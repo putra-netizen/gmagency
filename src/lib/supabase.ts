@@ -69,6 +69,15 @@ const MOCK_ORDERS_TO_SEED: Order[] = [
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+const checkValidUrl = (url: string | undefined): boolean => {
+  if (!url) return false;
+  try {
+    return url.startsWith('http://') || url.startsWith('https://');
+  } catch {
+    return false;
+  }
+};
+
 export const isSupabaseConfigured = !!(
   supabaseUrl && 
   supabaseAnonKey && 
@@ -76,12 +85,20 @@ export const isSupabaseConfigured = !!(
   supabaseUrl !== 'MY_SUPABASE_URL' &&
   !supabaseUrl.includes('placeholder') &&
   supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY' &&
-  supabaseAnonKey !== 'MY_SUPABASE_ANON_KEY'
+  supabaseAnonKey !== 'MY_SUPABASE_ANON_KEY' &&
+  checkValidUrl(supabaseUrl)
 );
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl!, supabaseAnonKey!)
-  : null;
+let supabaseInstance = null;
+if (isSupabaseConfigured) {
+  try {
+    supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!);
+  } catch (err) {
+    console.error('Failed to initialize Supabase client:', err);
+  }
+}
+
+export const supabase = supabaseInstance;
 
 // Track if Supabase database query failures happen, to fallback dynamically
 let supabaseFailed = false;
