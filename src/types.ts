@@ -33,6 +33,7 @@ export interface Order {
   worker_id?: string;
   worker_status?: 'unassigned' | 'taken' | 'done';
   worker_proof_url?: string;
+  created_by?: string;
 }
 
 export interface DashboardStats {

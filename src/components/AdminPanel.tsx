@@ -1162,6 +1162,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                     minute: '2-digit'
                                   })}
                                 </span>
+                                {order.created_by && (
+                                  <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
+                                    diinput oleh {order.created_by}
+                                  </span>
+                                )}
                               </td>
 
                               {/* Customer info */}
@@ -1339,6 +1344,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                       minute: '2-digit'
                                     })}
                                   </span>
+                                  {order.created_by && (
+                                    <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
+                                      diinput oleh {order.created_by}
+                                    </span>
+                                  )}
                                   <span className="text-[11px] font-bold text-slate-900 block mt-1 font-mono">
                                     {formatRupiah(order.total_price)}
                                   </span>
@@ -1549,6 +1559,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   minute: '2-digit'
                                 })}
                               </span>
+                              {order.created_by && (
+                                <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
+                                  diinput oleh {order.created_by}
+                                </span>
+                              )}
                             </td>
 
                             {/* Store & Buyer */}
@@ -1750,6 +1765,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   minute: '2-digit'
                                 })}
                               </span>
+                              {review.created_by && (
+                                <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
+                                  diinput oleh {review.created_by}
+                                </span>
+                              )}
                             </td>
 
                             {/* Client & Store Name */}
