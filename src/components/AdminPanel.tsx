@@ -15,6 +15,7 @@ import {
 } from '../lib/supabase';
 import { getAdminShpLogs, clearAdminShpLogs, AdminShpLog, logAdminShpAction } from '../utils/adminshpLogs';
 import { formatRupiah } from './ProductCard';
+import { getQrisConfig, saveQrisConfig, resetQrisConfig } from '../utils/qrisHelper';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
@@ -45,7 +46,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'
   const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'>('orders');
   // Settings view nested tab states
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'spreadsheet' | 'account_access'>('products');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'spreadsheet' | 'account_access' | 'qris_config'>('products');
 
   // Custom credentials state for adminshp1..4
   const [adminshpCreds, setAdminshpCreds] = useState<Record<string, { username: string; password: string }>>(() => {
@@ -243,6 +244,45 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     }, 1800);
   };
 
+  // QRIS configuration handlers
+  const handleSaveQrisMetadata = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveQrisConfig({
+      merchantName: qrisState.merchantName,
+      nmid: qrisState.nmid,
+      printerId: qrisState.printerId
+    });
+    alert(currentLang === 'id' ? 'Metadata QRIS berhasil disimpan!' : 'QRIS metadata saved successfully!');
+  };
+
+  const handleQrisImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingQris(true);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64Url = reader.result as string;
+      saveQrisConfig({ imageUrl: base64Url });
+      setQrisState(prev => ({ ...prev, imageUrl: base64Url }));
+      setIsUploadingQris(false);
+      alert(currentLang === 'id' ? 'Gambar QRIS asli berhasil dipasang!' : 'Original QRIS image uploaded successfully!');
+    };
+    reader.onerror = () => {
+      setIsUploadingQris(false);
+      alert(currentLang === 'id' ? 'Gagal membaca file gambar.' : 'Failed to read image file.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleResetQrisConfig = () => {
+    if (confirm(currentLang === 'id' ? 'Apakah Anda yakin ingin menyetel ulang pengaturan QRIS ke default?' : 'Are you sure you want to reset QRIS settings to default?')) {
+      resetQrisConfig();
+      setQrisState(getQrisConfig());
+      alert(currentLang === 'id' ? 'Pengaturan QRIS berhasil disetel ulang!' : 'QRIS settings reset successfully!');
+    }
+  };
+
   // Product CRUD Modal/Form states
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -257,6 +297,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+
+  // QRIS Configuration States
+  const [qrisState, setQrisState] = useState(() => getQrisConfig());
+  const qrisFileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingQris, setIsUploadingQris] = useState(false);
 
   // Load Admin Dashboard Data
   const [isStatsLoading, setIsStatsLoading] = useState(false);
@@ -312,7 +357,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     return () => {
       window.removeEventListener('popstate', checkLocationRoute);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // Handle Order Status Update
   const handleUpdateOrderStatus = async (orderId: string, newStatus: PaymentStatus) => {
@@ -1927,6 +1972,18 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   <Users className="h-3.5 w-3.5" />
                   <span>Hak Akses Akun</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsTab('qris_config')}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeSettingsTab === 'qris_config'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  <span>Pengaturan QRIS</span>
+                </button>
               </div>
 
               {activeSettingsTab === 'products' && (
@@ -2412,6 +2469,129 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                           </table>
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeSettingsTab === 'qris_config' && (
+                <div className="space-y-6" id="qris-config-settings-panel">
+                  <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6">
+                    <div className="space-y-1">
+                      <h3 className="text-base font-black text-slate-900 font-sans uppercase tracking-tight flex items-center gap-2">
+                        <ImageIcon className="h-5 w-5 text-blue-600" />
+                        Pengaturan Poster QRIS Pembayaran
+                      </h3>
+                      <p className="text-xs text-slate-400 font-medium font-sans">
+                        Ganti gambar QRIS poster asli dan sesuaikan metadata struk untuk pembayaran pelanggan.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+                      {/* Left: Metadata inputs */}
+                      <div className="lg:col-span-7 space-y-5">
+                        <form onSubmit={handleSaveQrisMetadata} className="space-y-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nama Merchant (Atas Nama QRIS)</label>
+                            <input
+                              type="text"
+                              required
+                              value={qrisState.merchantName}
+                              onChange={(e) => setQrisState(prev => ({ ...prev, merchantName: e.target.value }))}
+                              placeholder="Contoh: MATERIAL JAYA"
+                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">NMID (National Merchant ID)</label>
+                              <input
+                                type="text"
+                                required
+                                value={qrisState.nmid}
+                                onChange={(e) => setQrisState(prev => ({ ...prev, nmid: e.target.value }))}
+                                placeholder="Contoh: ID1022215501324"
+                                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Printer ID / ID Cetak</label>
+                              <input
+                                type="text"
+                                required
+                                value={qrisState.printerId}
+                                onChange={(e) => setQrisState(prev => ({ ...prev, printerId: e.target.value }))}
+                                placeholder="Contoh: 93600915"
+                                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              type="submit"
+                              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+                            >
+                              <Check className="h-4 w-4" />
+                              Simpan Metadata
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleResetQrisConfig}
+                              className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-colors cursor-pointer"
+                            >
+                              Reset ke Default
+                            </button>
+                          </div>
+                        </form>
+
+                        {/* Image upload box */}
+                        <div className="border border-dashed border-slate-200 rounded-2xl p-5 bg-slate-50/50 space-y-4">
+                          <div className="space-y-1">
+                            <h4 className="text-xs font-bold text-slate-800 uppercase">Ganti Gambar Poster QRIS</h4>
+                            <p className="text-[11px] text-slate-400 font-medium">Unggah berkas foto (.jpg / .png) poster QRIS asli Anda untuk menggantikan gambar QRIS di modal checkout pembayaran.</p>
+                          </div>
+                          
+                          <div className="flex items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() => qrisFileInputRef.current?.click()}
+                              disabled={isUploadingQris}
+                              className="px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 disabled:opacity-50 text-slate-700 text-xs font-extrabold rounded-xl shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <Plus className="h-4 w-4 text-slate-500" />
+                              {isUploadingQris ? 'Membaca Gambar...' : 'Pilih File Gambar'}
+                            </button>
+                            <span className="text-xs text-slate-400 font-mono">Max: 2MB (.jpg, .jpeg, .png)</span>
+                          </div>
+                          <input
+                            type="file"
+                            ref={qrisFileInputRef}
+                            onChange={handleQrisImageChange}
+                            accept="image/*"
+                            className="hidden"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Right: Real-time Live Poster Preview */}
+                      <div className="lg:col-span-5 flex flex-col items-center justify-center border border-slate-100 bg-slate-50/40 rounded-2xl p-6 min-h-[360px]">
+                        <span className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-wider font-sans">Pratinjau Live Poster QRIS</span>
+                        <div className="w-full max-w-[240px] rounded-2xl border border-slate-200 bg-white p-3.5 shadow-md flex flex-col items-center gap-3">
+                          <img
+                            src={qrisState.imageUrl}
+                            alt="QRIS Live Preview"
+                            className="w-full h-auto rounded-xl object-contain aspect-square border border-slate-100 shadow-inner"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="text-center w-full">
+                            <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Merchant Terdaftar</span>
+                            <span className="text-xs font-black text-slate-800 truncate block mt-0.5">{qrisState.merchantName}</span>
+                            <span className="text-[10px] font-mono text-slate-500 block mt-1 font-semibold">{qrisState.nmid}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

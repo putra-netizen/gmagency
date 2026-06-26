@@ -9,6 +9,7 @@ import { TRANSLATIONS } from '../lib/translations';
 import { dbCreateOrder } from '../lib/supabase';
 import { formatRupiah } from './ProductCard';
 import { X, Check, HelpCircle, Phone, Link2, FileText, ShoppingBag, ArrowRight, MessageSquare, AlertCircle } from 'lucide-react';
+import { getQrisConfig } from '../utils/qrisHelper';
 
 interface CheckoutModalProps {
   product: Product;
@@ -19,6 +20,7 @@ interface CheckoutModalProps {
 
 export default function CheckoutModal({ product, currentLang, onClose, onSuccess }: CheckoutModalProps) {
   const t = TRANSLATIONS[currentLang];
+  const qrisConfig = getQrisConfig();
 
   // Form states
   const [buyerName, setBuyerName] = useState('');
@@ -305,40 +307,16 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
                 </p>
 
                 {/* Professional QRIS Vector Generator Box */}
-                <div className="mx-auto max-w-[240px] rounded-2xl border border-slate-200 bg-white p-4 shadow-md flex flex-col items-center">
-                  <div className="flex items-center justify-between w-full border-b border-slate-100 pb-2 mb-3">
-                    <span className="text-[9px] font-extrabold text-pink-600 uppercase tracking-widest">QRIS nasionAL</span>
-                    <span className="text-[8px] font-bold text-slate-400">GM AGENCY</span>
-                  </div>
-
-                  {/* QR Core Pattern SVG Grid (scalable and convincing) */}
-                  <svg width="150" height="150" viewBox="0 0 150 150" className="bg-white">
-                    {/* Corners squares */}
-                    <rect x="10" y="10" width="35" height="35" fill="#0F172A" />
-                    <rect x="15" y="15" width="25" height="25" fill="#FFFFFF" />
-                    <rect x="20" y="20" width="15" height="15" fill="#0F172A" />
-
-                    <rect x="105" y="10" width="35" height="35" fill="#0F172A" />
-                    <rect x="110" y="15" width="25" height="25" fill="#FFFFFF" />
-                    <rect x="115" y="20" width="15" height="15" fill="#0F172A" />
-
-                    <rect x="10" y="105" width="35" height="35" fill="#0F172A" />
-                    <rect x="15" y="110" width="25" height="25" fill="#FFFFFF" />
-                    <rect x="20" y="115" width="15" height="15" fill="#0F172A" />
-
-                    {/* Small alignment block */}
-                    <rect x="115" y="115" width="15" height="15" fill="#0F172A" />
-                    <rect x="120" y="120" width="5" height="5" fill="#FFFFFF" />
-
-                    {/* Simulating organic randomized code grids */}
-                    <path d="M50,15h10v10H50V15z M65,10h10v20H65V10z M80,10h15v10H80V10z M10,50h15v10H10V50z M30,55h20v10H30V55z M60,40h15v10H60V40z M85,35h15v15H85V35z M10,75h10v15H10V75z M25,85h15v10H25V85z M45,75h20v10H45V75z M75,70h15v15H75V70z M95,65h10v20H95V65z M115,55h25v10h-25V55z M130,75h10v20h-10V75z M50,95h15v15H50V95z M70,105h15v10H70V105z M95,95h20v10H95V95z M10,140h45v5H10V140z M60,135h30v10H60V135z M100,130h40v10h-40V130z" fill="#0F172A" />
-                    <path d="M55,30h5v10h-5V30z M75,50h10v5H75V50z M120,30h10v15h-10V30z M80,110h10v20H80V110z M125,105h10v10h-10V105z" fill="#0B132B" />
-                  </svg>
-
-                  <span className="text-[9px] font-bold text-slate-400 mt-3 uppercase tracking-wide">NMID: ID102030405060</span>
-                  <div className="mt-1 flex items-center justify-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
-                    <span className="text-[9px] font-extrabold text-blue-700">LIVE QRIS MERCHANT</span>
+                <div className="mx-auto max-w-[240px] rounded-2xl border border-slate-200 bg-white p-3 shadow-md flex flex-col items-center">
+                  <img
+                    src={qrisConfig.imageUrl}
+                    alt="QRIS Pembayaran GMSOLUTION"
+                    className="w-full h-auto rounded-lg object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="mt-2 flex items-center justify-center gap-1 border-t border-slate-100 pt-2 w-full">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                    <span className="text-[9px] font-extrabold text-emerald-700">LIVE QRIS MERCHANT</span>
                   </div>
                 </div>
 
@@ -453,27 +431,18 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
                   PINDAI & TRANSFER QRIS
                 </span>
 
-                {/* SVG QR code */}
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                  <svg width="140" height="140" viewBox="0 0 150 150">
-                    <rect x="10" y="10" width="35" height="35" fill="#0F172A" />
-                    <rect x="15" y="15" width="25" height="25" fill="#FFFFFF" />
-                    <rect x="20" y="20" width="15" height="15" fill="#0F172A" />
-                    <rect x="105" y="10" width="35" height="35" fill="#0F172A" />
-                    <rect x="110" y="15" width="25" height="25" fill="#FFFFFF" />
-                    <rect x="115" y="20" width="15" height="15" fill="#0F172A" />
-                    <rect x="10" y="105" width="35" height="35" fill="#0F172A" />
-                    <rect x="15" y="110" width="25" height="25" fill="#FFFFFF" />
-                    <rect x="20" y="115" width="15" height="15" fill="#0F172A" />
-                    <rect x="115" y="115" width="15" height="15" fill="#0F172A" />
-                    <rect x="120" y="120" width="5" height="5" fill="#FFFFFF" />
-                    <path d="M50,15h10v10H50V15z M65,10h10v20H65V10z M80,10h15v10H80V10z M10,50h15v10H10V50z M30,55h20v10H30V55z M60,40h15v10H60V40z M85,35h15v15H85V35z M10,75h10v15H10V75z M25,85h15v10H25V85z M45,75h20v10H45V75z M75,70h15v15H75V70z M95,65h10v20H95V65z M115,55h25v10h-25V55z M130,75h10v20h-10V75z M50,95h15v15H50V95z M70,105h15v10H70V105z M95,95h20v10H95V95z M10,140h45v5H10V140z M60,135h30v10H60V135z M100,130h40v10h-40V130z" fill="#0F172A" />
-                  </svg>
+                <div className="bg-white rounded-xl p-2 border border-slate-100 max-w-[200px]">
+                  <img
+                    src={qrisConfig.imageUrl}
+                    alt="QRIS Pembayaran GMSOLUTION"
+                    className="w-full h-auto rounded-lg object-contain"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
 
                 <div className="text-center">
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">Merchant</span>
-                  <span className="text-sm font-extrabold text-slate-900 block">GM AGENCY DIGITAL</span>
+                  <span className="text-sm font-extrabold text-slate-900 block">{qrisConfig.merchantName}</span>
                   <span className="text-xs font-bold text-blue-600 mt-1 block font-mono">
                     {formatRupiah(createdOrder.total_price)}
                   </span>
