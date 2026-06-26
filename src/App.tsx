@@ -29,7 +29,7 @@ export default function App() {
 
   const [currentView, setCurrentView] = useState<'home' | 'admin' | 'worker' | 'adminshp'>(() => {
     const path = window.location.pathname;
-    if (path.startsWith('/admin/settings') || path === '/admin') return 'admin';
+    if (path === '/admin' || path.startsWith('/admin/')) return 'admin';
     if (path === '/worker' || path.startsWith('/worker/')) return 'worker';
     if (path === '/adminshp' || path.match(/^\/adminshp[1-4](\/.*)?$/)) return 'adminshp';
     return 'home';
@@ -81,7 +81,7 @@ export default function App() {
       if (path === '/' || path === '') {
         window.history.replaceState(null, '', '/home');
         setCurrentView('home');
-      } else if (path.startsWith('/admin/settings') || path === '/admin') {
+      } else if (path === '/admin' || path.startsWith('/admin/')) {
         setCurrentView('admin');
       } else if (path === '/worker' || path.startsWith('/worker/')) {
         setCurrentView('worker');

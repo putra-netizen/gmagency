@@ -301,9 +301,9 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     const checkLocationRoute = () => {
       if (isTabClicking.current) return;
       const pathname = window.location.pathname;
-      if (pathname === '/admin/settings') {
+      if (pathname === '/admin/settings' || pathname === '/admin/settings/') {
         setActiveTab('settings');
-      } else if (pathname === '/admin') {
+      } else if (pathname === '/admin' || pathname === '/admin/') {
         setActiveTab(prev => prev === 'settings' ? 'orders' : prev);
       }
     };
