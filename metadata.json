@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: GM AGENCY",
+  "description": "Website modern jasa layanan reputasi digital \u0026 engagement organik GM Agency dengan fitur pemesanan, invoice QRIS, dan admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
