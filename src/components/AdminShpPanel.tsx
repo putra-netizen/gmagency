@@ -47,13 +47,55 @@ interface AdminShpPanelProps {
 
 const WORKERS = ['rehan', 'deky', 'panca', 'anggun', 'riyanto', 'bintang'];
 
+const getSlotRouteName = (slot: string): string => {
+  try {
+    const saved = localStorage.getItem('gm_adminshp_creds');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object' && parsed[slot]?.username) {
+        return parsed[slot].username.trim().toLowerCase();
+      }
+    }
+  } catch (e) {}
+  return slot;
+};
+
+const getSlotFromRouteName = (routeName: string): string | null => {
+  const clean = routeName.replace(/^\//, '').trim().toLowerCase();
+  if (clean === 'adminshp' || clean === '') return null;
+  try {
+    const saved = localStorage.getItem('gm_adminshp_creds');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') {
+        for (const slot of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
+          if (parsed[slot]?.username?.trim()?.toLowerCase() === clean) {
+            return slot;
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  // Default fallback
+  if (['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].includes(clean)) {
+    return clean;
+  }
+  return null;
+};
+
 export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       const pathname = window.location.pathname;
       if (pathname === '/adminshp') return false; // Force NOT authenticated on portal!
-      return sessionStorage.getItem('gm_adminshp_auth') === 'true';
+      
+      const slot = getSlotFromRouteName(pathname);
+      if (!slot) return false;
+
+      const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true';
+      const authUser = sessionStorage.getItem('gm_adminshp_user');
+      return isAuth && authUser === slot;
     } catch (e) {
       return false;
     }
@@ -62,6 +104,10 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     try {
       const pathname = window.location.pathname;
       if (pathname === '/adminshp') return ''; // Force empty user on portal!
+      
+      const slot = getSlotFromRouteName(pathname);
+      if (!slot) return '';
+
       return sessionStorage.getItem('gm_adminshp_user') || '';
     } catch (e) {
       return '';
@@ -69,8 +115,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   });
   const [adminUsername, setAdminUsername] = useState(() => {
     const pathname = window.location.pathname;
-    const pathMatch = pathname.match(/^\/(adminshp[1-4])$/);
-    return pathMatch ? pathMatch[1] : '';
+    const slot = getSlotFromRouteName(pathname);
+    return slot ? getSlotRouteName(slot) : '';
   });
   const [adminPassword, setAdminPassword] = useState('');
   const [authError, setAuthError] = useState('');
@@ -156,13 +202,19 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   useEffect(() => {
     const handleRouteSync = () => {
       const pathname = window.location.pathname;
-      const pathMatch = pathname.match(/^\/(adminshp[1-4])$/);
-      const matchedUser = pathMatch ? pathMatch[1] : null;
+      const slot = getSlotFromRouteName(pathname);
+      const routeName = slot ? getSlotRouteName(slot) : null;
 
-      if (matchedUser) {
+      if (slot && routeName) {
+        // If they visited /adminshp1 but it's customized as /adminera, we sync the URL pathname
+        const currentSegment = pathname.replace(/^\//, '').trim().toLowerCase();
+        if (currentSegment !== routeName) {
+          window.history.replaceState(null, '', `/${routeName}`);
+        }
+
         // If the matched user is different from the currently logged in session,
         // we automatically logout the current user to keep logs and accounts separate.
-        if (isAuthenticated && currentAdminUser !== matchedUser) {
+        if (isAuthenticated && currentAdminUser !== slot) {
           setIsAuthenticated(false);
           setCurrentAdminUser('');
           try {
@@ -172,7 +224,7 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
             console.warn(e);
           }
         }
-        setAdminUsername(matchedUser);
+        setAdminUsername(routeName);
       } else if (pathname === '/adminshp') {
         // General adminshp portal - force clean login form and clear session
         if (isAuthenticated) setIsAuthenticated(false);
@@ -296,7 +348,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     if (matchedSlot) {
       setIsAuthenticated(true);
       setCurrentAdminUser(matchedSlot);
-      window.history.pushState(null, '', `/${matchedSlot}`);
+      const routeName = getSlotRouteName(matchedSlot);
+      window.history.pushState(null, '', `/${routeName}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
       try {
         sessionStorage.setItem('gm_adminshp_auth', 'true');
@@ -1519,13 +1572,24 @@ Format Chat : ${data.notes || '-'}`;
                               {/* ID / Tipe */}
                               <td className="px-4 py-3 font-mono">
                                 <span className="font-bold text-slate-900 block">{order.id}</span>
-                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md mt-1 inline-block ${
-                                  isSosmed 
-                                    ? 'bg-orange-50 text-orange-700 border border-orange-200' 
-                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                }`}>
-                                  {isSosmed ? 'REPORT' : 'SPAM WA'}
-                                </span>
+                                <div className="flex flex-col gap-1 mt-1">
+                                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md inline-block w-fit ${
+                                    isSosmed 
+                                      ? 'bg-orange-50 text-orange-700 border border-orange-200' 
+                                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  }`}>
+                                    {isSosmed ? 'REPORT' : 'SPAM WA'}
+                                  </span>
+                                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md inline-block w-fit border ${
+                                    order.status === 'DONE'
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : order.status === 'PROGRESS'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}>
+                                    {order.status || 'PENDING'}
+                                  </span>
+                                </div>
                               </td>
 
                               {/* Store Name */}
@@ -2105,10 +2169,18 @@ Format Chat : ${data.notes || '-'}`;
                                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                                       isFinished
                                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                        : item.status === 'PROGRESS'
+                                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
                                         : 'bg-amber-100 text-amber-800 border border-amber-200'
                                     }`}>
-                                      <span className={`h-1.5 w-1.5 rounded-full ${isFinished ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                                      <span>{isFinished ? 'DONE' : 'PENDING'}</span>
+                                      <span className={`h-1.5 w-1.5 rounded-full ${
+                                        isFinished 
+                                          ? 'bg-emerald-500' 
+                                          : item.status === 'PROGRESS'
+                                          ? 'bg-blue-500 animate-pulse'
+                                          : 'bg-amber-500 animate-pulse'
+                                      }`} />
+                                      <span>{isFinished ? 'DONE' : item.status === 'PROGRESS' ? 'PROGRESS' : 'PENDING'}</span>
                                     </span>
 
                                     <button

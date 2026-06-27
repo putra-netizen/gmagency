@@ -28,11 +28,40 @@ export default function App() {
     }
   });
 
+  const isAdminShpPath = (path: string) => {
+    if (path === '/adminshp' || path.startsWith('/adminshp/')) return true;
+    const match = path.match(/^\/([^/]+)(\/.*)?$/);
+    if (!match) return false;
+    const firstSegment = match[1].toLowerCase();
+    
+    // Default routes
+    const defaultRoutes = ['adminshp', 'adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'];
+    if (defaultRoutes.includes(firstSegment)) return true;
+    
+    // Custom routes from gm_adminshp_creds
+    try {
+      const saved = localStorage.getItem('gm_adminshp_creds');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          for (const key of Object.keys(parsed)) {
+            const customUser = parsed[key]?.username?.trim()?.toLowerCase();
+            if (customUser && customUser === firstSegment) {
+              return true;
+            }
+          }
+        }
+      }
+    } catch (e) {}
+    
+    return false;
+  };
+
   const [currentView, setCurrentView] = useState<'home' | 'admin' | 'worker' | 'adminshp'>(() => {
     const path = window.location.pathname;
     if (path === '/admin' || path.startsWith('/admin/')) return 'admin';
     if (path === '/worker' || path.startsWith('/worker/')) return 'worker';
-    if (path === '/adminshp' || path.match(/^\/adminshp[1-4](\/.*)?$/)) return 'adminshp';
+    if (isAdminShpPath(path)) return 'adminshp';
     return 'home';
   });
 
@@ -86,7 +115,7 @@ export default function App() {
         setCurrentView('admin');
       } else if (path === '/worker' || path.startsWith('/worker/')) {
         setCurrentView('worker');
-      } else if (path === '/adminshp' || path.match(/^\/adminshp[1-4](\/.*)?$/)) {
+      } else if (isAdminShpPath(path)) {
         setCurrentView('adminshp');
       } else if (path === '/home') {
         setCurrentView('home');
