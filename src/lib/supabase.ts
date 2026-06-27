@@ -163,21 +163,105 @@ async function safeFetch<T>(
   throw new Error(`Failed to request ${url} and no fallback storage available.`);
 }
 
+// Helper to compress and resize images to fit local storage limits (usually 5MB)
+function compressAndResizeImage(file: File, maxWidth = 480, maxHeight = 360, quality = 0.65): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions keeping aspect ratio
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(event.target?.result as string || '');
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        // Export as compressed JPEG to keep base64 string extremely small (~10KB - 30KB)
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = () => {
+        reject(new Error('Failed to load image for resizing'));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => {
+      reject(new Error('Failed to read file'));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Self-healing function to prune/clean up any massive legacy base64 images from localStorage to free up quota
+function sanitizeLocalProductsList(list: Product[]): Product[] {
+  let changed = false;
+  const sanitized = list.map(product => {
+    // If a product's image_url is a giant data URL longer than 100,000 characters, we replace it with a beautiful fallback Unsplash image
+    if (product.image_url && product.image_url.startsWith('data:') && product.image_url.length > 100000) {
+      changed = true;
+      console.log(`Pruning giant base64 image from product ${product.id} (${product.image_url.length} chars)`);
+      return {
+        ...product,
+        image_url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80'
+      };
+    }
+    return product;
+  });
+  
+  if (changed) {
+    try {
+      localStorage.setItem('gmsolution_local_products', JSON.stringify(sanitized));
+    } catch (e) {
+      console.warn('Failed to save sanitized products list:', e);
+    }
+  }
+  return sanitized;
+}
+
 // LocalStorage Persistence Helpers
 function getLocalProducts(): Product[] {
   try {
     const stored = localStorage.getItem('gmsolution_local_products');
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed = JSON.parse(stored) as Product[];
+      return sanitizeLocalProductsList(parsed);
+    }
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem('gmsolution_local_products', JSON.stringify(INITIAL_PRODUCTS));
+  try {
+    localStorage.setItem('gmsolution_local_products', JSON.stringify(INITIAL_PRODUCTS));
+  } catch (e) {
+    console.error('Failed to initialize local products:', e);
+  }
   return INITIAL_PRODUCTS;
 }
 
 function updateLocalStorageProduct(product: Product) {
+  let list: Product[] = [];
   try {
-    const list = getLocalProducts();
+    list = getLocalProducts();
     const index = list.findIndex(p => p.id === product.id);
     if (index !== -1) {
       list[index] = product;
@@ -186,7 +270,14 @@ function updateLocalStorageProduct(product: Product) {
     }
     localStorage.setItem('gmsolution_local_products', JSON.stringify(list));
   } catch (e) {
-    console.error(e);
+    console.error('Failed to update local storage product:', e);
+    // If it failed because of quota, try sanitizing first
+    try {
+      const sanitized = sanitizeLocalProductsList(list);
+      localStorage.setItem('gmsolution_local_products', JSON.stringify(sanitized));
+    } catch (retryErr) {
+      console.error('Failed to save even after sanitizing:', retryErr);
+    }
   }
 }
 
@@ -484,7 +575,19 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
       price: product.price !== undefined ? Number(product.price) : list[index].price
     } as Product;
     list[index] = updated;
-    localStorage.setItem('gmsolution_local_products', JSON.stringify(list));
+    try {
+      localStorage.setItem('gmsolution_local_products', JSON.stringify(list));
+    } catch (e) {
+      console.warn('Failed to save updated products list to localStorage:', e);
+      // Attempt to sanitize other products to free up space
+      try {
+        const sanitized = sanitizeLocalProductsList(list);
+        localStorage.setItem('gmsolution_local_products', JSON.stringify(sanitized));
+      } catch (retryErr) {
+        console.error('Failed to save even after sanitizing:', retryErr);
+        throw new Error('Storage is completely full. We pruned old heavy images, but still cannot save. Please try clearing browser cache.');
+      }
+    }
     return updated;
   }
   throw new Error('Product not found in local storage fallback');
@@ -1268,15 +1371,20 @@ export async function dbUploadProductImage(file: File): Promise<string> {
     }
   }
 
-  // Fallback for local database mode: convert to base64 Data URL
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      resolve(reader.result as string);
-    };
-    reader.onerror = () => {
-      reject(new Error('Failed to convert file to base64'));
-    };
-    reader.readAsDataURL(file);
-  });
+  // Fallback for local database mode: convert to compressed base64 Data URL to fit LocalStorage limits
+  try {
+    return await compressAndResizeImage(file);
+  } catch (err) {
+    console.warn('Image compression failed, falling back to original base64:', err);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        resolve(reader.result as string);
+      };
+      reader.onerror = () => {
+        reject(new Error('Failed to convert file to base64'));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 }
