@@ -130,15 +130,30 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   // Search and Sort states for each table
   const [searchUnpaid, setSearchUnpaid] = useState('');
   const [sortUnpaid, setSortUnpaid] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [timeFilterUnpaid, setTimeFilterUnpaid] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchPaid, setSearchPaid] = useState('');
   const [sortPaid, setSortPaid] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [timeFilterPaid, setTimeFilterPaid] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchShopee, setSearchShopee] = useState('');
   const [sortShopee, setSortShopee] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchReview, setSearchReview] = useState('');
   const [sortReview, setSortReview] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'week' | 'month'>('all');
+
+  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'week' | 'month') => {
+    if (timeframe === 'all' || !createdAtStr) return true;
+    const dateObj = new Date(createdAtStr);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - dateObj.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (timeframe === 'week') return diffDays <= 7;
+    if (timeframe === 'month') return diffDays <= 30;
+    return true;
+  };
 
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -393,6 +408,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       try {
         await dbDeleteMapsReview(id);
         setMapsReviews(prev => prev.filter(r => r.id !== id));
+        toast.success(currentLang === 'id' ? 'Laporan review berhasil dihapus!' : 'Review report successfully deleted!');
       } catch (err) {
         console.error(err);
         toast.error('Gagal menghapus laporan review');
@@ -409,6 +425,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       await dbDeleteShopeeOrder(id);
       setShopeeOrders(prev => prev.filter(o => o.id !== id));
       setDeleteConfirm(null);
+      toast.success(currentLang === 'id' ? 'Pesanan Shopee berhasil dihapus!' : 'Shopee order successfully deleted!');
     } catch (err) {
       console.error(err);
       toast.error('Gagal menghapus pesanan Shopee');
@@ -466,6 +483,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       const updatedStats = await dbGetDashboardStats();
       setStats(updatedStats);
       setDeleteConfirm(null);
+      toast.success(currentLang === 'id' ? 'Pesanan berhasil dihapus!' : 'Order deleted successfully!');
     } catch (err) {
       console.error(err);
       toast.error('Error deleting order');
@@ -568,8 +586,10 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
       if (editingProduct) {
         await dbUpdateProduct(editingProduct.id, payload);
+        toast.success(currentLang === 'id' ? 'Katalog berhasil diperbarui!' : 'Catalog updated successfully!');
       } else {
         await dbCreateProduct(payload);
+        toast.success(currentLang === 'id' ? 'Katalog baru berhasil ditambahkan!' : 'New catalog added successfully!');
       }
 
       setIsProductModalOpen(false);
@@ -636,6 +656,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       const updatedStats = await dbGetDashboardStats();
       setStats(updatedStats);
       setDeleteConfirm(null);
+      toast.success(currentLang === 'id' ? 'Produk katalog berhasil dihapus!' : 'Catalog product deleted successfully!');
     } catch (err) {
       console.error(err);
       toast.error('Error deleting product');
@@ -711,6 +732,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   // Filtered and Sorted Web Orders
   const filteredUnpaidOrders = orders
     .filter(o => o.payment_status !== 'PAID')
+    .filter(o => isWithinTimeframe(o.created_at, timeFilterUnpaid))
     .filter(o => {
       if (!searchUnpaid) return true;
       const q = searchUnpaid.toLowerCase();
@@ -731,6 +753,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
   const filteredPaidOrders = orders
     .filter(o => o.payment_status === 'PAID')
+    .filter(o => isWithinTimeframe(o.created_at, timeFilterPaid))
     .filter(o => {
       if (!searchPaid) return true;
       const q = searchPaid.toLowerCase();
@@ -775,6 +798,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
   // Filtered and Sorted Shopee Orders
   const filteredShopeeOrders = shopeeOrders
+    .filter(o => isWithinTimeframe(o.created_at, timeFilterShopee))
     .filter(o => {
       if (!searchShopee) return true;
       const q = searchShopee.toLowerCase();
@@ -819,6 +843,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
   // Filtered and Sorted Maps Reviews
   const filteredMapsReviews = mapsReviews
+    .filter(r => isWithinTimeframe(r.created_at, timeFilterReview))
     .filter(r => {
       if (!searchReview) return true;
       const q = searchReview.toLowerCase();
@@ -1101,8 +1126,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
             <div className="space-y-6" id="admin-orders-list">
               
               {/* Search & Sort Bar for Unpaid Web Orders */}
-              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
-                <div className="relative w-full sm:w-80">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
+                <div className="relative w-full lg:w-80">
                   <input
                     type="text"
                     value={searchUnpaid}
@@ -1111,17 +1136,46 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                     className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
                   />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Urutkan (Belum Lunas):</span>
-                  <select
-                    value={sortUnpaid}
-                    onChange={(e) => setSortUnpaid(e.target.value as any)}
-                    className="bg-white text-xs font-bold text-slate-700 rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
-                  >
-                    <option value="pending">PENDING</option>
-                    <option value="progress">PROGRES</option>
-                    <option value="done">DONE</option>
-                  </select>
+                
+                {/* Minimalist sorting / filtering controls */}
+                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Status / Progres Filter (Minimalist badge/pills style) */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
+                    {(['pending', 'progress', 'done'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setSortUnpaid(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          sortUnpaid === opt
+                            ? 'bg-slate-900 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Timeframe Filter (Minimalist badge/pills style) */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
+                    {(['all', 'week', 'month'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setTimeFilterUnpaid(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          timeFilterUnpaid === opt
+                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt === 'all' ? (currentLang === 'id' ? 'Semua' : 'All') : opt === 'week' ? (currentLang === 'id' ? 'Minggu' : 'Week') : (currentLang === 'id' ? 'Bulan' : 'Month')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -1275,8 +1329,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
               </div>
 
               {/* Search & Sort Bar for Paid Web Orders */}
-              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm mt-6">
-                <div className="relative w-full sm:w-80">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm mt-6">
+                <div className="relative w-full lg:w-80">
                   <input
                     type="text"
                     value={searchPaid}
@@ -1285,17 +1339,46 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                     className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
                   />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Urutkan (Lunas):</span>
-                  <select
-                    value={sortPaid}
-                    onChange={(e) => setSortPaid(e.target.value as any)}
-                    className="bg-white text-xs font-bold text-slate-700 rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
-                  >
-                    <option value="pending">PENDING</option>
-                    <option value="progress">PROGRES</option>
-                    <option value="done">DONE</option>
-                  </select>
+
+                {/* Minimalist sorting / filtering controls */}
+                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Status / Progres Filter (Minimalist badge/pills style) */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
+                    {(['pending', 'progress', 'done'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setSortPaid(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          sortPaid === opt
+                            ? 'bg-slate-900 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Timeframe Filter (Minimalist badge/pills style) */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
+                    {(['all', 'week', 'month'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setTimeFilterPaid(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          timeFilterPaid === opt
+                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt === 'all' ? (currentLang === 'id' ? 'Semua' : 'All') : opt === 'week' ? (currentLang === 'id' ? 'Minggu' : 'Week') : (currentLang === 'id' ? 'Bulan' : 'Month')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -1315,12 +1398,12 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse table-fixed">
                     <colgroup>
-                      <col className="w-[18%]" />
-                      <col className="w-[18%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[20%]" />
                       <col className="w-[20%]" />
                       <col className="w-[20%]" />
                       <col className="w-[14%]" />
-                      <col className="w-[10%]" />
+                      <col className="w-[6%]" />
                     </colgroup>
                     <thead>
                       <tr className="bg-slate-50/20 border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider">
@@ -1329,7 +1412,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                         <th className="px-4 py-3">Layanan</th>
                         <th className="px-4 py-3">Target Details</th>
                         <th className="px-4 py-3">Worker & Status</th>
-                        <th className="px-4 py-3 text-center">Bukti / Aksi</th>
+                        <th className="px-4 py-3 text-center">Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
@@ -1451,24 +1534,9 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   </select>
                                 </td>
 
-                                {/* Proof Photo Link & Delete Action */}
+                                {/* Delete Action */}
                                 <td className="px-4 py-3">
-                                  <div className="flex flex-col items-center justify-center gap-1.5">
-                                    {order.worker_proof_url ? (
-                                      <a
-                                        href={order.worker_proof_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center justify-center gap-1 rounded bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200 transition-colors w-full text-center"
-                                        title="View Proof Photo"
-                                      >
-                                        <ImageIcon className="h-3 w-3 text-emerald-600 shrink-0" />
-                                        <span>Bukti</span>
-                                      </a>
-                                    ) : (
-                                      <span className="text-[10px] text-slate-400 italic block font-mono">-</span>
-                                    )}
-                                    
+                                  <div className="flex flex-col items-center justify-center">
                                     <button
                                       onClick={() => handleDeleteOrder(order.id)}
                                       className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors shrink-0"
@@ -1495,8 +1563,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
             <div className="space-y-6" id="admin-shopee-orders-list">
               
               {/* Search & Sort Bar */}
-              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
-                <div className="relative w-full sm:w-80">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
+                <div className="relative w-full lg:w-80">
                   <input
                     type="text"
                     value={searchShopee}
@@ -1505,17 +1573,46 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                     className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
                   />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Urutkan:</span>
-                  <select
-                    value={sortShopee}
-                    onChange={(e) => setSortShopee(e.target.value as any)}
-                    className="bg-white text-xs font-bold text-slate-700 rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
-                  >
-                    <option value="pending">PENDING</option>
-                    <option value="progress">PROGRES</option>
-                    <option value="done">DONE</option>
-                  </select>
+
+                {/* Minimalist sorting / filtering controls */}
+                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Status / Progres Filter (Minimalist badge/pills style) */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
+                    {(['pending', 'progress', 'done'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setSortShopee(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          sortShopee === opt
+                            ? 'bg-slate-900 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Timeframe Filter (Minimalist badge/pills style) */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
+                    {(['all', 'week', 'month'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setTimeFilterShopee(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          timeFilterShopee === opt
+                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt === 'all' ? (currentLang === 'id' ? 'Semua' : 'All') : opt === 'week' ? (currentLang === 'id' ? 'Minggu' : 'Week') : (currentLang === 'id' ? 'Bulan' : 'Month')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -1699,8 +1796,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
             <div className="space-y-6" id="admin-maps-reviews-list">
               
               {/* Search & Sort Bar */}
-              <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
-                <div className="relative w-full sm:w-80">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
+                <div className="relative w-full lg:w-80">
                   <input
                     type="text"
                     value={searchReview}
@@ -1709,17 +1806,46 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                     className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
                   />
                 </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Urutkan:</span>
-                  <select
-                    value={sortReview}
-                    onChange={(e) => setSortReview(e.target.value as any)}
-                    className="bg-white text-xs font-bold text-slate-700 rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500 cursor-pointer shadow-sm"
-                  >
-                    <option value="pending">PENDING</option>
-                    <option value="progress">PROGRES</option>
-                    <option value="done">DONE</option>
-                  </select>
+
+                {/* Minimalist sorting / filtering controls */}
+                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Status / Progres Filter (Minimalist badge/pills style) */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
+                    {(['pending', 'progress', 'done'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setSortReview(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          sortReview === opt
+                            ? 'bg-slate-900 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Timeframe Filter (Minimalist badge/pills style) */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
+                    {(['all', 'week', 'month'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setTimeFilterReview(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          timeFilterReview === opt
+                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt === 'all' ? (currentLang === 'id' ? 'Semua' : 'All') : opt === 'week' ? (currentLang === 'id' ? 'Minggu' : 'Week') : (currentLang === 'id' ? 'Bulan' : 'Month')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

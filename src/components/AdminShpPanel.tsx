@@ -9,7 +9,8 @@ import {
   dbGetMapsReviews, 
   dbCreateMapsReview, 
   dbUpdateMapsReview, 
-  dbDeleteMapsReview 
+  dbDeleteMapsReview,
+  dbIsSupabaseConnected
 } from '../lib/supabase';
 import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
@@ -81,9 +82,22 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   // Search & Sort states for tables
   const [searchShopee, setSearchShopee] = useState('');
   const [sortShopee, setSortShopee] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchMaps, setSearchMaps] = useState('');
   const [sortMaps, setSortMaps] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [timeFilterMaps, setTimeFilterMaps] = useState<'all' | 'week' | 'month'>('all');
+
+  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'week' | 'month') => {
+    if (timeframe === 'all' || !createdAtStr) return true;
+    const dateObj = new Date(createdAtStr);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - dateObj.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (timeframe === 'week') return diffDays <= 7;
+    if (timeframe === 'month') return diffDays <= 30;
+    return true;
+  };
 
   // Loading states
   const [shopeeOrders, setShopeeOrders] = useState<ShopeeOrder[]>([]);
@@ -912,6 +926,7 @@ Format Chat : ${data.notes || '-'}`;
 
   // Filtered and sorted Shopee Orders
   const filteredShopeeOrders = shopeeOrders
+    .filter(order => isWithinTimeframe(order.created_at, timeFilterShopee))
     .filter(order => {
       if (!searchShopee) return true;
       const q = searchShopee.toLowerCase();
@@ -955,6 +970,7 @@ Format Chat : ${data.notes || '-'}`;
 
   // Filtered and sorted Maps Reviews
   const filteredMapsReviews = mapsReviews
+    .filter(review => isWithinTimeframe(review.created_at, timeFilterMaps))
     .filter(review => {
       if (!searchMaps) return true;
       const q = searchMaps.toLowerCase();
@@ -1000,7 +1016,7 @@ Format Chat : ${data.notes || '-'}`;
       {/* Header Portal */}
       <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
             <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-mono">
               Shopee Integration
             </span>
@@ -1008,6 +1024,17 @@ Format Chat : ${data.notes || '-'}`;
               <User className="h-3 w-3" />
               <span>Admin: {currentAdminUser.toUpperCase()}</span>
             </span>
+            {dbIsSupabaseConnected() ? (
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-mono flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Server Online</span>
+              </span>
+            ) : (
+              <span className="bg-red-50 text-red-700 border border-red-100 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-mono flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                <span>Server Offline</span>
+              </span>
+            )}
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">
             Manual Shopee Order Entry Portal
@@ -1398,8 +1425,8 @@ Format Chat : ${data.notes || '-'}`;
                 </div>
 
                 {/* Search & Sort Bar for Shopee Manual Orders */}
-                <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-50/50 p-4 border-b border-slate-200">
-                  <div className="relative w-full sm:w-80">
+                <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/50 p-4 border-b border-slate-200">
+                  <div className="relative w-full lg:w-80">
                     <input
                       type="text"
                       value={searchShopee}
@@ -1408,17 +1435,46 @@ Format Chat : ${data.notes || '-'}`;
                       className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-orange-500 font-sans shadow-sm"
                     />
                   </div>
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                    <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Urutkan:</span>
-                    <select
-                      value={sortShopee}
-                      onChange={(e) => setSortShopee(e.target.value as any)}
-                      className="bg-white text-xs font-bold text-slate-700 rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-orange-500 cursor-pointer shadow-sm font-sans"
-                    >
-                      <option value="pending">PENDING</option>
-                      <option value="progress">PROGRES</option>
-                      <option value="done">DONE</option>
-                    </select>
+
+                  {/* Minimalist sorting / filtering controls */}
+                  <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                    {/* Status / Progres Filter (Minimalist badge/pills style) */}
+                    <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                      <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
+                      {(['pending', 'progress', 'done'] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setSortShopee(opt)}
+                          className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                            sortShopee === opt
+                              ? 'bg-orange-500 text-white shadow-sm font-extrabold'
+                              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                          }`}
+                        >
+                          {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Timeframe Filter (Minimalist badge/pills style) */}
+                    <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                      <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
+                      {(['all', 'week', 'month'] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setTimeFilterShopee(opt)}
+                          className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                            timeFilterShopee === opt
+                              ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                          }`}
+                        >
+                          {opt === 'all' ? 'Semua' : opt === 'week' ? 'Minggu' : 'Bulan'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -1795,8 +1851,8 @@ Format Chat : ${data.notes || '-'}`;
                     </div>
 
                     {/* Search & Sort Bar for Maps Reviews */}
-                    <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-50/50 p-4 border-b border-slate-200">
-                      <div className="relative w-full sm:w-80">
+                    <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/50 p-4 border-b border-slate-200">
+                      <div className="relative w-full lg:w-80">
                         <input
                           type="text"
                           value={searchMaps}
@@ -1805,17 +1861,46 @@ Format Chat : ${data.notes || '-'}`;
                           className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
                         />
                       </div>
-                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                        <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Urutkan:</span>
-                        <select
-                          value={sortMaps}
-                          onChange={(e) => setSortMaps(e.target.value as any)}
-                          className="bg-white text-xs font-bold text-slate-700 rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-blue-500 cursor-pointer shadow-sm font-sans"
-                        >
-                          <option value="pending">PENDING</option>
-                          <option value="progress">PROGRES</option>
-                          <option value="done">DONE</option>
-                        </select>
+
+                      {/* Minimalist sorting / filtering controls */}
+                      <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                        {/* Status / Progres Filter (Minimalist badge/pills style) */}
+                        <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                          <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
+                          {(['pending', 'progress', 'done'] as const).map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setSortMaps(opt)}
+                              className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                                sortMaps === opt
+                                  ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                              }`}
+                            >
+                              {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Timeframe Filter (Minimalist badge/pills style) */}
+                        <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
+                          <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
+                          {(['all', 'week', 'month'] as const).map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setTimeFilterMaps(opt)}
+                              className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                                timeFilterMaps === opt
+                                  ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                              }`}
+                            >
+                              {opt === 'all' ? 'Semua' : opt === 'week' ? 'Minggu' : 'Bulan'}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 

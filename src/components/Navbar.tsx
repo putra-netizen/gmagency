@@ -137,8 +137,8 @@ export default function Navbar({
             </button>
           )}
 
-          {/* Navigation View switcher (Only visible in worker/adminshp mode to return home, hidden for admin to keep it clean) */}
-          {currentView !== 'home' && currentView !== 'admin' && (
+          {/* Navigation View switcher (Only visible in worker mode to return home, hidden for admin and adminshp to keep it clean) */}
+          {currentView !== 'home' && currentView !== 'admin' && currentView !== 'adminshp' && (
             <button
               onClick={() => onViewChange('home')}
               className="flex items-center gap-1 sm:gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 dark:hover:bg-slate-700 shadow-sm cursor-pointer"
@@ -159,8 +159,8 @@ export default function Navbar({
             {darkMode ? <Sun className="h-4 w-4 text-amber-500 animate-pulse" /> : <Moon className="h-4 w-4 text-slate-700" />}
           </button>
 
-          {/* Language toggle switcher (Hidden on admin view) */}
-          {currentView !== 'admin' && (
+          {/* Language toggle switcher (Hidden on admin and adminshp view) */}
+          {currentView !== 'admin' && currentView !== 'adminshp' && (
             <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-0.5">
               <button
                 onClick={() => onLangChange('id')}
