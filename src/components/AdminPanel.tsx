@@ -293,6 +293,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [prodPrice, setProdPrice] = useState(10000);
   const [prodImage, setProdImage] = useState('');
   const [prodWa, setProdWa] = useState('+6285921095666');
+  const [prodTargetType, setProdTargetType] = useState<'link' | 'phone'>('link');
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [isSavingProduct, setIsSavingProduct] = useState(false);
@@ -604,7 +605,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         description_en: translatedDesc,
         price: Number(prodPrice),
         image_url: imageUrl,
-        whatsapp_number: prodWa
+        whatsapp_number: prodWa,
+        target_type: prodTargetType
       };
 
       if (editingProduct) {
@@ -637,6 +639,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     setProdPrice(10000);
     setProdImage('https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80');
     setProdWa('+6285921095666');
+    setProdTargetType('link');
     setSelectedImageFile(null);
     setImagePreviewUrl('');
     setIsSavingProduct(false);
@@ -653,6 +656,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     setProdPrice(product.price);
     setProdImage(product.image_url);
     setProdWa(product.whatsapp_number);
+    setProdTargetType(product.target_type || 'link');
     setSelectedImageFile(null);
     setImagePreviewUrl(product.image_url);
     setIsSavingProduct(false);
@@ -2643,6 +2647,60 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   placeholder="Masukkan deskripsi lengkap layanan jasa..."
                   className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
                 />
+              </div>
+
+              {/* Target Type Option (Link vs Number) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                  {currentLang === 'id' ? 'Opsi Input Target (Untuk Pelanggan)' : 'Target Input Option (For Customers)'}
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label 
+                    className={`flex items-center gap-2.5 rounded-xl border p-3 cursor-pointer transition-all ${
+                      prodTargetType === 'link' 
+                        ? 'border-blue-600 bg-blue-50/50 text-blue-700 font-bold' 
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="prodTargetType"
+                      value="link"
+                      checked={prodTargetType === 'link'}
+                      onChange={() => setProdTargetType('link')}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black">{currentLang === 'id' ? 'LINK TARGET' : 'TARGET LINK'}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">
+                        {currentLang === 'id' ? 'Muncul input url/link di checkout' : 'Show URL/link input at checkout'}
+                      </span>
+                    </div>
+                  </label>
+                  
+                  <label 
+                    className={`flex items-center gap-2.5 rounded-xl border p-3 cursor-pointer transition-all ${
+                      prodTargetType === 'phone' 
+                        ? 'border-blue-600 bg-blue-50/50 text-blue-700 font-bold' 
+                        : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="prodTargetType"
+                      value="phone"
+                      checked={prodTargetType === 'phone'}
+                      onChange={() => setProdTargetType('phone')}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black">{currentLang === 'id' ? 'NOMER TARGET' : 'TARGET NUMBER'}</span>
+                      <span className="text-[10px] text-slate-500 font-normal">
+                        {currentLang === 'id' ? 'Muncul input no. telepon/WA di checkout' : 'Show phone/WA input at checkout'}
+                      </span>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               {/* Pricing & WA contact */}

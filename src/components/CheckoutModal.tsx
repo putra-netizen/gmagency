@@ -51,6 +51,19 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
       return;
     }
 
+    const isLinkTarget = product.target_type === 'link' || !product.target_type;
+    const isPhoneTarget = product.target_type === 'phone';
+
+    if (isLinkTarget && !targetLink.trim()) {
+      setErrorMsg(currentLang === 'id' ? 'Link target wajib diisi.' : 'Target link is required.');
+      return;
+    }
+
+    if (isPhoneTarget && !targetSpamPhone.trim()) {
+      setErrorMsg(currentLang === 'id' ? 'Nomor WhatsApp target wajib diisi.' : 'Target WhatsApp number is required.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMsg('');
 
@@ -60,8 +73,8 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
         buyer_name: buyerName,
         phone_number: phoneNumber,
         notes: notes,
-        target_link: targetLink,
-        target_spam_phone: targetSpamPhone,
+        target_link: isLinkTarget ? targetLink : '',
+        target_spam_phone: isPhoneTarget ? targetSpamPhone : '',
         quantity: quantity,
         total_price: totalPrice
       };
@@ -221,48 +234,54 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
                 </div>
 
                 {/* Target Link (Critical for Reviews & Social Media Services) */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      {t.targetLink}
-                    </label>
-                    <span className="text-[9px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">
-                      Untuk Review / Sosmed
-                    </span>
+                {(product.target_type === 'link' || !product.target_type) && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {t.targetLink} <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[9px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">
+                        {currentLang === 'id' ? 'Link Target' : 'Target URL'}
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Link2 className="absolute top-2.5 left-3 h-3.5 w-3.5 text-slate-400" />
+                      <input
+                        type="url"
+                        required
+                        value={targetLink}
+                        onChange={(e) => setTargetLink(e.target.value)}
+                        placeholder={t.targetLinkPl}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-600 outline-none transition-all"
+                      />
+                    </div>
                   </div>
-                  <div className="relative">
-                    <Link2 className="absolute top-2.5 left-3 h-3.5 w-3.5 text-slate-400" />
-                    <input
-                      type="url"
-                      value={targetLink}
-                      onChange={(e) => setTargetLink(e.target.value)}
-                      placeholder={t.targetLinkPl}
-                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-600 outline-none transition-all"
-                    />
-                  </div>
-                </div>
+                )}
 
                 {/* Target WhatsApp/Phone Number for specific services (e.g., spam report warning or testing) */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      {t.targetSpamPhone}
-                    </label>
-                    <span className="text-[9px] text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded-full">
-                      WA Target
-                    </span>
+                {product.target_type === 'phone' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {t.targetSpamPhone} <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[9px] text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded-full">
+                        {currentLang === 'id' ? 'No. WA Target' : 'Target WhatsApp'}
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Phone className="absolute top-2.5 left-3 h-3.5 w-3.5 text-slate-400" />
+                      <input
+                        type="tel"
+                        required
+                        value={targetSpamPhone}
+                        onChange={(e) => setTargetSpamPhone(e.target.value)}
+                        placeholder={t.targetSpamPhonePl}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-600 outline-none transition-all"
+                      />
+                    </div>
                   </div>
-                  <div className="relative">
-                    <Phone className="absolute top-2.5 left-3 h-3.5 w-3.5 text-slate-400" />
-                    <input
-                      type="tel"
-                      value={targetSpamPhone}
-                      onChange={(e) => setTargetSpamPhone(e.target.value)}
-                      placeholder={t.targetSpamPhonePl}
-                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-600 outline-none transition-all"
-                    />
-                  </div>
-                </div>
+                )}
 
                 {/* Additional Notes */}
                 <div>

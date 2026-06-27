@@ -3,7 +3,7 @@
  * Allows setting custom QRIS image (as Base64 Data URL) and metadata in LocalStorage.
  */
 
-const FALLBACK_QRIS_IMAGE = '/src/assets/images/original_qris_1782495138097.jpg';
+const FALLBACK_QRIS_IMAGE = 'https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/logo-qris/WhatsApp%20Image%202026-06-27%20at%2000.36.32.jpeg';
 
 export interface QrisConfig {
   imageUrl: string;
@@ -16,14 +16,14 @@ export const getQrisConfig = (): QrisConfig => {
   if (typeof window === 'undefined') {
     return {
       imageUrl: FALLBACK_QRIS_IMAGE,
-      merchantName: 'MATERIAL JAYA',
+      merchantName: 'GMSOLUTION',
       nmid: 'ID1022215501324',
       printerId: '93600915'
     };
   }
 
   const imageUrl = localStorage.getItem('gmsolution_qris_image') || FALLBACK_QRIS_IMAGE;
-  const merchantName = localStorage.getItem('gmsolution_qris_merchant_name') || 'MATERIAL JAYA';
+  const merchantName = localStorage.getItem('gmsolution_qris_merchant_name') || 'GMSOLUTION';
   const nmid = localStorage.getItem('gmsolution_qris_nmid') || 'ID1022215501324';
   const printerId = localStorage.getItem('gmsolution_qris_printer_id') || '93600915';
 

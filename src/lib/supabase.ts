@@ -162,8 +162,20 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
       if (!error && data) {
         return data as Product;
       }
+      
       if (error) {
-        console.warn('Supabase create product warning, falling back to API:', error);
+        console.warn('Supabase create product failed, trying retry without target_type:', error);
+        const { target_type, ...productNoTarget } = product;
+        const retryResult = await supabase
+          .from('products')
+          .insert([productNoTarget])
+          .select()
+          .single();
+          
+        if (!retryResult.error && retryResult.data) {
+          return retryResult.data as Product;
+        }
+        console.warn('Supabase create product retry warning, falling back to API:', retryResult.error || error);
         supabaseFailed = true;
       }
     } catch (err) {
@@ -194,8 +206,21 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
       if (!error && data) {
         return data as Product;
       }
+      
       if (error) {
-        console.warn('Supabase update product warning, falling back to API:', error);
+        console.warn('Supabase update product failed, trying retry without target_type:', error);
+        const { target_type, ...productNoTarget } = product;
+        const retryResult = await supabase
+          .from('products')
+          .update(productNoTarget)
+          .eq('id', id)
+          .select()
+          .single();
+          
+        if (!retryResult.error && retryResult.data) {
+          return retryResult.data as Product;
+        }
+        console.warn('Supabase update product retry warning, falling back to API:', retryResult.error || error);
         supabaseFailed = true;
       }
     } catch (err) {
@@ -377,8 +402,12 @@ export async function dbDeleteOrder(id: string): Promise<boolean> {
 export async function dbGetDashboardStats(): Promise<DashboardStats> {
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      let { data: productsData } = await supabase.from('products').select('*');
-      let { data: ordersData } = await supabase.from('orders').select('*');
+      let { data: productsData, error: prodError } = await supabase.from('products').select('*');
+      let { data: ordersData, error: ordError } = await supabase.from('orders').select('*');
+
+      if (prodError || ordError) {
+        throw new Error(prodError?.message || ordError?.message || 'Failed to select from products or orders');
+      }
 
       if (!productsData || productsData.length === 0) {
         console.log('Stats: products empty. Seeding...');

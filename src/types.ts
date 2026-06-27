@@ -13,6 +13,7 @@ export interface Product {
   image_url: string;
   whatsapp_number: string;
   created_at?: string;
+  target_type?: 'link' | 'phone';
 }
 
 export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED';

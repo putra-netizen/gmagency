@@ -31,7 +31,8 @@ if (supabase) {
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Path to JSON database
 const DB_DIR = path.join(process.cwd(), 'src', 'data');
@@ -182,6 +183,7 @@ app.post('/api/products', async (req, res) => {
     price: Number(req.body.price) || 0,
     image_url: req.body.image_url || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80',
     whatsapp_number: req.body.whatsapp_number || '+6285921095666',
+    target_type: req.body.target_type || 'link',
     created_at: new Date().toISOString()
   };
 
@@ -192,10 +194,23 @@ app.post('/api/products', async (req, res) => {
         .insert([newProduct])
         .select()
         .single();
+      
       if (!error && data) {
         return res.status(201).json(data);
       }
-      console.error('Supabase error inserting product:', error);
+      
+      console.warn('Supabase product insert with target_type failed, trying without target_type:', error);
+      const { target_type, ...newProductNoTargetType } = newProduct;
+      const retryResult = await supabase
+        .from('products')
+        .insert([newProductNoTargetType])
+        .select()
+        .single();
+        
+      if (!retryResult.error && retryResult.data) {
+        return res.status(201).json(retryResult.data);
+      }
+      console.error('Supabase error inserting product:', retryResult.error || error);
     } catch (err) {
       console.error('Supabase product insert exception:', err);
     }
@@ -219,7 +234,8 @@ app.put('/api/products/:id', async (req, res) => {
         description_en: req.body.description_en,
         price: req.body.price !== undefined ? Number(req.body.price) : undefined,
         image_url: req.body.image_url,
-        whatsapp_number: req.body.whatsapp_number
+        whatsapp_number: req.body.whatsapp_number,
+        target_type: req.body.target_type
       };
       // Clean undefined fields
       Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
@@ -234,7 +250,20 @@ app.put('/api/products/:id', async (req, res) => {
       if (!error && data) {
         return res.json(data);
       }
-      console.error('Supabase error updating product:', error);
+      
+      console.warn('Supabase product update with target_type failed, trying without target_type:', error);
+      const { target_type, ...updateDataNoTargetType } = updateData;
+      const retryResult = await supabase
+        .from('products')
+        .update(updateDataNoTargetType)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!retryResult.error && retryResult.data) {
+        return res.json(retryResult.data);
+      }
+      console.error('Supabase error updating product:', retryResult.error || error);
     } catch (err) {
       console.error('Supabase product update exception:', err);
     }
@@ -252,7 +281,8 @@ app.put('/api/products/:id', async (req, res) => {
       description_en: req.body.description_en !== undefined ? req.body.description_en : db.products[index].description_en,
       price: req.body.price !== undefined ? Number(req.body.price) : db.products[index].price,
       image_url: req.body.image_url || db.products[index].image_url,
-      whatsapp_number: req.body.whatsapp_number || db.products[index].whatsapp_number
+      whatsapp_number: req.body.whatsapp_number || db.products[index].whatsapp_number,
+      target_type: req.body.target_type !== undefined ? req.body.target_type : db.products[index].target_type
     };
     writeDatabase(db);
     res.json(db.products[index]);

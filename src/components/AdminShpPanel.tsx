@@ -191,8 +191,31 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       
       // Filter logs per account: each account only logs and sees their own data.
       // Pre-existing/legacy records are shown to all for safety.
-      const filteredOrders = orders.filter(o => !o.created_by || o.created_by === currentAdminUser);
-      const filteredReviews = reviews.filter(r => !r.created_by || r.created_by === currentAdminUser);
+      const ADMIN_ACCOUNTS = ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'];
+      try {
+        const credsStr = localStorage.getItem('gm_adminshp_creds');
+        if (credsStr) {
+          const custom = JSON.parse(credsStr);
+          Object.keys(custom).forEach(k => {
+            if (!ADMIN_ACCOUNTS.includes(k)) {
+              ADMIN_ACCOUNTS.push(k);
+            }
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
+      const filteredOrders = orders.filter(o => 
+        !o.created_by || 
+        o.created_by === currentAdminUser || 
+        !ADMIN_ACCOUNTS.includes(o.created_by)
+      );
+      const filteredReviews = reviews.filter(r => 
+        !r.created_by || 
+        r.created_by === currentAdminUser || 
+        !ADMIN_ACCOUNTS.includes(r.created_by)
+      );
 
       setShopeeOrders(filteredOrders);
       setMapsReviews(filteredReviews);
@@ -560,7 +583,7 @@ Format Chat : ${data.notes || '-'}`;
       alert(currentLang === 'id' ? 'Pesanan Report Sosmed berhasil ditambahkan!' : 'Sosmed Report order created successfully!');
     } catch (err) {
       console.error(err);
-      alert('Gagal menambah order.');
+      alert(currentLang === 'id' ? `Gagal menambah order: ${err instanceof Error ? err.message : String(err)}` : `Failed to create order: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -612,7 +635,7 @@ Format Chat : ${data.notes || '-'}`;
       alert(currentLang === 'id' ? 'Pesanan Spam WA berhasil ditambahkan!' : 'Spam WA order created successfully!');
     } catch (err) {
       console.error(err);
-      alert('Gagal menambah order.');
+      alert(currentLang === 'id' ? `Gagal menambah order: ${err instanceof Error ? err.message : String(err)}` : `Failed to create order: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -655,7 +678,7 @@ Format Chat : ${data.notes || '-'}`;
       setDeleteConfirm(null);
     } catch (err) {
       console.error(err);
-      alert('Gagal menghapus order.');
+      alert(currentLang === 'id' ? `Gagal menghapus order: ${err instanceof Error ? err.message : String(err)}` : `Failed to delete order: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -707,7 +730,7 @@ Format Chat : ${data.notes || '-'}`;
       alert(currentLang === 'id' ? 'Target review maps berhasil didaftarkan!' : 'Maps Review target created successfully!');
     } catch (err) {
       console.error(err);
-      alert('Gagal menambah data.');
+      alert(currentLang === 'id' ? `Gagal menambah data: ${err instanceof Error ? err.message : String(err)}` : `Failed to create data: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -732,7 +755,7 @@ Format Chat : ${data.notes || '-'}`;
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal menambah akun progres.');
+      alert(currentLang === 'id' ? `Gagal menambah akun progres: ${err instanceof Error ? err.message : String(err)}` : `Failed to add progress account: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
