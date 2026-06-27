@@ -46,6 +46,50 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
 
   const isDark = theme === 'dark';
 
+  const [isMobileFocused, setIsMobileFocused] = React.useState(false);
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  // IntersectionObserver specifically for mobile scroll focusing
+  React.useEffect(() => {
+    let observer: IntersectionObserver | null = null;
+
+    const setupObserver = () => {
+      if (window.innerWidth < 768) {
+        if (!observer) {
+          observer = new IntersectionObserver(
+            ([entry]) => {
+              setIsMobileFocused(entry.isIntersecting);
+            },
+            {
+              // Center portion of the mobile screen
+              rootMargin: '-25% 0px -25% 0px',
+              threshold: 0.4,
+            }
+          );
+          if (cardRef.current) {
+            observer.observe(cardRef.current);
+          }
+        }
+      } else {
+        if (observer) {
+          observer.disconnect();
+          observer = null;
+        }
+        setIsMobileFocused(false);
+      }
+    };
+
+    setupObserver();
+    window.addEventListener('resize', setupObserver);
+
+    return () => {
+      window.removeEventListener('resize', setupObserver);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, []);
+
   // Generate WhatsApp message for direct chat
   const getWhatsAppLink = () => {
     const defaultNumber = '6285921095666'; // GM Agency primary contact
@@ -82,28 +126,38 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
     return `${product.image_url}${product.image_url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
   }, [product.image_url]);
 
-
-
   return (
     <motion.div 
+      ref={cardRef}
       initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ 
+      animate={{ 
+        opacity: 1, 
+        y: isMobileFocused ? -10 : 0,
+        scale: isMobileFocused ? 1.03 : 1,
+        boxShadow: isMobileFocused
+          ? (isDark 
+              ? "0 25px 30px -5px rgba(59, 130, 246, 0.25), 0 15px 15px -5px rgba(59, 130, 246, 0.15)"
+              : "0 20px 25px -5px rgba(59, 130, 246, 0.15), 0 10px 10px -5px rgba(59, 130, 246, 0.08)")
+          : "0 0px 0px rgba(0, 0, 0, 0)"
+      }}
+      whileHover={!isMobileFocused ? { 
         y: -8, 
         boxShadow: isDark 
           ? "0 20px 25px -5px rgba(59, 130, 246, 0.2), 0 10px 10px -5px rgba(59, 130, 246, 0.1)"
           : "0 20px 25px -5px rgba(59, 130, 246, 0.1), 0 10px 10px -5px rgba(59, 130, 246, 0.05)"
-      }}
+      } : undefined}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
       className={`group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-300 h-full ${
         isDark 
-          ? 'border-slate-800/80 bg-slate-900/40 backdrop-blur-md hover:border-blue-500/50' 
-          : 'border-slate-200/85 bg-white shadow-sm hover:shadow-md hover:border-blue-400'
+          ? `border-slate-800/80 bg-slate-900/40 backdrop-blur-md ${isMobileFocused ? 'border-blue-500/80 shadow-[0_0_20px_rgba(59,130,246,0.25)]' : 'hover:border-blue-500/50'}` 
+          : `border-slate-200/85 bg-white shadow-sm ${isMobileFocused ? 'border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.15)] bg-slate-50/50' : 'hover:shadow-md hover:border-blue-400'}`
       }`}
       id={`product-card-${product.id}`}
     >
       {/* Decorative Top Hover Border Glow Line */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-emerald-400 to-indigo-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left z-20" />
+      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-emerald-400 to-indigo-500 transform transition-transform duration-500 origin-left z-20 ${
+        isMobileFocused ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+      }`} />
 
       {/* Product Image Stage */}
       <div className={`relative aspect-video w-full overflow-hidden border-b ${
@@ -119,15 +173,17 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
         <img
           src={imageUrlWithCacheBuster}
           alt={name}
-          className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-108"
+          className={`h-full w-full object-cover transition-transform duration-700 ease-out ${
+            isMobileFocused ? 'scale-108' : 'group-hover:scale-108'
+          }`}
           referrerPolicy="no-referrer"
           loading="lazy"
         />
 
-
-
         {/* Hover overlay sheen/consultation badge */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3 z-10 pointer-events-none">
+        <div className={`absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent transition-opacity duration-300 flex items-end p-3 z-10 pointer-events-none ${
+          isMobileFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}>
           <span className="text-[10px] text-white font-medium flex items-center gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Live Delivery Active
@@ -139,8 +195,10 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
       <div className={`flex flex-1 flex-col p-4 transition-colors duration-300 ${
         isDark ? 'bg-gradient-to-b from-slate-900/80 to-slate-950/80' : 'bg-white'
       }`}>
-        <h3 className={`font-bold text-sm mb-1.5 line-clamp-1 group-hover:text-blue-500 transition-colors duration-300 ${
-          isDark ? 'text-slate-100' : 'text-slate-800'
+        <h3 className={`font-bold text-sm mb-1.5 line-clamp-1 transition-colors duration-300 ${
+          isMobileFocused 
+            ? 'text-blue-500' 
+            : isDark ? 'text-slate-100 group-hover:text-blue-500' : 'text-slate-800 group-hover:text-blue-500'
         }`}>
           {name}
         </h3>
@@ -178,7 +236,9 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
             href={getWhatsAppLink()}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 py-2 bg-gradient-to-r from-[#25D366] to-[#128C7E] text-white rounded-lg text-[10px] font-extrabold text-center flex items-center justify-center gap-1.5 transition-all duration-300 shadow-md shadow-emerald-500/10 hover:shadow-lg hover:shadow-emerald-500/25 hover:brightness-105 active:scale-95 cursor-pointer border border-emerald-500/30"
+            className={`flex-1 py-2 bg-gradient-to-r from-[#25D366] to-[#128C7E] text-white rounded-lg text-[10px] font-extrabold text-center flex items-center justify-center gap-1.5 transition-all duration-300 shadow-md shadow-emerald-500/10 hover:shadow-lg hover:shadow-emerald-500/25 hover:brightness-105 active:scale-95 cursor-pointer border border-emerald-500/30 ${
+              isMobileFocused ? 'ring-2 ring-emerald-400 animate-pulse' : ''
+            }`}
             id={`product-wa-btn-${product.id}`}
           >
             <WhatsAppLogo className="h-3.5 w-3.5 shrink-0 fill-white drop-shadow-sm" />
@@ -188,7 +248,9 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
           {/* Premium Instant Checkout Button */}
           <button
             onClick={() => onCheckoutClick(product)}
-            className="flex-1 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-[10px] font-extrabold text-center flex items-center justify-center gap-1.5 transition-all duration-300 shadow-md shadow-blue-500/10 hover:shadow-lg hover:shadow-blue-500/25 hover:brightness-105 active:scale-95 cursor-pointer border border-blue-600/30"
+            className={`flex-1 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg text-[10px] font-extrabold text-center flex items-center justify-center gap-1.5 transition-all duration-300 shadow-md shadow-blue-500/10 hover:shadow-lg hover:shadow-blue-500/25 hover:brightness-105 active:scale-95 cursor-pointer border border-blue-600/30 ${
+              isMobileFocused ? 'ring-2 ring-blue-400 animate-pulse' : ''
+            }`}
             id={`product-checkout-btn-${product.id}`}
           >
             <ShoppingCart className="h-3.5 w-3.5 shrink-0 drop-shadow-sm" />
