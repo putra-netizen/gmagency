@@ -1,9 +1,32 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus } from './src/types';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+const isSupabaseConfigured = !!(
+  supabaseUrl && 
+  supabaseAnonKey && 
+  supabaseUrl !== 'YOUR_SUPABASE_URL' && 
+  supabaseUrl !== 'MY_SUPABASE_URL' &&
+  !supabaseUrl.includes('placeholder')
+);
+
+const supabase = isSupabaseConfigured ? createClient(supabaseUrl!, supabaseAnonKey!) : null;
+
+if (supabase) {
+  console.log('⚡ Server: Supabase client initialized successfully!');
+} else {
+  console.warn('📦 Server: Running with local JSON database fallback.');
+}
 
 const app = express();
 const PORT = 3000;
@@ -118,13 +141,38 @@ function writeDatabase(data: any) {
 // --- API ROUTES ---
 
 // 1. PRODUCTS API
-app.get('/api/products', (req, res) => {
+app.get('/api/products', async (req, res) => {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (!error && data) {
+        if (data.length === 0) {
+          console.log('Server auto-seeding products table in Supabase...');
+          await supabase.from('products').insert(INITIAL_PRODUCTS);
+          const { data: seeded } = await supabase
+            .from('products')
+            .select('*')
+            .order('created_at', { ascending: true });
+          if (seeded) return res.json(seeded);
+        } else {
+          return res.json(data);
+        }
+      } else {
+        console.error('Supabase error fetching products:', error);
+      }
+    } catch (err) {
+      console.error('Supabase products fetch exception:', err);
+    }
+  }
+
   const db = readDatabase();
   res.json(db.products);
 });
 
-app.post('/api/products', (req, res) => {
-  const db = readDatabase();
+app.post('/api/products', async (req, res) => {
   const newProduct: Product = {
     id: 'prod-' + Date.now(),
     name: req.body.name || 'Produk Baru',
@@ -137,14 +185,62 @@ app.post('/api/products', (req, res) => {
     created_at: new Date().toISOString()
   };
 
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .insert([newProduct])
+        .select()
+        .single();
+      if (!error && data) {
+        return res.status(201).json(data);
+      }
+      console.error('Supabase error inserting product:', error);
+    } catch (err) {
+      console.error('Supabase product insert exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   db.products.push(newProduct);
   writeDatabase(db);
   res.status(201).json(newProduct);
 });
 
-app.put('/api/products/:id', (req, res) => {
-  const db = readDatabase();
+app.put('/api/products/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (supabase) {
+    try {
+      const updateData = {
+        name: req.body.name,
+        name_en: req.body.name_en,
+        description: req.body.description,
+        description_en: req.body.description_en,
+        price: req.body.price !== undefined ? Number(req.body.price) : undefined,
+        image_url: req.body.image_url,
+        whatsapp_number: req.body.whatsapp_number
+      };
+      // Clean undefined fields
+      Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
+
+      const { data, error } = await supabase
+        .from('products')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return res.json(data);
+      }
+      console.error('Supabase error updating product:', error);
+    } catch (err) {
+      console.error('Supabase product update exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   const index = db.products.findIndex((p: Product) => p.id === id);
 
   if (index !== -1) {
@@ -165,9 +261,25 @@ app.put('/api/products/:id', (req, res) => {
   }
 });
 
-app.delete('/api/products/:id', (req, res) => {
-  const db = readDatabase();
+app.delete('/api/products/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', id);
+      if (!error) {
+        return res.json({ success: true, message: 'Product deleted' });
+      }
+      console.error('Supabase error deleting product:', error);
+    } catch (err) {
+      console.error('Supabase product delete exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   const initialLength = db.products.length;
   db.products = db.products.filter((p: Product) => p.id !== id);
 
@@ -180,31 +292,70 @@ app.delete('/api/products/:id', (req, res) => {
 });
 
 // 2. ORDERS API
-app.get('/api/orders', (req, res) => {
+app.get('/api/orders', async (req, res) => {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        return res.json(data);
+      }
+      console.error('Supabase error fetching orders:', error);
+    } catch (err) {
+      console.error('Supabase orders fetch exception:', err);
+    }
+  }
+
   const db = readDatabase();
-  // Sort orders descending (most recent first)
   const sortedOrders = [...db.orders].sort((a: Order, b: Order) => 
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   res.json(sortedOrders);
 });
 
-app.post('/api/orders', (req, res) => {
-  const db = readDatabase();
+app.post('/api/orders', async (req, res) => {
   const { product_id, buyer_name, phone_number, notes, target_link, target_spam_phone, quantity } = req.body;
 
-  const product = db.products.find((p: Product) => p.id === product_id);
-  if (!product) {
-    return res.status(404).json({ error: 'Product not found' });
+  let productPrice = 0;
+  let productName = 'Produk';
+
+  if (supabase) {
+    try {
+      const { data: prod, error: prodError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', product_id)
+        .single();
+      if (!prodError && prod) {
+        productPrice = prod.price;
+        productName = prod.name;
+      }
+    } catch (err) {
+      console.error('Supabase order product lookup exception:', err);
+    }
+  }
+
+  if (productPrice === 0) {
+    const db = readDatabase();
+    const product = db.products.find((p: Product) => p.id === product_id);
+    if (product) {
+      productPrice = product.price;
+      productName = product.name;
+    } else {
+      return res.status(404).json({ error: 'Product not found' });
+    }
   }
 
   const qty = Number(quantity) || 1;
-  const totalPrice = product.price * qty;
+  const totalPrice = productPrice * qty;
+  const orderId = 'ord-' + Date.now().toString().slice(-6);
 
   const newOrder: Order = {
-    id: 'ord-' + (1000 + db.orders.length + 1),
+    id: orderId,
     product_id,
-    product_name: product.name,
+    product_name: productName,
     buyer_name,
     phone_number,
     notes: notes || '',
@@ -216,14 +367,65 @@ app.post('/api/orders', (req, res) => {
     created_at: new Date().toISOString()
   };
 
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .insert([newOrder])
+        .select()
+        .single();
+      if (!error && data) {
+        return res.status(201).json(data);
+      }
+      console.error('Supabase error inserting order:', error);
+    } catch (err) {
+      console.error('Supabase order insert exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   db.orders.push(newOrder);
   writeDatabase(db);
   res.status(201).json(newOrder);
 });
 
-app.put('/api/orders/:id', (req, res) => {
-  const db = readDatabase();
+app.put('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (supabase) {
+    try {
+      const updateData = {
+        payment_status: req.body.payment_status,
+        buyer_name: req.body.buyer_name,
+        phone_number: req.body.phone_number,
+        notes: req.body.notes,
+        target_link: req.body.target_link,
+        target_spam_phone: req.body.target_spam_phone,
+        quantity: req.body.quantity !== undefined ? Number(req.body.quantity) : undefined,
+        total_price: req.body.total_price !== undefined ? Number(req.body.total_price) : undefined,
+        worker_id: req.body.worker_id,
+        worker_status: req.body.worker_status,
+        worker_proof_url: req.body.worker_proof_url
+      };
+      Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
+
+      const { data, error } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return res.json(data);
+      }
+      console.error('Supabase error updating order:', error);
+    } catch (err) {
+      console.error('Supabase order update exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   const index = db.orders.findIndex((o: Order) => o.id === id);
 
   if (index !== -1) {
@@ -248,9 +450,25 @@ app.put('/api/orders/:id', (req, res) => {
   }
 });
 
-app.delete('/api/orders/:id', (req, res) => {
-  const db = readDatabase();
+app.delete('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .delete()
+        .eq('id', id);
+      if (!error) {
+        return res.json({ success: true, message: 'Order deleted' });
+      }
+      console.error('Supabase error deleting order:', error);
+    } catch (err) {
+      console.error('Supabase order delete exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   const initialLength = db.orders.length;
   db.orders = db.orders.filter((o: Order) => o.id !== id);
 
@@ -263,27 +481,77 @@ app.delete('/api/orders/:id', (req, res) => {
 });
 
 // --- SHOPEE ORDERS API ---
-app.get('/api/shopee_orders', (req, res) => {
+app.get('/api/shopee_orders', async (req, res) => {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('shopee_orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        return res.json(data);
+      }
+      console.error('Supabase error fetching shopee_orders:', error);
+    } catch (err) {
+      console.error('Supabase shopee_orders fetch exception:', err);
+    }
+  }
+
   const db = readDatabase();
   res.json(db.shopee_orders || []);
 });
 
-app.post('/api/shopee_orders', (req, res) => {
-  const db = readDatabase();
+app.post('/api/shopee_orders', async (req, res) => {
   const newOrder = {
     id: 'shp-' + Date.now().toString().slice(-6),
     ...req.body,
     created_at: new Date().toISOString()
   };
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('shopee_orders')
+        .insert([newOrder])
+        .select()
+        .single();
+      if (!error && data) {
+        return res.status(201).json(data);
+      }
+      console.error('Supabase error inserting shopee_order:', error);
+    } catch (err) {
+      console.error('Supabase shopee_order insert exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   if (!db.shopee_orders) db.shopee_orders = [];
   db.shopee_orders.push(newOrder);
   writeDatabase(db);
   res.status(201).json(newOrder);
 });
 
-app.put('/api/shopee_orders/:id', (req, res) => {
-  const db = readDatabase();
+app.put('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('shopee_orders')
+        .update(req.body)
+        .eq('id', id)
+        .select()
+        .single();
+      if (!error && data) {
+        return res.json(data);
+      }
+      console.error('Supabase error updating shopee_order:', error);
+    } catch (err) {
+      console.error('Supabase shopee_order update exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   const idx = db.shopee_orders.findIndex((o: any) => o.id === id);
   if (idx !== -1) {
     db.shopee_orders[idx] = {
@@ -297,9 +565,25 @@ app.put('/api/shopee_orders/:id', (req, res) => {
   }
 });
 
-app.delete('/api/shopee_orders/:id', (req, res) => {
-  const db = readDatabase();
+app.delete('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('shopee_orders')
+        .delete()
+        .eq('id', id);
+      if (!error) {
+        return res.json({ success: true });
+      }
+      console.error('Supabase error deleting shopee_order:', error);
+    } catch (err) {
+      console.error('Supabase shopee_order delete exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   const len = db.shopee_orders.length;
   db.shopee_orders = db.shopee_orders.filter((o: any) => o.id !== id);
   if (db.shopee_orders.length < len) {
@@ -311,13 +595,27 @@ app.delete('/api/shopee_orders/:id', (req, res) => {
 });
 
 // --- MAPS REVIEWS API ---
-app.get('/api/maps_reviews', (req, res) => {
+app.get('/api/maps_reviews', async (req, res) => {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('maps_reviews')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        return res.json(data);
+      }
+      console.error('Supabase error fetching maps_reviews:', error);
+    } catch (err) {
+      console.error('Supabase maps_reviews fetch exception:', err);
+    }
+  }
+
   const db = readDatabase();
   res.json(db.maps_reviews || []);
 });
 
-app.post('/api/maps_reviews', (req, res) => {
-  const db = readDatabase();
+app.post('/api/maps_reviews', async (req, res) => {
   const newReview = {
     id: 'map-' + Date.now().toString().slice(-6),
     ...req.body,
@@ -326,15 +624,51 @@ app.post('/api/maps_reviews', (req, res) => {
     status: req.body.status || 'PENDING',
     created_at: new Date().toISOString()
   };
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('maps_reviews')
+        .insert([newReview])
+        .select()
+        .single();
+      if (!error && data) {
+        return res.status(201).json(data);
+      }
+      console.error('Supabase error inserting maps_review:', error);
+    } catch (err) {
+      console.error('Supabase maps_review insert exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   if (!db.maps_reviews) db.maps_reviews = [];
   db.maps_reviews.push(newReview);
   writeDatabase(db);
   res.status(201).json(newReview);
 });
 
-app.put('/api/maps_reviews/:id', (req, res) => {
-  const db = readDatabase();
+app.put('/api/maps_reviews/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('maps_reviews')
+        .update(req.body)
+        .eq('id', id)
+        .select()
+        .single();
+      if (!error && data) {
+        return res.json(data);
+      }
+      console.error('Supabase error updating maps_review:', error);
+    } catch (err) {
+      console.error('Supabase maps_review update exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   const idx = db.maps_reviews.findIndex((o: any) => o.id === id);
   if (idx !== -1) {
     db.maps_reviews[idx] = {
@@ -348,9 +682,25 @@ app.put('/api/maps_reviews/:id', (req, res) => {
   }
 });
 
-app.delete('/api/maps_reviews/:id', (req, res) => {
-  const db = readDatabase();
+app.delete('/api/maps_reviews/:id', async (req, res) => {
   const { id } = req.params;
+
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('maps_reviews')
+        .delete()
+        .eq('id', id);
+      if (!error) {
+        return res.json({ success: true });
+      }
+      console.error('Supabase error deleting maps_review:', error);
+    } catch (err) {
+      console.error('Supabase maps_review delete exception:', err);
+    }
+  }
+
+  const db = readDatabase();
   const len = db.maps_reviews.length;
   db.maps_reviews = db.maps_reviews.filter((o: any) => o.id !== id);
   if (db.maps_reviews.length < len) {
@@ -362,7 +712,54 @@ app.delete('/api/maps_reviews/:id', (req, res) => {
 });
 
 // 3. FINANCIAL & STATS DASHBOARD API
-app.get('/api/dashboard/stats', (req, res) => {
+app.get('/api/dashboard/stats', async (req, res) => {
+  if (supabase) {
+    try {
+      const { data: productsData, error: prodError } = await supabase.from('products').select('*');
+      const { data: ordersData, error: ordError } = await supabase.from('orders').select('*');
+
+      if (!prodError && !ordError && ordersData && productsData) {
+        const orders = ordersData as Order[];
+
+        const totalOrders = orders.length;
+        const totalRevenue = orders
+          .filter((o: Order) => o.payment_status === 'PAID')
+          .reduce((sum: number, o: Order) => sum + Number(o.total_price), 0);
+
+        const pendingOrders = orders.filter((o: Order) => o.payment_status === 'PENDING').length;
+        const completedOrders = orders.filter((o: Order) => o.payment_status === 'PAID').length;
+
+        // Revenue by product mapping
+        const revenueMap: Record<string, number> = {};
+        orders
+          .filter((o: Order) => o.payment_status === 'PAID')
+          .forEach((o: Order) => {
+            revenueMap[o.product_name] = (revenueMap[o.product_name] || 0) + Number(o.total_price);
+          });
+
+        const revenueByProduct = Object.entries(revenueMap).map(([name, value]) => ({
+          name,
+          value
+        }));
+
+        const recentOrders = [...orders]
+          .sort((a: Order, b: Order) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 10);
+
+        return res.json({
+          totalOrders,
+          totalRevenue,
+          pendingOrders,
+          completedOrders,
+          revenueByProduct,
+          recentOrders
+        });
+      }
+    } catch (err) {
+      console.error('Supabase stats compilation exception:', err);
+    }
+  }
+
   const db = readDatabase();
   const orders = db.orders as Order[];
 
