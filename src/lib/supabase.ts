@@ -444,11 +444,24 @@ export async function dbGetProducts(): Promise<Product[]> {
 }
 
 export async function dbCreateProduct(product: Partial<Product>): Promise<Product> {
+  const newProduct: Product = {
+    id: product.id || 'prod-' + Date.now().toString().slice(-6),
+    name: product.name || '',
+    name_en: product.name_en || '',
+    description: product.description || '',
+    description_en: product.description_en || '',
+    price: Number(product.price) || 0,
+    image_url: product.image_url || '',
+    whatsapp_number: product.whatsapp_number || '',
+    target_type: product.target_type || 'link',
+    created_at: product.created_at || new Date().toISOString()
+  };
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('products')
-        .insert([product])
+        .insert([newProduct])
         .select()
         .single();
       
@@ -458,7 +471,7 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
       
       if (error) {
         console.warn('Supabase create product failed, trying retry without target_type:', error);
-        const { target_type, ...productNoTarget } = product;
+        const { target_type, ...productNoTarget } = newProduct;
         const retryResult = await supabase
           .from('products')
           .insert([productNoTarget])
@@ -477,24 +490,11 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
     }
   }
 
-  const newProduct: Product = {
-    id: product.id || 'prod-' + Date.now().toString().slice(-6),
-    name: product.name || '',
-    name_en: product.name_en || '',
-    description: product.description || '',
-    description_en: product.description_en || '',
-    price: Number(product.price) || 0,
-    image_url: product.image_url || '',
-    whatsapp_number: product.whatsapp_number || '',
-    target_type: product.target_type || 'link',
-    created_at: product.created_at || new Date().toISOString()
-  };
-
   try {
     const response = await fetch('/api/products', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(product),
+      body: JSON.stringify(newProduct),
     });
     if (response.ok) {
       const contentType = response.headers.get('content-type');

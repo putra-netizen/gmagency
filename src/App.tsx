@@ -149,6 +149,17 @@ export default function App() {
   useEffect(() => {
     if (currentView === 'home') {
       loadProducts();
+      
+      const interval = setInterval(() => {
+        // Silent background refresh of products to provide automatic realtime updates
+        dbGetProducts()
+          .then((data) => {
+            setProducts(data);
+          })
+          .catch((err) => console.error('Silent products refresh failed:', err));
+      }, 15000);
+      
+      return () => clearInterval(interval);
     }
   }, [currentView]);
 

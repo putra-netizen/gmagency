@@ -307,6 +307,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   useEffect(() => {
     loadDashboardData();
     const interval = setInterval(() => {
+      dbGetProducts().then(prodsData => setProducts(prodsData)).catch(err => console.error(err));
       dbGetOrders().then(ordsData => setOrders(ordsData)).catch(err => console.error(err));
       dbGetShopeeOrders().then(shopeeData => setShopeeOrders(shopeeData)).catch(err => console.error(err));
       dbGetMapsReviews().then(mapsData => setMapsReviews(mapsData)).catch(err => console.error(err));
@@ -567,17 +568,22 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         }
       }
 
-      // 2. Perform auto-translation for English fields
-      const [translatedName, translatedDesc] = await Promise.all([
-        translateText(prodName),
-        translateText(prodDesc)
-      ]);
+      // 2. Perform auto-translation for English fields if they are empty
+      let finalNameEn = prodNameEn ? prodNameEn.trim() : '';
+      let finalDescEn = prodDescEn ? prodDescEn.trim() : '';
+
+      if (!finalNameEn && prodName) {
+        finalNameEn = await translateText(prodName);
+      }
+      if (!finalDescEn && prodDesc) {
+        finalDescEn = await translateText(prodDesc);
+      }
 
       const payload: Partial<Product> = {
         name: prodName,
-        name_en: translatedName,
+        name_en: finalNameEn,
         description: prodDesc,
-        description_en: translatedDesc,
+        description_en: finalDescEn,
         price: Number(prodPrice),
         image_url: imageUrl,
         whatsapp_number: prodWa,
@@ -2446,30 +2452,84 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
             <form onSubmit={handleSaveProduct} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
               
-              {/* Product Name */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">{t.prodNameId}</label>
-                <input
-                  type="text"
-                  required
-                  value={prodName}
-                  onChange={(e) => setProdName(e.target.value)}
-                  placeholder="Contoh: Review Management Google Maps"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                />
+              {/* Product Name (Indonesia & English) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">{t.prodNameId}</label>
+                  <input
+                    type="text"
+                    required
+                    value={prodName}
+                    onChange={(e) => setProdName(e.target.value)}
+                    placeholder="Contoh: Review Management Google Maps"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-slate-700 uppercase">{t.prodNameEn}</label>
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                        if (prodName) {
+                          const translated = await translateText(prodName);
+                          setProdNameEn(translated);
+                        }
+                      }}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                    >
+                      {currentLang === 'id' ? 'Terjemahkan Otomatis' : 'Auto-translate'}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={prodNameEn}
+                    onChange={(e) => setProdNameEn(e.target.value)}
+                    placeholder="Example: Google Maps Review Management"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
               </div>
 
-              {/* Product Description */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">{t.prodDescId}</label>
-                <textarea
-                  rows={3}
-                  required
-                  value={prodDesc}
-                  onChange={(e) => setProdDesc(e.target.value)}
-                  placeholder="Masukkan deskripsi lengkap layanan jasa..."
-                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
-                />
+              {/* Product Description (Indonesia & English) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">{t.prodDescId}</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={prodDesc}
+                    onChange={(e) => setProdDesc(e.target.value)}
+                    placeholder="Masukkan deskripsi lengkap layanan jasa..."
+                    className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-xs font-bold text-slate-700 uppercase">{t.prodDescEn}</label>
+                    <button 
+                      type="button" 
+                      onClick={async () => {
+                        if (prodDesc) {
+                          const translated = await translateText(prodDesc);
+                          setProdDescEn(translated);
+                        }
+                      }}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                    >
+                      {currentLang === 'id' ? 'Terjemahkan Otomatis' : 'Auto-translate'}
+                    </button>
+                  </div>
+                  <textarea
+                    rows={3}
+                    required
+                    value={prodDescEn}
+                    onChange={(e) => setProdDescEn(e.target.value)}
+                    placeholder="Enter full English description..."
+                    className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
+                  />
+                </div>
               </div>
 
               {/* Target Type Option (Link vs Number) */}
