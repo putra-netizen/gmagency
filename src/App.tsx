@@ -16,6 +16,7 @@ import { Product, Language, Order } from './types';
 import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected } from './lib/supabase';
 import { TRANSLATIONS } from './lib/translations';
 import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart } from 'lucide-react';
+import { motion } from 'motion/react';
 
 export default function App() {
   // Global States
@@ -158,7 +159,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans antialiased">
+    <div className="min-h-screen flex flex-col bg-[#070b19] text-white font-sans antialiased">
       {/* 1. Header Navbar */}
       <Navbar
         currentLang={currentLang}
@@ -187,10 +188,10 @@ export default function App() {
             >
               {/* Grid Header */}
               <div className="text-center max-w-3xl mx-auto mb-10 space-y-2">
-                <h2 className="text-2xl font-extrabold text-slate-800 font-sans tracking-tight uppercase">
+                <h2 className="text-2xl font-black text-white font-sans tracking-tight uppercase">
                   {t.productsTitle}
                 </h2>
-                <p className="text-slate-500 font-sans leading-relaxed text-xs sm:text-sm">
+                <p className="text-slate-400 font-sans leading-relaxed text-xs sm:text-sm">
                   {t.productsSub}
                 </p>
               </div>
@@ -199,10 +200,10 @@ export default function App() {
               {isLoading ? (
                 <div className="flex h-64 flex-col items-center justify-center gap-3">
                   <div className="h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500">Loading digital services...</span>
+                  <span className="text-sm font-semibold text-slate-400">Loading digital services...</span>
                 </div>
               ) : errorMsg ? (
-                <div className="mx-auto max-w-md rounded-xl bg-red-50 border border-red-100 p-5 text-center text-sm font-semibold text-red-700">
+                <div className="mx-auto max-w-md rounded-xl bg-red-950/20 border border-red-900/30 p-5 text-center text-sm font-semibold text-red-400">
                   {errorMsg}
                 </div>
               ) : (
@@ -326,18 +327,60 @@ export default function App() {
         />
       )}
 
-      {/* 5. Floating Global WhatsApp chat button */}
+      {/* 5. Floating Global WhatsApp chat button with real logo and glowing aura */}
       {currentView === 'home' && (
-        <a
-          href="https://wa.me/6285921095666?text=Halo%20GM%20Agency%2C%20saya%20ingin%20berkonsultasi%20mengenai%20layanan%20reputasi%20digital%20bisnis."
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/25 transition-transform hover:scale-110 hover:bg-emerald-600 active:scale-95"
-          title="Hubungi GM Agency via WhatsApp"
-          id="global-floating-whatsapp"
-        >
-          <MessageSquare className="h-6 w-6 fill-white" />
-        </a>
+        <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3">
+          {/* Decorative Message Bubble */}
+          <motion.div
+            initial={{ opacity: 0, x: 20, scale: 0.9 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            transition={{ delay: 1, duration: 0.5 }}
+            className="hidden sm:flex items-center gap-2 bg-white/95 backdrop-blur-md px-4 py-2 rounded-2xl shadow-xl shadow-slate-900/10 border border-slate-100 text-xs font-bold text-slate-800"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>
+              {currentLang === 'id' ? 'Ada Pertanyaan? Chat Sekarang!' : 'Any Questions? Chat Now!'}
+            </span>
+          </motion.div>
+
+          {/* Interactive Floating Pulse Button */}
+          <motion.a
+            href="https://wa.me/6285921095666?text=Halo%20GM%20Agency%2C%20saya%20ingin%20berkonsultasi%20mengenai%20layanan%20reputasi%20digital%20bisnis."
+            target="_blank"
+            rel="noopener noreferrer"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ 
+              scale: 1, 
+              opacity: 1,
+              y: [0, -8, 0]
+            }}
+            whileHover={{ scale: 1.12 }}
+            whileTap={{ scale: 0.92 }}
+            transition={{
+              scale: { type: "spring", stiffness: 260, damping: 20 },
+              opacity: { duration: 0.2 },
+              y: { repeat: Infinity, duration: 4, ease: "easeInOut" }
+            }}
+            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-r from-[#25D366] to-[#128C7E] text-white shadow-[0_4px_25px_rgba(37,211,102,0.45)] hover:shadow-[0_4px_35px_rgba(37,211,102,0.7)] cursor-pointer"
+            title="Hubungi GM Agency via WhatsApp"
+            id="global-floating-whatsapp"
+          >
+            {/* Pulsating background ring */}
+            <span className="absolute inset-0 rounded-full bg-emerald-400/30 animate-ping pointer-events-none" style={{ animationDuration: '3s' }} />
+            
+            {/* Real WhatsApp SVG Logo */}
+            <svg 
+              viewBox="0 0 24 24" 
+              className="h-7 w-7 fill-white drop-shadow-md"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.5-5.729-1.448L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.799.002-2.63-1.023-5.101-2.885-6.97C16.387 1.966 13.92 1.922 12.007 1.92c-5.439 0-9.865 4.37-9.869 9.8-.001 1.716.463 3.39 1.342 4.88l-.991 3.616 3.731-.963zm10.868-6.082c-.29-.146-1.72-.85-1.985-.947-.266-.097-.46-.146-.653.146-.193.291-.748.946-.917 1.14-.17.194-.339.219-.63.073-.29-.146-1.229-.453-2.34-1.445-.864-.772-1.448-1.725-1.618-2.016-.17-.29-.018-.447.127-.592.13-.13.29-.34.436-.51.145-.17.194-.291.291-.486.097-.194.048-.364-.025-.51-.072-.146-.653-1.577-.894-2.16-.236-.569-.475-.49-.653-.49-.17 0-.364-.025-.558-.025-.194 0-.51.073-.775.364-.266.29-1.018.996-1.018 2.43 0 1.434 1.043 2.818 1.189 3.012.145.195 2.052 3.134 4.973 4.394.694.3 1.236.48 1.658.614.698.221 1.334.19 1.837.115.56-.083 1.72-.704 1.963-1.385.242-.682.242-1.264.17-1.385-.072-.122-.266-.195-.558-.34z" />
+            </svg>
+          </motion.a>
+        </div>
       )}
 
       {/* 6. Global custom toast container */}
