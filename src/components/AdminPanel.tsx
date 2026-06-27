@@ -623,7 +623,10 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       await loadDashboardData();
     } catch (err) {
       console.error(err);
-      alert('Error saving product');
+      alert(currentLang === 'id' 
+        ? `Gagal menyimpan produk: ${err instanceof Error ? err.message : String(err)}` 
+        : `Error saving product: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       setIsSavingProduct(false);
     }
