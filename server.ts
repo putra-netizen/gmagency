@@ -1,9 +1,24 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+
+// Self-healing: if the user deletes the .env file, recreate it from process.env variables so Vite can build with correct variables
+if (!fs.existsSync('.env')) {
+  let envContent = '';
+  if (process.env.VITE_SUPABASE_URL) envContent += `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL}\n`;
+  if (process.env.VITE_SUPABASE_ANON_KEY) envContent += `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY}\n`;
+  if (process.env.GEMINI_API_KEY) envContent += `GEMINI_API_KEY=${process.env.GEMINI_API_KEY}\n`;
+  if (process.env.APP_URL) envContent += `APP_URL=${process.env.APP_URL}\n`;
+  
+  if (envContent) {
+    fs.writeFileSync('.env', envContent);
+    console.log('✨ Recreated .env from process.env variables');
+  }
+}
+
 dotenv.config();
 
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus } from './src/types';

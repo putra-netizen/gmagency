@@ -1223,10 +1223,18 @@ export async function dbUploadProductImage(file: File): Promise<string> {
     
     // We try multiple case-sensitivity permutations of bucket name and folder path to guarantee it saves to the correct bucket & folder structure
     const permutations = [
-      { bucket: 'files', path: `Buckets/katalog-image/${fileName}` },
+      // 1. Bucket: 'katalog-image', Path at root (this is the most likely actual bucket setup)
+      { bucket: 'katalog-image', path: fileName },
+      // 2. Bucket: 'katalog-image', Path: products/fileName
+      { bucket: 'katalog-image', path: `products/${fileName}` },
+      // 3. Bucket: 'files', Path: buckets/katalog-image/fileName (User's literal path)
       { bucket: 'files', path: `buckets/katalog-image/${fileName}` },
-      { bucket: 'Files', path: `Buckets/katalog-image/${fileName}` },
-      { bucket: 'Files', path: `buckets/katalog-image/${fileName}` }
+      { bucket: 'files', path: `Buckets/katalog-image/${fileName}` },
+      // 4. Bucket: 'buckets', Path: katalog-image/fileName
+      { bucket: 'buckets', path: `katalog-image/${fileName}` },
+      { bucket: 'Buckets', path: `katalog-image/${fileName}` },
+      // 5. Bucket: 'files', Path: katalog-image/fileName
+      { bucket: 'files', path: `katalog-image/${fileName}` }
     ];
 
     let lastError: any = null;
