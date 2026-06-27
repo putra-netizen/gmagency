@@ -146,8 +146,10 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadProducts();
-  }, []);
+    if (currentView === 'home') {
+      loadProducts();
+    }
+  }, [currentView]);
 
   const t = TRANSLATIONS[currentLang];
 

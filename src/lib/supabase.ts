@@ -127,7 +127,15 @@ async function safeFetch<T>(
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const text = await response.text();
-        return JSON.parse(text) as T;
+        const parsed = JSON.parse(text) as T;
+        if (fallbackStorageKey) {
+          try {
+            localStorage.setItem(fallbackStorageKey, text);
+          } catch (e) {
+            console.warn('Failed to save fetch result to localStorage:', e);
+          }
+        }
+        return parsed;
       } else {
         console.warn(`Response for ${url} is not JSON (got ${contentType}), falling back to LocalStorage.`);
       }
@@ -1213,10 +1221,10 @@ export async function dbUploadProductImage(file: File): Promise<string> {
     try {
       const fileExt = file.name.split('.').pop() || 'png';
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-      const filePath = `products/${fileName}`;
+      const filePath = `buckets/katalog-image/${fileName}`;
 
       const { data, error } = await supabase.storage
-        .from('katalog-image')
+        .from('files')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
@@ -1224,17 +1232,17 @@ export async function dbUploadProductImage(file: File): Promise<string> {
 
       if (error) {
         console.warn('Warning uploading image to Supabase:', error);
-        supabaseFailed = true;
+        // Do not set supabaseFailed = true so database operations still use Supabase
       } else {
         const { data: { publicUrl } } = supabase.storage
-          .from('katalog-image')
+          .from('files')
           .getPublicUrl(filePath);
 
         return publicUrl;
       }
     } catch (err) {
       console.warn('Exception uploading image to Supabase:', err);
-      supabaseFailed = true;
+      // Do not set supabaseFailed = true so database operations still use Supabase
     }
   }
 
