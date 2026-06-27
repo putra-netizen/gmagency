@@ -59,6 +59,12 @@ export default function ProductCard({ product, currentLang, onCheckoutClick }: P
     return currentLang === 'id' ? 'ulasan' : 'reviews';
   };
 
+  // Cache-busting URL to prevent browser caching of images, memoized to prevent constant reloading on component re-renders
+  const imageUrlWithCacheBuster = React.useMemo(() => {
+    if (!product.image_url) return '';
+    return `${product.image_url}${product.image_url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+  }, [product.image_url]);
+
   return (
     <div 
       className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white hover:border-blue-300 transition-all shadow-sm duration-300"
@@ -66,8 +72,8 @@ export default function ProductCard({ product, currentLang, onCheckoutClick }: P
     >
       {/* Product Image */}
       <div className="relative aspect-video w-full overflow-hidden bg-slate-100 border-b border-slate-100">
-        <img
-          src={product.image_url}
+         <img
+          src={imageUrlWithCacheBuster}
           alt={name}
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           referrerPolicy="no-referrer"

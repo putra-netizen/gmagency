@@ -1218,31 +1218,45 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
 // 6. STORAGE UPLOAD FOR PRODUCT IMAGES
 export async function dbUploadProductImage(file: File): Promise<string> {
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const fileExt = file.name.split('.').pop() || 'png';
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-      const filePath = `buckets/katalog-image/${fileName}`;
+    const fileExt = file.name.split('.').pop() || 'png';
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+    
+    // We try multiple case-sensitivity permutations of bucket name and folder path to guarantee it saves to the correct bucket & folder structure
+    const permutations = [
+      { bucket: 'files', path: `Buckets/katalog-image/${fileName}` },
+      { bucket: 'files', path: `buckets/katalog-image/${fileName}` },
+      { bucket: 'Files', path: `Buckets/katalog-image/${fileName}` },
+      { bucket: 'Files', path: `buckets/katalog-image/${fileName}` }
+    ];
 
-      const { data, error } = await supabase.storage
-        .from('files')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
+    let lastError: any = null;
 
-      if (error) {
-        console.warn('Warning uploading image to Supabase:', error);
-        // Do not set supabaseFailed = true so database operations still use Supabase
-      } else {
-        const { data: { publicUrl } } = supabase.storage
-          .from('files')
-          .getPublicUrl(filePath);
+    for (const perm of permutations) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(perm.bucket)
+          .upload(perm.path, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
 
-        return publicUrl;
+        if (!error && data) {
+          const { data: { publicUrl } } = supabase.storage
+            .from(perm.bucket)
+            .getPublicUrl(perm.path);
+          return publicUrl;
+        } else if (error) {
+          lastError = error;
+          console.warn(`Failed upload permutation bucket:${perm.bucket} path:${perm.path}:`, error);
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn(`Exception in upload permutation bucket:${perm.bucket} path:${perm.path}:`, err);
       }
-    } catch (err) {
-      console.warn('Exception uploading image to Supabase:', err);
-      // Do not set supabaseFailed = true so database operations still use Supabase
+    }
+
+    if (lastError) {
+      throw new Error(lastError.message || JSON.stringify(lastError));
     }
   }
 
