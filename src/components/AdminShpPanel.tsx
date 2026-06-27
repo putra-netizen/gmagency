@@ -299,6 +299,23 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     }
   }, [isAuthenticated, currentAdminUser]);
 
+  useEffect(() => {
+    const handleLogoutEvent = () => {
+      handleLogout();
+    };
+    const handleRefreshEvent = () => {
+      if (isAuthenticated) {
+        loadData();
+      }
+    };
+    window.addEventListener('adminshp-logout', handleLogoutEvent);
+    window.addEventListener('adminshp-refresh', handleRefreshEvent);
+    return () => {
+      window.removeEventListener('adminshp-logout', handleLogoutEvent);
+      window.removeEventListener('adminshp-refresh', handleRefreshEvent);
+    };
+  }, [isAuthenticated, currentAdminUser]);
+
   // Handle Login submission
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1067,75 +1084,61 @@ Format Chat : ${data.notes || '-'}`;
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 font-sans" id="shopee-portal-container">
       {/* Header Portal */}
-      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-5">
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-5 border-b border-slate-100 pb-6">
         <div>
-          <div className="flex flex-wrap items-center gap-2 mb-1.5">
-            <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-mono">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="bg-orange-50 text-orange-600 border border-orange-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans">
               Shopee Integration
             </span>
-            <span className="bg-slate-900 text-slate-100 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-mono flex items-center gap-1">
-              <User className="h-3 w-3" />
+            <span className="bg-slate-50 text-slate-700 border border-slate-200 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
+              <User className="h-3 w-3 text-slate-450" />
               <span>Admin: {currentAdminUser.toUpperCase()}</span>
             </span>
             {dbIsSupabaseConnected() ? (
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-mono flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 <span>Server Online</span>
               </span>
             ) : (
-              <span className="bg-red-50 text-red-700 border border-red-100 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider font-mono flex items-center gap-1">
+              <span className="bg-red-50 text-red-700 border border-red-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
                 <span>Server Offline</span>
               </span>
             )}
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight font-sans">
             Manual Shopee Order Entry Portal
           </h1>
-          <p className="text-slate-500 text-xs mt-1">
+          <p className="text-slate-550 text-xs mt-1.5 leading-relaxed">
             Silakan masukkan data transaksi pesanan shopee secara manual sesuai dengan jenis layanan di bawah ini.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={loadData}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Refresh Data</span>
-          </button>
 
-          <button
-            onClick={handleLogout}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors shadow-sm cursor-pointer"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            <span>Sign Out</span>
-          </button>
-        </div>
       </div>
 
       {/* Tab Switches */}
-      <div className="flex border-b border-slate-200 mb-6 gap-2">
+      <div className="flex border-b border-slate-100 mb-8 gap-3">
         <button
           onClick={() => setActiveTab('shopee')}
-          className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
             activeTab === 'shopee'
               ? 'border-orange-500 text-orange-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              : 'border-transparent text-slate-400 hover:text-slate-750'
           }`}
         >
-          🛍️ SOSMED & SPAM WA
+          <Sparkles className="h-4 w-4" />
+          <span>SOSMED & SPAM WA</span>
         </button>
         <button
           onClick={() => setActiveTab('maps')}
-          className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
             activeTab === 'maps'
               ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              : 'border-transparent text-slate-400 hover:text-slate-750'
           }`}
         >
-          📍 G MAPS, TRIPAD & REVIEW APPS
+          <MapPin className="h-4 w-4" />
+          <span>G MAPS & REVIEW APPS</span>
         </button>
       </div>
 
@@ -1166,7 +1169,7 @@ Format Chat : ${data.notes || '-'}`;
                 >
                   {/* Card Header Section always visible */}
                   <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100">
-                    <div className="flex items-start gap-3.5">
+                    <div className="flex items-center gap-3.5">
                       <div className="h-10 w-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-black shrink-0">
                         <AlertCircle className="h-5 w-5" />
                       </div>
@@ -1174,9 +1177,6 @@ Format Chat : ${data.notes || '-'}`;
                         <h2 className="text-base font-black text-slate-900 leading-snug">
                           REPORT ALL SOSMED
                         </h2>
-                        <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                          Otomatis generate format pesanan report tiktok, instagram, threads, x, whatsapp, dll.
-                        </p>
                       </div>
                     </div>
                     
@@ -1324,7 +1324,7 @@ Format Chat : ${data.notes || '-'}`;
                 >
                   {/* Card Header Section always visible */}
                   <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100">
-                    <div className="flex items-start gap-3.5">
+                    <div className="flex items-center gap-3.5">
                       <div className="h-10 w-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-black shrink-0">
                         <MessageSquare className="h-5 w-5" />
                       </div>
@@ -1332,9 +1332,6 @@ Format Chat : ${data.notes || '-'}`;
                         <h2 className="text-base font-black text-slate-900 leading-snug">
                           SPAM WA (WHATSAPP)
                         </h2>
-                        <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                          Otomatis generate format pesanan spam chat, call, atau kombinasi ke no Whatsapp target.
-                        </p>
                       </div>
                     </div>
                     
@@ -1464,45 +1461,45 @@ Format Chat : ${data.notes || '-'}`;
               </div>
 
               {/* TABLE: LIST OF MANUAL SHOPEE ORDERS */}
-              <div ref={shopeeQueueRef} className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden scroll-mt-24">
-                <div className="bg-slate-50/75 border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-orange-500 animate-pulse" />
-                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+              <div ref={shopeeQueueRef} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden scroll-mt-24">
+                <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-2 w-2 rounded-full bg-orange-500" />
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
                       Daftar Antrean Order Shopee Manual
                     </h3>
                   </div>
-                  <span className="text-xs font-bold text-slate-600 bg-slate-200 px-2.5 py-0.5 rounded-full font-mono">
+                  <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
                     {filteredShopeeOrders.length} / {shopeeOrders.length} Pesanan
                   </span>
                 </div>
 
                 {/* Search & Sort Bar for Shopee Manual Orders */}
-                <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/50 p-4 border-b border-slate-200">
+                <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-white p-4 border-b border-slate-50">
                   <div className="relative w-full lg:w-80">
                     <input
                       type="text"
                       value={searchShopee}
                       onChange={(e) => setSearchShopee(e.target.value)}
-                      placeholder="Cari (ID, toko, buyer, layanan, link, notes)..."
-                      className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-orange-500 font-sans shadow-sm"
+                      placeholder="Cari pesanan, toko, pembeli..."
+                      className="w-full bg-slate-50/50 text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-150 focus:border-slate-300 focus:bg-white font-sans transition-all shadow-sm"
                     />
                   </div>
 
                   {/* Minimalist sorting / filtering controls */}
                   <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
                     {/* Status / Progres Filter (Minimalist badge/pills style) */}
-                    <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                      <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
+                    <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
+                      <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Progres:</span>
                       {(['pending', 'progress', 'done'] as const).map((opt) => (
                         <button
                           key={opt}
                           type="button"
                           onClick={() => setSortShopee(opt)}
-                          className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          className={`px-3 py-1.5 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase text-[10px] ${
                             sortShopee === opt
-                              ? 'bg-orange-500 text-white shadow-sm font-extrabold'
-                              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                              ? 'bg-orange-50 text-orange-600 border border-orange-150/40 font-extrabold shadow-sm'
+                              : 'text-slate-400 hover:text-slate-700 hover:bg-white'
                           }`}
                         >
                           {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
@@ -1511,17 +1508,17 @@ Format Chat : ${data.notes || '-'}`;
                     </div>
 
                     {/* Timeframe Filter (Minimalist badge/pills style) */}
-                    <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                      <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
+                    <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
+                      <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Waktu:</span>
                       {(['all', 'week', 'month'] as const).map((opt) => (
                         <button
                           key={opt}
                           type="button"
                           onClick={() => setTimeFilterShopee(opt)}
-                          className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          className={`px-3 py-1.5 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase text-[10px] ${
                             timeFilterShopee === opt
-                              ? 'bg-blue-600 text-white shadow-sm font-extrabold'
-                              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                              ? 'bg-blue-50 text-blue-600 border border-blue-150/40 font-extrabold shadow-sm'
+                              : 'text-slate-400 hover:text-slate-700 hover:bg-white'
                           }`}
                         >
                           {opt === 'all' ? 'Semua' : opt === 'week' ? 'Minggu' : 'Bulan'}
@@ -1545,16 +1542,16 @@ Format Chat : ${data.notes || '-'}`;
                       <col className="w-[10%]" />
                     </colgroup>
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                        <th className="px-4 py-3">ID / Tipe</th>
-                        <th className="px-4 py-3">Store Name</th>
-                        <th className="px-4 py-3">Buyer Name</th>
-                        <th className="px-4 py-3">Jasa / Slot</th>
-                        <th className="px-4 py-3">Target</th>
-                        <th className="px-4 py-3">Notes</th>
-                        <th className="px-4 py-3">Format Pesanan</th>
-                        <th className="px-4 py-3">Work Order</th>
-                        <th className="px-4 py-3 text-center">Assign Worker</th>
+                      <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-450 text-[10px] font-bold uppercase tracking-wider">
+                        <th className="px-4 py-3.5">ID / Tipe</th>
+                        <th className="px-4 py-3.5">Store Name</th>
+                        <th className="px-4 py-3.5">Buyer Name</th>
+                        <th className="px-4 py-3.5">Jasa / Slot</th>
+                        <th className="px-4 py-3.5">Target</th>
+                        <th className="px-4 py-3.5">Notes</th>
+                        <th className="px-4 py-3.5">Format Pesanan</th>
+                        <th className="px-4 py-3.5">Work Order</th>
+                        <th className="px-4 py-3.5 text-center">Assign Worker</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
@@ -1719,7 +1716,7 @@ Format Chat : ${data.notes || '-'}`;
                 >
                   {/* Card Header Section always visible */}
                   <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100">
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-black shrink-0">
                         <MapPin className="h-5 w-5" />
                       </div>
@@ -1727,9 +1724,6 @@ Format Chat : ${data.notes || '-'}`;
                         <h2 className="text-sm font-black text-slate-900 leading-snug">
                           G MAPS, TRIPAD & REVIEW APPS
                         </h2>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Kelola ulasan target Google Maps, Tripadvisor, dan Review Apps.
-                        </p>
                       </div>
                     </div>
                     
@@ -1899,95 +1893,95 @@ Format Chat : ${data.notes || '-'}`;
                   </AnimatePresence>
                 </div>
 
-                {/* TABLE PROGRESS & LIST (8 columns) */}
-                <div ref={mapsQueueRef} className="lg:col-span-8 space-y-4 scroll-mt-24">
-                  <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="bg-slate-50/75 border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse" />
-                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                          Progres Target Review (G Maps, Tripadvisor & Review Apps)
-                        </h3>
-                      </div>
-                      <span className="text-xs font-bold text-slate-600 bg-slate-200 px-2.5 py-0.5 rounded-full font-mono">
-                        {filteredMapsReviews.length} / {mapsReviews.length} Data
-                      </span>
-                    </div>
-
-                    {/* Search & Sort Bar for Maps Reviews */}
-                    <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/50 p-4 border-b border-slate-200">
-                      <div className="relative w-full lg:w-80">
-                        <input
-                          type="text"
-                          value={searchMaps}
-                          onChange={(e) => setSearchMaps(e.target.value)}
-                          placeholder="Cari (Nama toko, klien, tipe, clue)..."
-                          className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
-                        />
-                      </div>
-
-                      {/* Minimalist sorting / filtering controls */}
-                      <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                        {/* Status / Progres Filter (Minimalist badge/pills style) */}
-                        <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                          <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
-                          {(['pending', 'progress', 'done'] as const).map((opt) => (
-                            <button
-                              key={opt}
-                              type="button"
-                              onClick={() => setSortMaps(opt)}
-                              className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                                sortMaps === opt
-                                  ? 'bg-blue-600 text-white shadow-sm font-extrabold'
-                                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                              }`}
-                            >
-                              {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Timeframe Filter (Minimalist badge/pills style) */}
-                        <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                          <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
-                          {(['all', 'week', 'month'] as const).map((opt) => (
-                            <button
-                              key={opt}
-                              type="button"
-                              onClick={() => setTimeFilterMaps(opt)}
-                              className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                                timeFilterMaps === opt
-                                  ? 'bg-blue-600 text-white shadow-sm font-extrabold'
-                                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                              }`}
-                            >
-                              {opt === 'all' ? 'Semua' : opt === 'week' ? 'Minggu' : 'Bulan'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse table-fixed">
-                        <colgroup>
-                          <col className="w-[14%]" />
-                          <col className="w-[18%]" />
-                          <col className="w-[14%]" />
-                          <col className="w-[20%]" />
-                          <col className="w-[14%]" />
+                 {/* TABLE PROGRESS & LIST (8 columns) */}
+                 <div ref={mapsQueueRef} className="lg:col-span-8 space-y-4 scroll-mt-24">
+                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                     <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                       <div className="flex items-center gap-2.5">
+                         <span className="h-2 w-2 rounded-full bg-blue-500" />
+                         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
+                           Progres Target Review (G Maps, Tripadvisor & Review Apps)
+                         </h3>
+                       </div>
+                       <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                         {filteredMapsReviews.length} / {mapsReviews.length} Data
+                       </span>
+                     </div>
+ 
+                     {/* Search & Sort Bar for Maps Reviews */}
+                     <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-white p-4 border-b border-slate-50">
+                       <div className="relative w-full lg:w-80">
+                         <input
+                           type="text"
+                           value={searchMaps}
+                           onChange={(e) => setSearchMaps(e.target.value)}
+                           placeholder="Cari toko, klien, tipe, clue..."
+                           className="w-full bg-slate-50/50 text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-150 focus:border-slate-300 focus:bg-white font-sans transition-all shadow-sm"
+                         />
+                       </div>
+ 
+                       {/* Minimalist sorting / filtering controls */}
+                       <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                         {/* Status / Progres Filter (Minimalist badge/pills style) */}
+                         <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
+                           <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Progres:</span>
+                           {(['pending', 'progress', 'done'] as const).map((opt) => (
+                             <button
+                               key={opt}
+                               type="button"
+                               onClick={() => setSortMaps(opt)}
+                               className={`px-3 py-1.5 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase text-[10px] ${
+                                 sortMaps === opt
+                                   ? 'bg-blue-50 text-blue-650 border border-blue-150/40 font-extrabold shadow-sm'
+                                   : 'text-slate-400 hover:text-slate-700 hover:bg-white'
+                               }`}
+                             >
+                               {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                             </button>
+                           ))}
+                         </div>
+ 
+                         {/* Timeframe Filter (Minimalist badge/pills style) */}
+                         <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
+                           <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Waktu:</span>
+                           {(['all', 'week', 'month'] as const).map((opt) => (
+                             <button
+                               key={opt}
+                               type="button"
+                               onClick={() => setTimeFilterMaps(opt)}
+                               className={`px-3 py-1.5 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase text-[10px] ${
+                                 timeFilterMaps === opt
+                                   ? 'bg-blue-50 text-blue-650 border border-blue-150/40 font-extrabold shadow-sm'
+                                   : 'text-slate-400 hover:text-slate-700 hover:bg-white'
+                               }`}
+                             >
+                               {opt === 'all' ? 'Semua' : opt === 'week' ? 'Minggu' : 'Bulan'}
+                             </button>
+                           ))}
+                         </div>
+                       </div>
+                     </div>
+ 
+                     <div className="overflow-x-auto">
+                       <table className="w-full text-left border-collapse table-fixed">
+                         <colgroup>
+                           <col className="w-[14%]" />
+                           <col className="w-[18%]" />
+                           <col className="w-[14%]" />
+                           <col className="w-[20%]" />
+                           <col className="w-[14%]" />
                           <col className="w-[12%]" />
                           <col className="w-[10%]" />
                         </colgroup>
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                            <th className="px-3 py-3">Nama Store</th>
-                            <th className="px-3 py-3">Client / Target Link</th>
-                            <th className="px-3 py-3">Progres Target</th>
-                            <th className="px-3 py-3">Input Progres Akun</th>
-                            <th className="px-3 py-3">Clue</th>
-                            <th className="px-3 py-3">Link Bukti</th>
-                            <th className="px-3 py-3 text-center">Status / Aksi</th>
+                          <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-450 text-[10px] font-bold uppercase tracking-wider">
+                            <th className="px-3 py-3.5">Nama Store</th>
+                            <th className="px-3 py-3.5">Client / Target Link</th>
+                            <th className="px-3 py-3.5">Progres Target</th>
+                            <th className="px-3 py-3.5">Input Progres Akun</th>
+                            <th className="px-3 py-3.5">Clue</th>
+                            <th className="px-3 py-3.5">Link Bukti</th>
+                            <th className="px-3 py-3.5 text-center">Status / Aksi</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-sans">

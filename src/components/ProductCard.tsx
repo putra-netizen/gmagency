@@ -6,7 +6,7 @@
 import React from 'react';
 import { Product, Language } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
-import { ShoppingCart, Star, Flame, Sparkles } from 'lucide-react';
+import { ShoppingCart } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface ProductCardProps {
@@ -14,6 +14,7 @@ interface ProductCardProps {
   product: Product;
   currentLang: Language;
   onCheckoutClick: (product: Product) => void;
+  theme?: 'light' | 'dark';
 }
 
 export function formatRupiah(amount: number): string {
@@ -38,10 +39,12 @@ export function WhatsAppLogo({ className = "h-4 w-4" }: { className?: string }) 
   );
 }
 
-export default function ProductCard({ product, currentLang, onCheckoutClick }: ProductCardProps) {
+export default function ProductCard({ product, currentLang, onCheckoutClick, theme = 'dark' }: ProductCardProps) {
   const t = TRANSLATIONS[currentLang];
   const name = currentLang === 'id' ? product.name : product.name_en;
   const description = currentLang === 'id' ? product.description : product.description_en;
+
+  const isDark = theme === 'dark';
 
   // Generate WhatsApp message for direct chat
   const getWhatsAppLink = () => {
@@ -79,32 +82,7 @@ export default function ProductCard({ product, currentLang, onCheckoutClick }: P
     return `${product.image_url}${product.image_url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
   }, [product.image_url]);
 
-  // Determine premium dynamic badge tags to attract attention
-  const badgeDetails = React.useMemo(() => {
-    const id = product.id.toLowerCase();
-    if (id.includes('gmaps') || id.includes('maps')) {
-      return {
-        label: currentLang === 'id' ? 'Sangat Direkomendasikan' : 'Highly Recommended',
-        color: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
-        dotColor: 'bg-amber-500',
-        icon: <Star className="h-3 w-3 text-amber-400" />
-      };
-    }
-    if (id.includes('vote') || id.includes('comment') || id.includes('instagram') || id.includes('shopee')) {
-      return {
-        label: currentLang === 'id' ? 'Terlaris' : 'Best Seller',
-        color: 'bg-rose-500/10 border-rose-500/20 text-rose-400',
-        dotColor: 'bg-rose-500',
-        icon: <Flame className="h-3 w-3 text-rose-400" />
-      };
-    }
-    return {
-      label: currentLang === 'id' ? 'Premium Jasa' : 'Premium Service',
-      color: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400',
-      dotColor: 'bg-indigo-500',
-      icon: <Sparkles className="h-3 w-3 text-indigo-400" />
-    };
-  }, [product.id, currentLang]);
+
 
   return (
     <motion.div 
@@ -112,19 +90,31 @@ export default function ProductCard({ product, currentLang, onCheckoutClick }: P
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ 
         y: -8, 
-        boxShadow: "0 20px 25px -5px rgba(59, 130, 246, 0.2), 0 10px 10px -5px rgba(59, 130, 246, 0.1)"
+        boxShadow: isDark 
+          ? "0 20px 25px -5px rgba(59, 130, 246, 0.2), 0 10px 10px -5px rgba(59, 130, 246, 0.1)"
+          : "0 20px 25px -5px rgba(59, 130, 246, 0.1), 0 10px 10px -5px rgba(59, 130, 246, 0.05)"
       }}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
-      className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-md hover:border-blue-500/50 transition-colors duration-300 h-full"
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-300 h-full ${
+        isDark 
+          ? 'border-slate-800/80 bg-slate-900/40 backdrop-blur-md hover:border-blue-500/50' 
+          : 'border-slate-200/85 bg-white shadow-sm hover:shadow-md hover:border-blue-400'
+      }`}
       id={`product-card-${product.id}`}
     >
       {/* Decorative Top Hover Border Glow Line */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-emerald-400 to-indigo-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left z-20" />
 
       {/* Product Image Stage */}
-      <div className="relative aspect-video w-full overflow-hidden bg-slate-950 border-b border-slate-850">
+      <div className={`relative aspect-video w-full overflow-hidden border-b ${
+        isDark ? 'bg-slate-950 border-slate-850' : 'bg-slate-100 border-slate-200'
+      }`}>
         {/* Subtle radial sheen on card background */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(59,130,246,0.15),transparent_60%)] z-10 pointer-events-none" />
+        <div className={`absolute inset-0 pointer-events-none z-10 ${
+          isDark 
+            ? 'bg-[radial-gradient(circle_at_30%_20%,rgba(59,130,246,0.15),transparent_60%)]' 
+            : 'bg-[radial-gradient(circle_at_30%_20%,rgba(59,130,246,0.05),transparent_60%)]'
+        }`} />
         
         <img
           src={imageUrlWithCacheBuster}
@@ -134,18 +124,7 @@ export default function ProductCard({ product, currentLang, onCheckoutClick }: P
           loading="lazy"
         />
 
-        {/* Dynamic Attraction Badges */}
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
-          {/* Dynamic recommended/best seller badge */}
-          <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] font-bold ${badgeDetails.color} backdrop-blur shadow-sm`}>
-            {badgeDetails.icon}
-            <span>{badgeDetails.label}</span>
-            <span className="relative flex h-1.5 w-1.5">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${badgeDetails.dotColor}`}></span>
-              <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${badgeDetails.dotColor}`}></span>
-            </span>
-          </div>
-        </div>
+
 
         {/* Hover overlay sheen/consultation badge */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3 z-10 pointer-events-none">
@@ -157,29 +136,43 @@ export default function ProductCard({ product, currentLang, onCheckoutClick }: P
       </div>
 
       {/* Product Content / Information */}
-      <div className="flex flex-1 flex-col p-4 bg-gradient-to-b from-slate-900/80 to-slate-950/80">
-        <h3 className="font-bold text-slate-100 text-sm mb-1.5 line-clamp-1 group-hover:text-blue-400 transition-colors duration-300">
+      <div className={`flex flex-1 flex-col p-4 transition-colors duration-300 ${
+        isDark ? 'bg-gradient-to-b from-slate-900/80 to-slate-950/80' : 'bg-white'
+      }`}>
+        <h3 className={`font-bold text-sm mb-1.5 line-clamp-1 group-hover:text-blue-500 transition-colors duration-300 ${
+          isDark ? 'text-slate-100' : 'text-slate-800'
+        }`}>
           {name}
         </h3>
-        <p className="text-[11px] text-slate-400 mb-4 line-clamp-3 leading-relaxed flex-1">
+        <p className={`text-[11px] mb-4 line-clamp-3 leading-relaxed flex-1 ${
+          isDark ? 'text-slate-400' : 'text-slate-500'
+        }`}>
           {description}
         </p>
 
         {/* Modern Pricing Container */}
-        <div className="mb-4 bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/80 flex items-center justify-between">
+        <div className={`mb-4 rounded-xl p-2.5 border flex items-center justify-between ${
+          isDark ? 'bg-slate-950/60 border-slate-800/80' : 'bg-slate-50 border-slate-100'
+        }`}>
           <div className="flex flex-col">
-            <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Starting Price</span>
-            <div className="text-blue-400 font-black text-base leading-none mt-1">
+            <span className={`text-[9px] uppercase font-bold tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Starting Price</span>
+            <div className={`font-black text-base leading-none mt-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
               {formatRupiah(product.price)}
             </div>
           </div>
-          <div className="text-[10px] font-bold bg-blue-950/40 text-blue-400 px-2 py-0.5 rounded border border-blue-900/30">
+          <div className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+            isDark 
+              ? 'bg-blue-950/40 text-blue-400 border-blue-900/30' 
+              : 'bg-blue-50 text-blue-600 border-blue-100'
+          }`}>
             Per {getUnitSuffix()}
           </div>
         </div>
 
         {/* Interactive Call-To-Action Button Row */}
-        <div className="flex gap-2 mt-auto pt-3 border-t border-slate-800/60">
+        <div className={`flex gap-2 mt-auto pt-3 border-t ${
+          isDark ? 'border-slate-800/60' : 'border-slate-100'
+        }`}>
           {/* Direct WhatsApp with Official Branding and Pulsing Glow */}
           <a
             href={getWhatsAppLink()}

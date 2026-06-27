@@ -158,8 +158,31 @@ export default function App() {
     servicesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('gm_theme');
+      return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+    } catch (e) {
+      return 'dark';
+    }
+  });
+
+  const handleThemeToggle = () => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem('gm_theme', next);
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const isDarkHome = currentView === 'home' && theme === 'dark';
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#070b19] text-white font-sans antialiased">
+    <div className={`min-h-screen flex flex-col font-sans antialiased transition-colors duration-300 ${
+      isDarkHome ? 'bg-[#070b19] text-white' : 'bg-slate-50 text-slate-900'
+    }`}>
       {/* 1. Header Navbar */}
       <Navbar
         currentLang={currentLang}
@@ -167,6 +190,8 @@ export default function App() {
         currentView={currentView}
         onViewChange={handleViewChange}
         supabaseConnected={dbIsSupabaseConnected()}
+        theme={theme}
+        onThemeToggle={handleThemeToggle}
       />
 
       {/* 2. Main Content Views */}
@@ -178,6 +203,7 @@ export default function App() {
             <Hero 
               currentLang={currentLang} 
               onExploreClick={scrollToServices} 
+              theme={theme}
             />
 
             {/* Services Catalogue Section Grid */}
@@ -188,10 +214,14 @@ export default function App() {
             >
               {/* Grid Header */}
               <div className="text-center max-w-3xl mx-auto mb-10 space-y-2">
-                <h2 className="text-2xl font-black text-white font-sans tracking-tight uppercase">
+                <h2 className={`text-2xl font-black font-sans tracking-tight uppercase ${
+                  theme === 'dark' ? 'text-white' : 'text-slate-900'
+                }`}>
                   {t.productsTitle}
                 </h2>
-                <p className="text-slate-400 font-sans leading-relaxed text-xs sm:text-sm">
+                <p className={`font-sans leading-relaxed text-xs sm:text-sm ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                }`}>
                   {t.productsSub}
                 </p>
               </div>
@@ -207,13 +237,14 @@ export default function App() {
                   {errorMsg}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
                   {products.map((product) => (
                     <ProductCard
                       key={product.id}
                       product={product}
                       currentLang={currentLang}
                       onCheckoutClick={(prod) => setSelectedProduct(prod)}
+                      theme={theme}
                     />
                   ))}
                 </div>
@@ -240,24 +271,38 @@ export default function App() {
 
       {/* 3. Global Static Footer */}
       {currentView === 'home' && (
-        <footer className="bg-slate-950 text-slate-400 border-t border-slate-900 font-sans mt-auto">
+        <footer className={`transition-colors duration-300 font-sans mt-auto ${
+          theme === 'dark' 
+            ? 'bg-slate-950 text-slate-400 border-t border-slate-900' 
+            : 'bg-slate-100 text-slate-600 border-t border-slate-200'
+        }`}>
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-slate-900">
+            <div className={`grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b ${
+              theme === 'dark' ? 'border-slate-900' : 'border-slate-200'
+            }`}>
               {/* About brand column (5 columns) */}
               <div className="md:col-span-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white font-extrabold text-base">
                     GM
                   </div>
-                  <span className="text-lg font-black tracking-widest text-white">GM AGENCY</span>
+                  <span className={`text-lg font-black tracking-widest ${
+                    theme === 'dark' ? 'text-white' : 'text-slate-900'
+                  }`}>GM AGENCY</span>
                 </div>
-                <p className="text-sm leading-relaxed max-w-sm text-slate-400 font-light">
+                <p className={`text-sm leading-relaxed max-w-sm font-light ${
+                  theme === 'dark' ? 'text-slate-400' : 'text-slate-650'
+                }`}>
                   {currentLang === 'id'
                     ? 'Penyedia solusi manajemen reputasi, optimasi pencarian peta, dan engagement organik sosial media terlengkap, profesional, dan 100% legal.'
                     : 'Leading professional reputation managers, local SEO optimization, and compliant organic engagement digital services.'
                   }
                 </p>
-                <div className="flex items-center gap-2.5 text-xs text-blue-500 font-bold bg-blue-950/40 border border-blue-900/30 w-fit px-3.5 py-1.5 rounded-full">
+                <div className={`flex items-center gap-2.5 text-xs font-bold w-fit px-3.5 py-1.5 rounded-full border ${
+                  theme === 'dark' 
+                    ? 'text-blue-400 bg-blue-950/40 border-blue-900/30' 
+                    : 'text-blue-600 bg-blue-50 border-blue-100'
+                }`}>
                   <ShieldCheck className="h-4 w-4" />
                   <span>100% LEGAL & COMPLIANT SERVICES</span>
                 </div>
@@ -265,7 +310,9 @@ export default function App() {
 
               {/* Quick links columns (4 columns) */}
               <div className="md:col-span-4 space-y-4">
-                <h4 className="text-xs font-black text-white uppercase tracking-widest">
+                <h4 className={`text-xs font-black uppercase tracking-widest ${
+                  theme === 'dark' ? 'text-white' : 'text-slate-900'
+                }`}>
                   {currentLang === 'id' ? 'Layanan Kami' : 'Core Services'}
                 </h4>
                 <ul className="space-y-2.5 text-sm font-light">
@@ -278,7 +325,9 @@ export default function App() {
 
               {/* Contact details columns (3 columns) */}
               <div className="md:col-span-3 space-y-4">
-                <h4 className="text-xs font-black text-white uppercase tracking-widest">
+                <h4 className={`text-xs font-black uppercase tracking-widest ${
+                  theme === 'dark' ? 'text-white' : 'text-slate-900'
+                }`}>
                   Contact & Location
                 </h4>
                 <ul className="space-y-3 text-sm font-light">
@@ -299,7 +348,9 @@ export default function App() {
             </div>
 
             {/* Copyright signature */}
-            <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 font-light">
+            <div className={`pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-light ${
+              theme === 'dark' ? 'text-slate-500' : 'text-slate-650'
+            }`}>
               <p>
                 &copy; {new Date().getFullYear()} GM AGENCY (GM GROUP). All rights reserved.
               </p>
