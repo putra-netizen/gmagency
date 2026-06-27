@@ -5,3 +5,11 @@
     { "source": "/((?!api|assets|static|favicon.ico|.*\\..*).*)", "destination": "/index.html" }
   ]
 }
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
