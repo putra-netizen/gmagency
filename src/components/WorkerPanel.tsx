@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Order, Language } from '../types';
 import { dbGetOrders, dbUpdateOrder } from '../lib/supabase';
+import { toast } from '../utils/toast';
 import { 
   Database, 
   Lock, 
@@ -133,7 +134,7 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
       if (!targetOrder) throw new Error('Order not found');
 
       if (targetOrder.worker_status === 'taken' || targetOrder.worker_status === 'done') {
-        alert(currentLang === 'id' ? 'Tugas ini sudah diambil oleh worker lain!' : 'This task has already been taken by another worker!');
+        toast.info(currentLang === 'id' ? 'Tugas ini sudah diambil oleh worker lain!' : 'This task has already been taken by another worker!');
         await loadOrdersData(true);
         return;
       }
@@ -146,9 +147,10 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
 
       // Reload order data
       await loadOrdersData(true);
+      toast.success(currentLang === 'id' ? 'Berhasil mengambil tugas!' : 'Task successfully taken!');
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? 'Gagal mengambil tugas.' : 'Failed to take task.');
+      toast.error(currentLang === 'id' ? 'Gagal mengambil tugas.' : 'Failed to take task.');
     } finally {
       setActionLoadingId(null);
     }
@@ -177,9 +179,10 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
       setSelectedDoneOrder(null);
       setProofUrlInput('');
       await loadOrdersData(true);
+      toast.success(currentLang === 'id' ? 'Tugas berhasil diselesaikan!' : 'Task successfully completed!');
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? 'Gagal menyelesaikan tugas.' : 'Failed to complete task.');
+      toast.error(currentLang === 'id' ? 'Gagal menyelesaikan tugas.' : 'Failed to complete task.');
     } finally {
       setActionLoadingId(null);
     }

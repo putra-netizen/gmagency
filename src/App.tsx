@@ -11,8 +11,9 @@ import CheckoutModal from './components/CheckoutModal';
 import AdminPanel from './components/AdminPanel';
 import WorkerPanel from './components/WorkerPanel';
 import AdminShpPanel from './components/AdminShpPanel';
+import ToastContainer from './components/ToastContainer';
 import { Product, Language, Order } from './types';
-import { dbGetProducts, isSupabaseConfigured } from './lib/supabase';
+import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected } from './lib/supabase';
 import { TRANSLATIONS } from './lib/translations';
 import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart } from 'lucide-react';
 
@@ -133,7 +134,7 @@ export default function App() {
         onLangChange={handleLangChange}
         currentView={currentView}
         onViewChange={handleViewChange}
-        supabaseConnected={isSupabaseConfigured}
+        supabaseConnected={dbIsSupabaseConnected()}
       />
 
       {/* 2. Main Content Views */}
@@ -307,6 +308,9 @@ export default function App() {
           <MessageSquare className="h-6 w-6 fill-white" />
         </a>
       )}
+
+      {/* 6. Global custom toast container */}
+      <ToastContainer />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   dbDeleteMapsReview 
 } from '../lib/supabase';
 import { logAdminShpAction } from '../utils/adminshpLogs';
+import { toast } from '../utils/toast';
 import { ShopeeOrder, MapsReview } from '../types';
 import { 
   Copy, 
@@ -496,7 +497,7 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       doc.save(`Laporan_GM_Agency_${item.client_name.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
       console.error("Gagal mengekspor PDF:", err);
-      alert("Terjadi kesalahan saat memproses PDF.");
+      toast.error("Terjadi kesalahan saat memproses PDF.");
     }
   };
 
@@ -539,7 +540,7 @@ Format Chat : ${data.notes || '-'}`;
   const handleSubmitSosmed = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formSosmed.storeName || !formSosmed.buyerName || !formSosmed.targetLink) {
-      alert(currentLang === 'id' ? 'Mohon lengkapi semua data wajib!' : 'Please fill all required fields!');
+      toast.error(currentLang === 'id' ? 'Mohon lengkapi semua data wajib!' : 'Please fill all required fields!');
       return;
     }
 
@@ -580,10 +581,10 @@ Format Chat : ${data.notes || '-'}`;
         shopeeQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 350);
 
-      alert(currentLang === 'id' ? 'Pesanan Report Sosmed berhasil ditambahkan!' : 'Sosmed Report order created successfully!');
+      toast.success(currentLang === 'id' ? 'Pesanan Report Sosmed berhasil ditambahkan!' : 'Sosmed Report order created successfully!');
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? `Gagal menambah order: ${err instanceof Error ? err.message : String(err)}` : `Failed to create order: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(currentLang === 'id' ? `Gagal menambah order: ${err instanceof Error ? err.message : String(err)}` : `Failed to create order: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -591,7 +592,7 @@ Format Chat : ${data.notes || '-'}`;
   const handleSubmitSpam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formSpam.storeName || !formSpam.buyerName || !formSpam.targetLink) {
-      alert(currentLang === 'id' ? 'Mohon lengkapi semua data wajib!' : 'Please fill all required fields!');
+      toast.error(currentLang === 'id' ? 'Mohon lengkapi semua data wajib!' : 'Please fill all required fields!');
       return;
     }
 
@@ -632,10 +633,10 @@ Format Chat : ${data.notes || '-'}`;
         shopeeQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 350);
 
-      alert(currentLang === 'id' ? 'Pesanan Spam WA berhasil ditambahkan!' : 'Spam WA order created successfully!');
+      toast.success(currentLang === 'id' ? 'Pesanan Spam WA berhasil ditambahkan!' : 'Spam WA order created successfully!');
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? `Gagal menambah order: ${err instanceof Error ? err.message : String(err)}` : `Failed to create order: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(currentLang === 'id' ? `Gagal menambah order: ${err instanceof Error ? err.message : String(err)}` : `Failed to create order: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -649,7 +650,7 @@ Format Chat : ${data.notes || '-'}`;
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal memperbarui worker.');
+      toast.error('Gagal memperbarui worker.');
     }
   };
 
@@ -678,7 +679,7 @@ Format Chat : ${data.notes || '-'}`;
       setDeleteConfirm(null);
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? `Gagal menghapus order: ${err instanceof Error ? err.message : String(err)}` : `Failed to delete order: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(currentLang === 'id' ? `Gagal menghapus order: ${err instanceof Error ? err.message : String(err)}` : `Failed to delete order: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -686,7 +687,7 @@ Format Chat : ${data.notes || '-'}`;
   const handleSubmitMaps = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formMaps.clientName || !formMaps.mapsLink || !formMaps.targetCount || !formMaps.storeName || !formMaps.notes) {
-      alert(currentLang === 'id' ? 'Mohon lengkapi semua data wajib (termasuk Nama Store & Notes/Clue)!' : 'Please fill all required fields (including Store Name & Notes/Clue)!');
+      toast.error(currentLang === 'id' ? 'Mohon lengkapi semua data wajib (termasuk Nama Store & Notes/Clue)!' : 'Please fill all required fields (including Store Name & Notes/Clue)!');
       return;
     }
 
@@ -727,10 +728,10 @@ Format Chat : ${data.notes || '-'}`;
         mapsQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 350);
 
-      alert(currentLang === 'id' ? 'Target review maps berhasil didaftarkan!' : 'Maps Review target created successfully!');
+      toast.success(currentLang === 'id' ? 'Target review maps berhasil didaftarkan!' : 'Maps Review target created successfully!');
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? `Gagal menambah data: ${err instanceof Error ? err.message : String(err)}` : `Failed to create data: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(currentLang === 'id' ? `Gagal menambah data: ${err instanceof Error ? err.message : String(err)}` : `Failed to create data: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -755,7 +756,7 @@ Format Chat : ${data.notes || '-'}`;
       }
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? `Gagal menambah akun progres: ${err instanceof Error ? err.message : String(err)}` : `Failed to add progress account: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(currentLang === 'id' ? `Gagal menambah akun progres: ${err instanceof Error ? err.message : String(err)}` : `Failed to add progress account: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -776,7 +777,7 @@ Format Chat : ${data.notes || '-'}`;
       }
     } catch (err) {
       console.error(err);
-      alert('Gagal menghapus akun progres.');
+      toast.error('Gagal menghapus akun progres.');
     }
   };
 
@@ -834,7 +835,7 @@ Format Chat : ${data.notes || '-'}`;
       setDeleteConfirm(null);
     } catch (err) {
       console.error(err);
-      alert('Gagal menghapus data.');
+      toast.error('Gagal menghapus data.');
     }
   };
 
@@ -1636,26 +1637,26 @@ Format Chat : ${data.notes || '-'}`;
                       >
                         <div ref={mapsFormRef} className="p-5 border-t border-slate-100 bg-slate-50/30 space-y-4">
                           <form onSubmit={handleSubmitMaps} className="space-y-4">
-                            {/* Tipe Review Selector */}
+                            {/* Tipe Review Selector Dropdown */}
                             <div className="space-y-1.5">
                               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                                 Tipe Review <span className="text-red-500">*</span>
                               </label>
-                              <div className="grid grid-cols-3 gap-2">
-                                {(['G_MAPS', 'TRIPAD', 'REVIEW_APPS'] as const).map(type => (
-                                  <button
-                                    key={type}
-                                    type="button"
-                                    onClick={() => setFormMaps(prev => ({ ...prev, reviewType: type }))}
-                                    className={`px-2.5 py-2 text-[10px] font-black rounded-xl transition-all uppercase tracking-wider border ${
-                                      formMaps.reviewType === type
-                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md ring-2 ring-blue-600/10'
-                                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                                    } cursor-pointer text-center truncate`}
-                                  >
-                                    {type === 'G_MAPS' ? 'G Maps' : type === 'TRIPAD' ? 'Tripadvisor' : 'Review Apps'}
-                                  </button>
-                                ))}
+                              <div className="relative">
+                                <select
+                                  value={formMaps.reviewType}
+                                  onChange={e => setFormMaps(prev => ({ ...prev, reviewType: e.target.value as 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' }))}
+                                  className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans cursor-pointer appearance-none pr-8 font-black text-slate-700 uppercase tracking-wider"
+                                >
+                                  <option value="G_MAPS">G Maps (Google Maps)</option>
+                                  <option value="TRIPAD">Tripadvisor (Tripad)</option>
+                                  <option value="REVIEW_APPS">Review Apps</option>
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                                  </svg>
+                                </div>
                               </div>
                             </div>
 
@@ -2178,7 +2179,7 @@ Format Chat : ${data.notes || '-'}`;
                   onClick={() => {
                     const accountsText = screenshotModalItem.reviewer_accounts?.map((acc, i) => `${i + 1}. ${acc}`).join('\n') || '';
                     navigator.clipboard.writeText(`*GM AGENCY - LAPORAN MAPS REVIEW*\n\nClient: ${screenshotModalItem.client_name}\nTarget: ${screenshotModalItem.reviewer_accounts?.length || 0} / ${screenshotModalItem.target_count}\n\nList Akun:\n${accountsText}`);
-                    alert('Format Laporan berhasil disalin ke clipboard!');
+                    toast.success('Format Laporan berhasil disalin ke clipboard!');
                   }}
                   className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >

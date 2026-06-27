@@ -16,6 +16,7 @@ import {
 import { getAdminShpLogs, clearAdminShpLogs, AdminShpLog, logAdminShpAction } from '../utils/adminshpLogs';
 import { formatRupiah } from './ProductCard';
 import { getQrisConfig, saveQrisConfig, resetQrisConfig } from '../utils/qrisHelper';
+import { toast } from '../utils/toast';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
@@ -214,7 +215,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       console.warn('Local storage restricted', err);
     }
     setIsSpreadsheetConnected(true);
-    alert(currentLang === 'id' ? 'Pengaturan koneksi spreadsheet berhasil disimpan!' : 'Spreadsheet connection settings saved successfully!');
+    toast.success(currentLang === 'id' ? 'Pengaturan koneksi spreadsheet berhasil disimpan!' : 'Spreadsheet connection settings saved successfully!');
   };
 
   const handleDisconnectSpreadsheet = () => {
@@ -225,12 +226,12 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     }
     setIsSpreadsheetConnected(false);
     setSyncResult(null);
-    alert(currentLang === 'id' ? 'Koneksi spreadsheet diputuskan.' : 'Spreadsheet connection disconnected.');
+    toast.info(currentLang === 'id' ? 'Koneksi spreadsheet diputuskan.' : 'Spreadsheet connection disconnected.');
   };
 
   const handleSyncSpreadsheet = () => {
     if (!isSpreadsheetConnected) {
-      alert(currentLang === 'id' ? 'Silakan simpan pengaturan koneksi spreadsheet terlebih dahulu!' : 'Please save spreadsheet connection settings first!');
+      toast.error(currentLang === 'id' ? 'Silakan simpan pengaturan koneksi spreadsheet terlebih dahulu!' : 'Please save spreadsheet connection settings first!');
       return;
     }
     setIsSyncing(true);
@@ -242,45 +243,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         : `Sync Success! Successfully synchronized ${orders.length} orders data to Google Sheets on sheet "${sheetName}".`
       );
     }, 1800);
-  };
-
-  // QRIS configuration handlers
-  const handleSaveQrisMetadata = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveQrisConfig({
-      merchantName: qrisState.merchantName,
-      nmid: qrisState.nmid,
-      printerId: qrisState.printerId
-    });
-    alert(currentLang === 'id' ? 'Metadata QRIS berhasil disimpan!' : 'QRIS metadata saved successfully!');
-  };
-
-  const handleQrisImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploadingQris(true);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64Url = reader.result as string;
-      saveQrisConfig({ imageUrl: base64Url });
-      setQrisState(prev => ({ ...prev, imageUrl: base64Url }));
-      setIsUploadingQris(false);
-      alert(currentLang === 'id' ? 'Gambar QRIS asli berhasil dipasang!' : 'Original QRIS image uploaded successfully!');
-    };
-    reader.onerror = () => {
-      setIsUploadingQris(false);
-      alert(currentLang === 'id' ? 'Gagal membaca file gambar.' : 'Failed to read image file.');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleResetQrisConfig = () => {
-    if (confirm(currentLang === 'id' ? 'Apakah Anda yakin ingin menyetel ulang pengaturan QRIS ke default?' : 'Are you sure you want to reset QRIS settings to default?')) {
-      resetQrisConfig();
-      setQrisState(getQrisConfig());
-      alert(currentLang === 'id' ? 'Pengaturan QRIS berhasil disetel ulang!' : 'QRIS settings reset successfully!');
-    }
   };
 
   // Product CRUD Modal/Form states
@@ -298,11 +260,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-
-  // QRIS Configuration States
-  const [qrisState, setQrisState] = useState(() => getQrisConfig());
-  const qrisFileInputRef = useRef<HTMLInputElement>(null);
-  const [isUploadingQris, setIsUploadingQris] = useState(false);
 
   // Load Admin Dashboard Data
   const [isStatsLoading, setIsStatsLoading] = useState(false);
@@ -373,7 +330,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setStats(updatedStats);
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? 'Gagal mengubah status.' : 'Failed to update status.');
+      toast.error(currentLang === 'id' ? 'Gagal mengubah status.' : 'Failed to update status.');
     }
   };
 
@@ -384,7 +341,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, worker_id: workerId } : o));
     } catch (err) {
       console.error(err);
-      alert('Gagal memperbarui worker Shopee');
+      toast.error('Gagal memperbarui worker Shopee');
     }
   };
 
@@ -394,7 +351,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, work_order: workOrder } : o));
     } catch (err) {
       console.error(err);
-      alert('Gagal memperbarui work order Shopee');
+      toast.error('Gagal memperbarui work order Shopee');
     }
   };
 
@@ -404,7 +361,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
     } catch (err) {
       console.error(err);
-      alert('Gagal memperbarui status Shopee');
+      toast.error('Gagal memperbarui status Shopee');
     }
   };
 
@@ -414,7 +371,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setMapsReviews(prev => prev.map(r => r.id === id ? { ...r, status } : r));
     } catch (err) {
       console.error(err);
-      alert('Gagal memperbarui status Review');
+      toast.error('Gagal memperbarui status Review');
     }
   };
 
@@ -438,7 +395,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         setMapsReviews(prev => prev.filter(r => r.id !== id));
       } catch (err) {
         console.error(err);
-        alert('Gagal menghapus laporan review');
+        toast.error('Gagal menghapus laporan review');
       }
     }
   };
@@ -454,7 +411,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setDeleteConfirm(null);
     } catch (err) {
       console.error(err);
-      alert('Gagal menghapus pesanan Shopee');
+      toast.error('Gagal menghapus pesanan Shopee');
     }
   };
 
@@ -472,7 +429,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updatePayload } : o));
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? 'Gagal mengupdate worker.' : 'Failed to update worker.');
+      toast.error(currentLang === 'id' ? 'Gagal mengupdate worker.' : 'Failed to update worker.');
     }
   };
 
@@ -480,7 +437,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const handleUpdateWorkerStatus = async (orderId: string, status: 'unassigned' | 'taken' | 'done') => {
     const currentOrder = orders.find(o => o.id === orderId);
     if ((status === 'taken' || status === 'done') && (!currentOrder || !currentOrder.worker_id)) {
-      alert(currentLang === 'id' ? 'Harap masukkan worker terlebih dahulu baru bisa mengubah status diproses/selesai!' : 'Please assign a worker first before changing status to in progress/done!');
+      toast.error(currentLang === 'id' ? 'Harap masukkan worker terlebih dahulu baru bisa mengubah status diproses/selesai!' : 'Please assign a worker first before changing status to in progress/done!');
       return;
     }
     try {
@@ -492,7 +449,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updatePayload } : o));
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' ? 'Gagal memperbarui status pengerjaan.' : 'Failed to update job status.');
+      toast.error(currentLang === 'id' ? 'Gagal memperbarui status pengerjaan.' : 'Failed to update job status.');
     }
   };
 
@@ -511,7 +468,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setDeleteConfirm(null);
     } catch (err) {
       console.error(err);
-      alert('Error deleting order');
+      toast.error('Error deleting order');
     }
   };
 
@@ -536,7 +493,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         setSelectedImageFile(file);
         setImagePreviewUrl(URL.createObjectURL(file));
       } else {
-        alert(currentLang === 'id' ? 'Hanya diperbolehkan mengunggah file gambar!' : 'Only image files are allowed!');
+        toast.error(currentLang === 'id' ? 'Hanya diperbolehkan mengunggah file gambar!' : 'Only image files are allowed!');
       }
     }
   };
@@ -583,7 +540,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
           imageUrl = await dbUploadProductImage(selectedImageFile);
         } catch (uploadErr) {
           console.error('Image upload failed:', uploadErr);
-          alert(currentLang === 'id' 
+          toast.error(currentLang === 'id' 
             ? 'Gagal mengunggah gambar ke Supabase Storage. Silakan coba lagi.' 
             : 'Failed to upload image to Supabase Storage. Please try again.'
           );
@@ -623,7 +580,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       await loadDashboardData();
     } catch (err) {
       console.error(err);
-      alert(currentLang === 'id' 
+      toast.error(currentLang === 'id' 
         ? `Gagal menyimpan produk: ${err instanceof Error ? err.message : String(err)}` 
         : `Error saving product: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -681,7 +638,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       setDeleteConfirm(null);
     } catch (err) {
       console.error(err);
-      alert('Error deleting product');
+      toast.error('Error deleting product');
     }
   };
 
@@ -975,72 +932,98 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       {/* Conditionally hide the stats dashboard and tabs if activeTab is 'settings' */}
       {activeTab !== 'settings' && (
         <>
-          {/* 1. STATS OVERVIEW ROW (Financial Dashboard Card) */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-8">
+          {/* 1. STATS OVERVIEW ROW (Financial Dashboard Card) - Highly Polished & Organized */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
+            <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-6 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+              Ikhtisar Keuangan & Kinerja Operasional
+            </h2>
             
-            {/* Web Orders */}
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                <ShoppingBag className="h-6 w-6" />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+              {/* Featured Financial Card */}
+              <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 dark:from-slate-950 dark:to-slate-900 text-white rounded-2xl p-6 shadow-md flex flex-col justify-between relative overflow-hidden">
+                <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+                
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Pendapatan</span>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                      <DollarSign className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="text-3xl sm:text-4xl font-black font-sans tracking-tight text-emerald-400 select-all">
+                    {formatRupiah(stats?.totalRevenue ?? 0)}
+                  </div>
+                </div>
+                
+                <div className="mt-6 pt-4 border-t border-slate-800/80 relative z-10 flex items-center justify-between text-xs text-slate-400">
+                  <span className="font-medium">Total Akumulasi Transaksi</span>
+                  <span className="bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-md font-bold text-[10px]">Lunas</span>
+                </div>
               </div>
-              <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Web Orders</span>
-                <span className="text-2xl font-black text-slate-950 font-sans mt-1 block">
-                  {orders.length}
-                </span>
-              </div>
-            </div>
 
-            {/* Shopee Orders */}
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
-                <ShoppingCart className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Shopee Orders</span>
-                <span className="text-2xl font-black text-slate-950 font-sans mt-1 block">
-                  {shopeeOrders.length}
-                </span>
-              </div>
-            </div>
+              {/* Sub Metrics Grid */}
+              <div className="lg:col-span-7 grid grid-cols-2 gap-4">
+                {/* Web Orders */}
+                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
+                      <ShoppingBag className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Web Orders</span>
+                  </div>
+                  <div>
+                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                      {orders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
+                    </span>
+                  </div>
+                </div>
 
-            {/* Total Revenue */}
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                <DollarSign className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">{t.totalRevenue}</span>
-                <span className="text-2xl font-black text-emerald-600 font-sans mt-1 block">
-                  {formatRupiah(stats?.totalRevenue ?? 0)}
-                </span>
-              </div>
-            </div>
+                {/* Shopee Orders */}
+                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400">
+                      <ShoppingCart className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Shopee Orders</span>
+                  </div>
+                  <div>
+                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                      {shopeeOrders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
+                    </span>
+                  </div>
+                </div>
 
-            {/* Pending Orders */}
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-                <Clock className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">{t.pendingOrders}</span>
-                <span className="text-2xl font-black text-slate-950 font-sans mt-1 block">
-                  {stats?.pendingOrders ?? 0}
-                </span>
-              </div>
-            </div>
+                {/* Pending Orders */}
+                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
+                      <Clock className="h-4 w-4 animate-pulse" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t.pendingOrders}</span>
+                  </div>
+                  <div>
+                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                      {stats?.pendingOrders ?? 0} <span className="text-xs font-medium text-slate-400">menunggu</span>
+                    </span>
+                  </div>
+                </div>
 
-            {/* Completed Orders */}
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">{t.completedOrders}</span>
-                <span className="text-2xl font-black text-slate-950 font-sans mt-1 block">
-                  {stats?.completedOrders ?? 0}
-                  <span className="text-xs font-semibold text-slate-400 ml-1.5">({getCompletedPercentage()}%)</span>
-                </span>
+                {/* Completed Orders */}
+                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t.completedOrders}</span>
+                  </div>
+                  <div>
+                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                      {stats?.completedOrders ?? 0}
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">({getCompletedPercentage()}%)</span>
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1100,24 +1083,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
             >
               <Star className="h-4 w-4 animate-pulse" />
               <span>Review Orders</span>
-            </button>
-            <button
-              onClick={() => {
-                isTabClicking.current = true;
-                setActiveTab('settings');
-                window.history.pushState(null, '', '/admin/settings');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-                setTimeout(() => { isTabClicking.current = false; }, 50);
-              }}
-              className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ml-auto ${
-                activeTab === 'settings'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-              id="tab-settings"
-            >
-              <Settings className="h-4 w-4" />
-              <span>Settings</span>
             </button>
           </div>
         </>
@@ -1979,18 +1944,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   <Users className="h-3.5 w-3.5" />
                   <span>Hak Akses Akun</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsTab('qris_config')}
-                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeSettingsTab === 'qris_config'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <ImageIcon className="h-3.5 w-3.5" />
-                  <span>Pengaturan QRIS</span>
-                </button>
               </div>
 
               {activeSettingsTab === 'products' && (
@@ -2325,7 +2278,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                 localStorage.setItem('gm_adminshp_creds', JSON.stringify(updated));
                                 setAdminshpCreds(updated);
                                 logAdminShpAction('Main Admin', 'Ubah Kredensial', `Mengubah kredensial slot ${slot}. Username baru: "${updated[slot].username}"`);
-                                alert(`Kredensial untuk ${slot} berhasil diperbarui!`);
+                                toast.success(`Kredensial untuk ${slot} berhasil diperbarui!`);
                               }}
                               className={`w-full py-2 px-3 rounded-xl text-xs font-bold font-sans transition-all flex items-center justify-center gap-1 cursor-pointer ${
                                 isEdited 
@@ -2340,265 +2293,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                           </div>
                         );
                       })}
-                    </div>
-                  </div>
-
-                  {/* Activity Log Dashboard Section */}
-                  <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <h3 className="text-base font-black text-slate-900 font-sans uppercase tracking-tight flex items-center gap-2">
-                          <ShieldAlert className="h-5 w-5 text-blue-600" />
-                          Log Aktifitas Admin Portal
-                        </h3>
-                        <p className="text-xs text-slate-400 font-medium font-sans">
-                          Berikut adalah daftar aktifitas pengerjaan pesanan dan otentikasi yang dilakukan oleh masing-masing admin portal.
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleClearLogs}
-                        className="self-start sm:self-center bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        <span>Hapus Semua Log</span>
-                      </button>
-                    </div>
-
-                    {/* Filters bar */}
-                    <div className="flex flex-col md:flex-row gap-4 justify-between pt-2 border-t border-slate-100">
-                      {/* Filter Slots */}
-                      <div className="flex flex-wrap gap-1.5" id="log-filter-tabs">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedLogFilter('all')}
-                          className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                            selectedLogFilter === 'all'
-                              ? 'bg-slate-900 text-white'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          Semua ({activityLogs.length})
-                        </button>
-                        {(['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'] as const).map((slot) => {
-                          const customName = adminshpCreds[slot].username;
-                          const count = activityLogs.filter(log => log.adminshp === slot).length;
-                          return (
-                            <button
-                              key={slot}
-                              type="button"
-                              onClick={() => setSelectedLogFilter(slot)}
-                              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                                selectedLogFilter === slot
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              }`}
-                            >
-                              <span className="capitalize">{customName}</span> ({count})
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Search log */}
-                      <div className="relative w-full md:w-64">
-                        <input
-                          type="text"
-                          placeholder="Cari log aktifitas..."
-                          value={logSearchQuery}
-                          onChange={(e) => setLogSearchQuery(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200 pl-8 pr-3 py-1.5 text-xs outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans"
-                        />
-                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                      </div>
-                    </div>
-
-                    {/* Timeline List */}
-                    <div className="space-y-3 pt-2">
-                      {filteredLogs.length === 0 ? (
-                        <div className="py-12 text-center text-slate-400 font-semibold text-xs">
-                          Belum ada aktifitas yang tercatat untuk filter ini.
-                        </div>
-                      ) : (
-                        <div className="overflow-hidden border border-slate-200 rounded-xl bg-slate-50/50">
-                          <table className="min-w-full divide-y divide-slate-100 text-left">
-                            <thead className="bg-slate-100/80">
-                              <tr>
-                                <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-500 font-sans tracking-wider w-40">Waktu</th>
-                                <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-500 font-sans tracking-wider w-44">Admin</th>
-                                <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-500 font-sans tracking-wider w-40">Aksi</th>
-                                <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-500 font-sans tracking-wider">Detail Aktifitas</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 bg-white">
-                              {filteredLogs.map((log) => {
-                                const slotName = log.adminshp;
-                                const displayName = adminshpCreds[slotName] ? adminshpCreds[slotName].username : slotName;
-                                let badgeColor = 'bg-slate-100 text-slate-800';
-                                if (log.action === 'Login') badgeColor = 'bg-emerald-100 text-emerald-800 font-extrabold';
-                                else if (log.action === 'Logout') badgeColor = 'bg-slate-100 text-slate-600 font-bold';
-                                else if (log.action.includes('Buat')) badgeColor = 'bg-blue-100 text-blue-800 font-bold';
-                                else if (log.action.includes('Assign') || log.action.includes('Update') || log.action.includes('Tambah')) badgeColor = 'bg-orange-100 text-orange-800 font-bold';
-                                
-                                return (
-                                  <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
-                                    <td className="px-4 py-3 text-xs font-semibold text-slate-500 font-mono whitespace-nowrap">
-                                      {new Date(log.timestamp).toLocaleString('id-ID', {
-                                        year: 'numeric',
-                                        month: 'short',
-                                        day: '2-digit',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        second: '2-digit'
-                                      })}
-                                    </td>
-                                    <td className="px-4 py-3 text-xs font-extrabold text-slate-800">
-                                      <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-sans text-[11px] capitalize">
-                                        {displayName}
-                                      </span>
-                                      {slotName !== displayName && (
-                                        <span className="text-[10px] text-slate-400 font-medium ml-1.5 font-mono">({slotName})</span>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] uppercase font-sans tracking-wider ${badgeColor}`}>
-                                        {log.action}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-xs font-semibold text-slate-600 font-sans">
-                                      {log.details || log.action}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeSettingsTab === 'qris_config' && (
-                <div className="space-y-6" id="qris-config-settings-panel">
-                  <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6">
-                    <div className="space-y-1">
-                      <h3 className="text-base font-black text-slate-900 font-sans uppercase tracking-tight flex items-center gap-2">
-                        <ImageIcon className="h-5 w-5 text-blue-600" />
-                        Pengaturan Poster QRIS Pembayaran
-                      </h3>
-                      <p className="text-xs text-slate-400 font-medium font-sans">
-                        Ganti gambar QRIS poster asli dan sesuaikan metadata struk untuk pembayaran pelanggan.
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
-                      {/* Left: Metadata inputs */}
-                      <div className="lg:col-span-7 space-y-5">
-                        <form onSubmit={handleSaveQrisMetadata} className="space-y-4">
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Nama Merchant (Atas Nama QRIS)</label>
-                            <input
-                              type="text"
-                              required
-                              value={qrisState.merchantName}
-                              onChange={(e) => setQrisState(prev => ({ ...prev, merchantName: e.target.value }))}
-                              placeholder="Contoh: MATERIAL JAYA"
-                              className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">NMID (National Merchant ID)</label>
-                              <input
-                                type="text"
-                                required
-                                value={qrisState.nmid}
-                                onChange={(e) => setQrisState(prev => ({ ...prev, nmid: e.target.value }))}
-                                placeholder="Contoh: ID1022215501324"
-                                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans font-mono"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Printer ID / ID Cetak</label>
-                              <input
-                                type="text"
-                                required
-                                value={qrisState.printerId}
-                                onChange={(e) => setQrisState(prev => ({ ...prev, printerId: e.target.value }))}
-                                placeholder="Contoh: 93600915"
-                                className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans font-mono"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex gap-3 pt-2">
-                            <button
-                              type="submit"
-                              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-                            >
-                              <Check className="h-4 w-4" />
-                              Simpan Metadata
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleResetQrisConfig}
-                              className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-colors cursor-pointer"
-                            >
-                              Reset ke Default
-                            </button>
-                          </div>
-                        </form>
-
-                        {/* Image upload box */}
-                        <div className="border border-dashed border-slate-200 rounded-2xl p-5 bg-slate-50/50 space-y-4">
-                          <div className="space-y-1">
-                            <h4 className="text-xs font-bold text-slate-800 uppercase">Ganti Gambar Poster QRIS</h4>
-                            <p className="text-[11px] text-slate-400 font-medium">Unggah berkas foto (.jpg / .png) poster QRIS asli Anda untuk menggantikan gambar QRIS di modal checkout pembayaran.</p>
-                          </div>
-                          
-                          <div className="flex items-center gap-4">
-                            <button
-                              type="button"
-                              onClick={() => qrisFileInputRef.current?.click()}
-                              disabled={isUploadingQris}
-                              className="px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 disabled:opacity-50 text-slate-700 text-xs font-extrabold rounded-xl shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
-                            >
-                              <Plus className="h-4 w-4 text-slate-500" />
-                              {isUploadingQris ? 'Membaca Gambar...' : 'Pilih File Gambar'}
-                            </button>
-                            <span className="text-xs text-slate-400 font-mono">Max: 2MB (.jpg, .jpeg, .png)</span>
-                          </div>
-                          <input
-                            type="file"
-                            ref={qrisFileInputRef}
-                            onChange={handleQrisImageChange}
-                            accept="image/*"
-                            className="hidden"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Right: Real-time Live Poster Preview */}
-                      <div className="lg:col-span-5 flex flex-col items-center justify-center border border-slate-100 bg-slate-50/40 rounded-2xl p-6 min-h-[360px]">
-                        <span className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-wider font-sans">Pratinjau Live Poster QRIS</span>
-                        <div className="w-full max-w-[240px] rounded-2xl border border-slate-200 bg-white p-3.5 shadow-md flex flex-col items-center gap-3">
-                          <img
-                            src={qrisState.imageUrl}
-                            alt="QRIS Live Preview"
-                            className="w-full h-auto rounded-xl object-contain aspect-square border border-slate-100 shadow-inner"
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="text-center w-full">
-                            <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Merchant Terdaftar</span>
-                            <span className="text-xs font-black text-slate-800 truncate block mt-0.5">{qrisState.merchantName}</span>
-                            <span className="text-[10px] font-mono text-slate-500 block mt-1 font-semibold">{qrisState.nmid}</span>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
