@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import GMLogo from './GMLogo';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
@@ -32,6 +33,14 @@ export default function Navbar({
 
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
+  const [isAdminAuth, setIsAdminAuth] = useState(() => {
+    try {
+      return sessionStorage.getItem('gm_admin_auth') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
   const isShpAuthenticated = () => {
     try {
       const pathname = window.location.pathname;
@@ -52,9 +61,14 @@ export default function Navbar({
     const handleRoute = () => {
       setCurrentPath(window.location.pathname);
     };
+    const handleAuthChange = () => {
+      setIsAdminAuth(sessionStorage.getItem('gm_admin_auth') === 'true');
+    };
     window.addEventListener('popstate', handleRoute);
+    window.addEventListener('admin-auth-change', handleAuthChange);
     return () => {
       window.removeEventListener('popstate', handleRoute);
+      window.removeEventListener('admin-auth-change', handleAuthChange);
     };
   }, []);
 
@@ -98,7 +112,7 @@ export default function Navbar({
           /* Normal Logo brand encapsulated in white capsule wrapper */
           <div 
             onClick={() => onViewChange('home')} 
-            className="cursor-pointer transition-transform duration-200 active:scale-95 bg-white border border-slate-200 rounded-full py-1 px-3 sm:py-1.5 sm:px-4 flex items-center justify-center shadow-md shadow-black/5 hover:shadow-lg hover:bg-slate-50"
+            className="cursor-pointer transition-all duration-200 active:scale-95 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full py-1.5 px-3 sm:py-2 sm:px-4 flex items-center justify-center shadow-md shadow-black/5 hover:shadow-lg hover:bg-slate-50 dark:hover:bg-slate-900"
             id="brand-logo-container"
           >
             <GMLogo size="sm" showSubtitle={true} />
@@ -122,23 +136,50 @@ export default function Navbar({
             </div>
           )}
 
-          {/* Settings Admin button - only visible in admin view (icon only) */}
-          {currentView === 'admin' && (
-            <button
-              onClick={() => {
-                window.history.pushState(null, '', '/admin/settings');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              }}
-              className={`h-9 w-9 items-center justify-center rounded-full transition-all flex border cursor-pointer ${
-                currentPath.includes('settings')
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                  : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:text-slate-950'
-              }`}
-              title="Settings Admin"
-              id="nav-settings-admin"
-            >
-              <Settings className="h-4 w-4 animate-spin-slow" />
-            </button>
+          {/* Admin panel actions (Refresh, Settings, and Sign Out) */}
+          {currentView === 'admin' && isAdminAuth && (
+            <>
+              {/* Refresh (icon only, minimal) */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('admin-refresh'));
+                }}
+                className="h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-950 transition-all flex cursor-pointer shadow-sm active:scale-95"
+                title="Refresh Data"
+                id="nav-refresh-admin"
+              >
+                <RefreshCw className="h-4 w-4 text-slate-500 hover:text-slate-700" />
+              </button>
+
+              {/* Settings */}
+              <button
+                onClick={() => {
+                  window.history.pushState(null, '', '/admin/settings');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }}
+                className={`h-9 w-9 items-center justify-center rounded-full transition-all flex border cursor-pointer ${
+                  currentPath.includes('settings')
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:text-slate-950'
+                }`}
+                title="Settings Admin"
+                id="nav-settings-admin"
+              >
+                <Settings className="h-4 w-4 animate-spin-slow" />
+              </button>
+
+              {/* Log Out (icon only, minimal) */}
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('admin-logout'));
+                }}
+                className="h-9 w-9 items-center justify-center rounded-full border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 transition-all flex cursor-pointer shadow-sm active:scale-95"
+                title="Log Out"
+                id="nav-logout-admin"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </>
           )}
 
           {/* AdminShp view actions (Refresh and Sign Out) */}

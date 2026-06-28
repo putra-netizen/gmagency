@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { jsPDF } from 'jspdf';
 import { Product, Order, Language, PaymentStatus, DashboardStats, ShopeeOrder, MapsReview } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
 import { 
@@ -22,7 +23,7 @@ import {
   Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
   Briefcase, Save, AlertCircle, FileText, Check, Database, X,
   ExternalLink, Image as ImageIcon, Settings, ShoppingCart, Copy, ArrowLeft,
-  Star, MapPin, Upload, Users, Key, ShieldAlert, Search
+  Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -42,6 +43,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedShopeeId, setCopiedShopeeId] = useState<string | null>(null);
+  const [tempAccountInput, setTempAccountInput] = useState<Record<string, string>>({});
+  const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'order' | 'product' } | null>(null);
   
   // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'
@@ -203,6 +206,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         console.warn('Session storage restricted', err);
       }
       setAuthError('');
+      window.dispatchEvent(new CustomEvent('admin-auth-change'));
     } else {
       setAuthError(currentLang === 'id' ? 'Username atau password salah!' : 'Invalid username or password!');
     }
@@ -217,7 +221,24 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     }
     setUsername('');
     setPassword('');
+    window.dispatchEvent(new CustomEvent('admin-auth-change'));
   };
+
+  // Listen to custom navbar events
+  useEffect(() => {
+    const onNavbarLogout = () => {
+      handleLogout();
+    };
+    const onNavbarRefresh = () => {
+      loadDashboardData();
+    };
+    window.addEventListener('admin-logout', onNavbarLogout);
+    window.addEventListener('admin-refresh', onNavbarRefresh);
+    return () => {
+      window.removeEventListener('admin-logout', onNavbarLogout);
+      window.removeEventListener('admin-refresh', onNavbarRefresh);
+    };
+  }, []);
 
   // Spreadsheet settings handlers
   const handleSaveSpreadsheetSettings = (e: React.FormEvent) => {
@@ -414,6 +435,226 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         console.error(err);
         toast.error('Gagal menghapus laporan review');
       }
+    }
+  };
+
+  // Add Reviewer Account Name to specific Maps Review item
+  const handleAddReviewerAccount = async (reviewId: string) => {
+    const nameToAdd = tempAccountInput[reviewId]?.trim();
+    if (!nameToAdd) return;
+
+    const targetReview = mapsReviews.find(r => r.id === reviewId);
+    if (!targetReview) return;
+
+    const updatedAccounts = [...(targetReview.reviewer_accounts || []), nameToAdd];
+    
+    try {
+      await dbUpdateMapsReview(reviewId, {
+        reviewer_accounts: updatedAccounts
+      });
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
+      setTempAccountInput(prev => ({ ...prev, [reviewId]: '' }));
+      logAdminShpAction('Main Admin', 'Tambah Reviewer', `Menambahkan akun reviewer "${nameToAdd}" ke review store "${targetReview.store_name}"`);
+    } catch (err) {
+      console.error(err);
+      toast.error(currentLang === 'id' ? `Gagal menambah akun progres: ${err instanceof Error ? err.message : String(err)}` : `Failed to add progress account: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Remove Reviewer Account Name
+  const handleRemoveReviewerAccount = async (reviewId: string, indexToRemove: number) => {
+    const targetReview = mapsReviews.find(r => r.id === reviewId);
+    if (!targetReview) return;
+
+    const updatedAccounts = (targetReview.reviewer_accounts || []).filter((_, idx) => idx !== indexToRemove);
+
+    try {
+      await dbUpdateMapsReview(reviewId, {
+        reviewer_accounts: updatedAccounts
+      });
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
+      logAdminShpAction('Main Admin', 'Hapus Reviewer', `Menghapus akun reviewer dari review store "${targetReview.store_name}"`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal menghapus akun progres.');
+    }
+  };
+
+  // Helper to generate a highly polished single-page PDF of Google Maps Reviewers list
+  const generateMapsReportPDF = (item: MapsReview) => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const dateStr = new Date(item.created_at).toLocaleDateString('id-ID', {
+        year: 'numeric', month: 'long', day: 'numeric'
+      });
+
+      // 1. Title / Brand Header
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(37, 99, 235); // Tailwind Blue 600
+      doc.text("GM AGENCY", 15, 22);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(59, 130, 246); // Tailwind Blue 500
+      doc.text("GOOGLE MAPS REVIEWER LIST REPORT", 15, 28);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184); // Slate 400
+      doc.text(`Tanggal Laporan: ${dateStr}`, 195, 22, { align: 'right' });
+
+      // Divider Line
+      doc.setDrawColor(226, 232, 240); // Slate 200
+      doc.setLineWidth(0.5);
+      doc.line(15, 33, 195, 33);
+
+      // 2. Metadata Block/Card (Fills x=15 to x=195, height = 30mm)
+      doc.setFillColor(248, 250, 252); // Slate 50
+      doc.roundedRect(15, 38, 180, 30, 3, 3, 'F');
+      doc.setDrawColor(241, 245, 249); // Slate 100
+      doc.roundedRect(15, 38, 180, 30, 3, 3, 'S');
+
+      // Client name column
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text("NAMA CLIENT:", 20, 45);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42); // Slate 900
+      doc.text(item.client_name.toUpperCase(), 20, 51);
+
+      // Progress column
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text("PROGRES ULASAN:", 115, 45);
+
+      const count = item.reviewer_accounts?.length || 0;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`${count} dari ${item.target_count} Target Selesai`, 115, 51);
+
+      // Maps Link full width
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text("LINK GOOGLE MAPS:", 20, 59);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(37, 99, 235);
+      // Truncate maps link if extremely long
+      let mapsLink = item.maps_link;
+      if (mapsLink.length > 95) {
+        mapsLink = mapsLink.substring(0, 92) + '...';
+      }
+      doc.text(mapsLink, 20, 64);
+
+      // 3. Accounts Grid Title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(71, 85, 105); // Slate 600
+      doc.text("DAFTAR AKUN REVIEWER REAL SELESAI:", 15, 77);
+
+      // 4. Draw Accounts in Grid
+      const accounts = item.reviewer_accounts || [];
+      const totalAccounts = accounts.length;
+
+      if (totalAccounts === 0) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(9);
+        doc.setTextColor(148, 163, 184);
+        doc.text("Belum ada ulasan akun yang selesai diinput.", 20, 88);
+      } else {
+        // Calculate dynamic grid parameters to fit exactly in one page
+        let numCols = 3;
+        let rowHeight = 7;
+        let fontSize = 8;
+        let verticalSpacing = 2; // spacing between cards
+
+        if (totalAccounts <= 24) {
+          numCols = 2;
+          rowHeight = 8;
+          fontSize = 9;
+          verticalSpacing = 2.5;
+        } else if (totalAccounts <= 60) {
+          numCols = 3;
+          rowHeight = 7.2;
+          fontSize = 8;
+          verticalSpacing = 2;
+        } else {
+          // If a lot of accounts (e.g. 60 to 120), use 4 columns to fit in 1 page!
+          numCols = 4;
+          rowHeight = 6.2;
+          fontSize = 7;
+          verticalSpacing = 1.2;
+        }
+
+        const colWidth = (180 - (numCols - 1) * 3) / numCols;
+        const colGap = 3;
+        const startX = 15;
+        const startY = 82;
+
+        accounts.forEach((acc, index) => {
+          const colIndex = index % numCols;
+          const rowIndex = Math.floor(index / numCols);
+          const x = startX + colIndex * (colWidth + colGap);
+          const y = startY + rowIndex * (rowHeight + verticalSpacing);
+
+          // Draw a soft rounded rect for each account
+          doc.setFillColor(248, 250, 252); // Slate 50
+          doc.roundedRect(x, y, colWidth, rowHeight, 1.2, 1.2, 'F');
+          doc.setDrawColor(226, 232, 240); // Slate 200
+          doc.roundedRect(x, y, colWidth, rowHeight, 1.2, 1.2, 'S');
+
+          // Number badge background
+          doc.setFillColor(219, 234, 254); // Blue 100
+          doc.roundedRect(x + 1.2, y + 1.2, rowHeight - 2.4, rowHeight - 2.4, 0.8, 0.8, 'F');
+
+          // Number text
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(fontSize - 1.5);
+          doc.setTextColor(29, 78, 216); // Blue 700
+          doc.text((index + 1).toString(), x + 1.2 + (rowHeight - 2.4)/2, y + 1.2 + (rowHeight - 2.4)/2 + (fontSize - 1.5)/4 + 0.3, { align: 'center' });
+
+          // Account name text
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(fontSize);
+          doc.setTextColor(51, 65, 85); // Slate 700
+
+          const maxTextWidth = colWidth - (rowHeight + 1);
+          let truncatedAcc = acc;
+          if (doc.getTextWidth(acc) > maxTextWidth) {
+            while (doc.getTextWidth(truncatedAcc + '...') > maxTextWidth && truncatedAcc.length > 0) {
+              truncatedAcc = truncatedAcc.slice(0, -1);
+            }
+            truncatedAcc += '...';
+          }
+          doc.text(truncatedAcc, x + rowHeight + 0.5, y + rowHeight / 2 + fontSize / 4 - 0.2);
+        });
+      }
+
+      // 5. Footer (Single Page forced)
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(148, 163, 184); // Slate 400
+      doc.text("* Laporan ini sah dan dibuat secara otomatis oleh sistem GM AGENCY.", 15, 285);
+      doc.text("Halaman 1 dari 1 (Dokumen 1 Lembar)", 195, 285, { align: 'right' });
+
+      // Save PDF
+      doc.save(`Laporan_GM_Agency_${item.client_name.replace(/\s+/g, '_')}.pdf`);
+    } catch (err) {
+      console.error("Gagal mengekspor PDF:", err);
+      toast.error("Terjadi kesalahan saat memproses PDF.");
     }
   };
 
@@ -932,25 +1173,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
             }
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
-          <button
-            onClick={loadDashboardData}
-            className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
-            id="refresh-admin-dashboard"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Refresh Data</span>
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 px-4 py-2.5 text-xs font-bold text-red-700 hover:bg-red-100 transition-colors cursor-pointer"
-            id="admin-logout-btn"
-          >
-            <span>Log Out</span>
-          </button>
-        </div>
       </div>
 
       {errorMsg && (
@@ -1241,7 +1463,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                 </span>
                                 {order.created_by && (
                                   <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                    diinput oleh {order.created_by}
+                                    diinput oleh {adminshpCreds[order.created_by]?.username || order.created_by}
                                   </span>
                                 )}
                               </td>
@@ -1417,7 +1639,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                         <th className="px-4 py-3">Pembeli & No WA</th>
                         <th className="px-4 py-3">Layanan</th>
                         <th className="px-4 py-3">Target Details</th>
-                        <th className="px-4 py-3">Worker & Status</th>
+                        <th className="px-4 py-3">Status</th>
                         <th className="px-4 py-3 text-center">Aksi</th>
                       </tr>
                     </thead>
@@ -1452,7 +1674,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   </span>
                                   {order.created_by && (
                                     <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                      diinput oleh {order.created_by}
+                                      diinput oleh {adminshpCreds[order.created_by]?.username || order.created_by}
                                     </span>
                                   )}
                                   <span className="text-[11px] font-bold text-slate-900 block mt-1 font-mono">
@@ -1510,17 +1732,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
                                 {/* Worker Assignment & Status Dropdown Stacked */}
                                 <td className="px-4 py-3 space-y-1">
-                                  {/* Worker select dropdown */}
-                                  <select
-                                    value={order.worker_id || ''}
-                                    onChange={(e) => handleUpdateOrderWorker(order.id, e.target.value)}
-                                    className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700 outline-none focus:border-blue-500"
-                                  >
-                                    <option value="">-- No Worker --</option>
-                                    {Array.from({ length: 8 }, (_, i) => `worker${i + 1}`).map((w, idx) => (
-                                      <option key={w} value={w}>Worker {idx + 1}</option>
-                                    ))}
-                                  </select>
+
+
 
                                   {/* Worker status dropdown */}
                                   <select
@@ -1681,7 +1894,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                               </span>
                               {order.created_by && (
                                 <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                  diinput oleh {order.created_by}
+                                  diinput oleh {adminshpCreds[order.created_by]?.username || order.created_by}
                                 </span>
                               )}
                             </td>
@@ -1871,13 +2084,14 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   <table className="w-full text-left border-collapse table-fixed">
                     <colgroup>
                       <col className="w-[10%]" />
-                      <col className="w-[15%]" />
-                      <col className="w-[12%]" />
+                      <col className="w-[13%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[20%]" />
                       <col className="w-[11%]" />
-                      <col className="w-[16%]" />
-                      <col className="w-[16%]" />
                       <col className="w-[11%]" />
-                      <col className="w-[9%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[7%]" />
                     </colgroup>
                     <thead>
                       <tr className="bg-slate-50/20 border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider">
@@ -1885,6 +2099,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                         <th className="px-4 py-3">Klien & Store Name</th>
                         <th className="px-4 py-3">Tipe Review</th>
                         <th className="px-4 py-3">Target Link</th>
+                        <th className="px-4 py-3">Input Progres Akun</th>
                         <th className="px-4 py-3">Catatan</th>
                         <th className="px-4 py-3">Link Bukti</th>
                         <th className="px-4 py-3 text-center">Status</th>
@@ -1894,7 +2109,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                       {filteredMapsReviews.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                          <td colSpan={9} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
                             Belum ada laporan review yang cocok / terdaftar.
                           </td>
                         </tr>
@@ -1916,7 +2131,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                               </span>
                               {review.created_by && (
                                 <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                  diinput oleh {review.created_by}
+                                  diinput oleh {adminshpCreds[review.created_by]?.username || review.created_by}
                                 </span>
                               )}
                             </td>
@@ -1960,6 +2175,93 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                               ) : (
                                 <span className="text-slate-400">-</span>
                               )}
+                            </td>
+
+                            {/* Input Progres Akun Column */}
+                            <td className="px-4 py-3 space-y-2">
+                              {/* Progress bar inside the same column */}
+                              {(() => {
+                                const doneCount = review.reviewer_accounts?.length || 0;
+                                const pct = Math.min(100, Math.round((doneCount / (review.target_count || 1)) * 100));
+                                const isFinished = review.status === 'DONE';
+
+                                return (
+                                  <>
+                                    <div className="flex items-center justify-between text-[9px] font-bold text-slate-600 font-mono mb-1">
+                                      <span>Target: {doneCount} / {review.target_count || 0}</span>
+                                      <span>{pct}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mb-2">
+                                      <div 
+                                        className={`h-full rounded-full transition-all duration-300 ${
+                                          isFinished ? 'bg-emerald-500' : 'bg-blue-600'
+                                        }`} 
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+
+                                    <div className="flex gap-1">
+                                      <input
+                                        type="text"
+                                        placeholder="Nama Akun Reviewer"
+                                        value={tempAccountInput[review.id] || ''}
+                                        onChange={e => setTempAccountInput(prev => ({ ...prev, [review.id]: e.target.value }))}
+                                        onKeyDown={e => {
+                                          if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleAddReviewerAccount(review.id);
+                                          }
+                                        }}
+                                        className="rounded border border-slate-200 px-2 py-1 text-[10px] outline-none focus:border-blue-500 flex-grow font-sans bg-white min-w-0"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddReviewerAccount(review.id)}
+                                        className="bg-blue-600 text-white rounded p-1 hover:bg-blue-700 transition-colors shrink-0 cursor-pointer flex items-center justify-center"
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                      </button>
+                                    </div>
+
+                                    {/* Scrollable grid for accounts */}
+                                    {review.reviewer_accounts && review.reviewer_accounts.length > 0 ? (
+                                      <div className="border border-slate-200 rounded p-1.5 bg-white max-h-[100px] overflow-y-auto shadow-inner mt-1">
+                                        <div className="grid grid-cols-2 gap-1">
+                                          {review.reviewer_accounts.map((acc, index) => (
+                                            <div key={index} className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-[8px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+                                              <span className="truncate font-mono" title={`${index + 1}. ${acc}`}>
+                                                {index + 1}. {acc}
+                                              </span>
+                                              <button
+                                                onClick={() => handleRemoveReviewerAccount(review.id, index)}
+                                                className="text-red-500 hover:text-red-700 font-extrabold hover:bg-red-50 px-0.5 rounded transition-all cursor-pointer text-[10px] leading-none"
+                                                title="Hapus Akun"
+                                              >
+                                                ×
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="text-[9px] text-slate-400 italic py-1 text-center bg-slate-50/60 border border-dashed border-slate-200 rounded">
+                                        Belum ada ulasan akun diinput
+                                      </div>
+                                    )}
+
+                                    {review.reviewer_accounts && review.reviewer_accounts.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => generateMapsReportPDF(review)}
+                                        className="w-full mt-1.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm"
+                                      >
+                                        <FileDown className="h-3 w-3 text-blue-600" />
+                                        <span>Export PDF ({review.reviewer_accounts.length})</span>
+                                      </button>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </td>
 
                             {/* Notes */}

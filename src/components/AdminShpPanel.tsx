@@ -1569,6 +1569,14 @@ Format Chat : ${data.notes || '-'}`;
                               {/* ID / Tipe */}
                               <td className="px-4 py-3 font-mono">
                                 <span className="font-bold text-slate-900 block">{order.id}</span>
+                                <span className="text-[10px] text-slate-400 block mt-0.5 whitespace-nowrap">
+                                  {new Date(order.created_at).toLocaleDateString('id-ID', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
                                 <div className="flex flex-col gap-1 mt-1">
                                   <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md inline-block w-fit ${
                                     isSosmed 
@@ -1978,7 +1986,7 @@ Format Chat : ${data.notes || '-'}`;
                             <th className="px-3 py-3.5">Nama Store</th>
                             <th className="px-3 py-3.5">Client / Target Link</th>
                             <th className="px-3 py-3.5">Progres Target</th>
-                            <th className="px-3 py-3.5">Input Progres Akun</th>
+                            <th className="px-3 py-3.5">Progres Akun</th>
                             <th className="px-3 py-3.5">Clue</th>
                             <th className="px-3 py-3.5">Link Bukti</th>
                             <th className="px-3 py-3.5 text-center">Status / Aksi</th>
@@ -2020,6 +2028,14 @@ Format Chat : ${data.notes || '-'}`;
                                     <span className="font-bold text-slate-900 block truncate" title={item.client_name}>
                                       {item.client_name}
                                     </span>
+                                    <div className="text-[10px] text-slate-400 font-mono mt-1">
+                                      ID: {item.id.slice(0, 8)} | {new Date(item.created_at).toLocaleDateString('id-ID', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </div>
                                     <a 
                                       href={item.maps_link}
                                       target="_blank"
@@ -2062,32 +2078,9 @@ Format Chat : ${data.notes || '-'}`;
                                     </div>
                                   </td>
 
-                                  {/* Input Progres Akun - NEAT MINI-TABLE FOR REPORTING */}
+                                  {/* Progres Akun - READ-ONLY VIEW FOR ADMINSHP */}
                                   <td className="px-3 py-3 space-y-2">
-                                    <div className="flex gap-1">
-                                      <input
-                                        type="text"
-                                        placeholder="Nama Akun Reviewer"
-                                        value={tempAccountInput[item.id] || ''}
-                                        onChange={e => setTempAccountInput(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                        onKeyDown={e => {
-                                          if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            handleAddReviewerAccount(item.id);
-                                          }
-                                        }}
-                                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] outline-none focus:border-blue-500 flex-grow font-sans bg-white min-w-0"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => handleAddReviewerAccount(item.id)}
-                                        className="bg-blue-600 text-white rounded-lg p-1.5 hover:bg-blue-700 transition-colors shrink-0 cursor-pointer"
-                                      >
-                                        <Plus className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-
-                                    {/* Efficient compact grid with 5 columns for reviewer accounts (stops excessive scrolling) */}
+                                    {/* Efficient compact grid with 5 columns for reviewer accounts */}
                                     {item.reviewer_accounts && item.reviewer_accounts.length > 0 ? (
                                       <div className="border border-slate-200 rounded-xl p-2 bg-white max-h-[140px] overflow-y-auto shadow-inner">
                                         <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-1">
@@ -2096,20 +2089,13 @@ Format Chat : ${data.notes || '-'}`;
                                               <span className="truncate font-mono" title={`${index + 1}. ${acc}`}>
                                                 {index + 1}. {acc}
                                               </span>
-                                              <button
-                                                onClick={() => handleRemoveReviewerAccount(item.id, index)}
-                                                className="text-red-500 hover:text-red-700 font-extrabold hover:bg-red-50 px-1 rounded transition-all cursor-pointer"
-                                                title="Hapus Akun"
-                                              >
-                                                ×
-                                              </button>
                                             </div>
                                           ))}
                                         </div>
                                       </div>
                                     ) : (
                                       <div className="text-[10px] text-slate-400 italic py-2 text-center bg-slate-50/60 border border-dashed border-slate-200 rounded-lg">
-                                        Belum ada ulasan akun diinput
+                                        Belum ada ulasan akun diinput oleh Admin
                                       </div>
                                     )}
 

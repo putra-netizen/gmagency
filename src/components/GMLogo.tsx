@@ -14,9 +14,9 @@ interface GMLogoProps {
 
 export default function GMLogo({ className = '', size = 'md', showSubtitle = true }: GMLogoProps) {
   const dimensions = {
-    sm: { width: 'w-10', height: 'h-10', titleSize: 'text-lg', subSize: 'text-[9px]' },
-    md: { width: 'w-14', height: 'h-14', titleSize: 'text-2xl', subSize: 'text-[11px]' },
-    lg: { width: 'w-20', height: 'h-20', titleSize: 'text-3xl', subSize: 'text-[14px]' }
+    sm: { width: 'w-14', height: 'h-14', titleSize: 'text-xl', subSize: 'text-[10px]' },
+    md: { width: 'w-18', height: 'h-18', titleSize: 'text-3xl', subSize: 'text-[12px]' },
+    lg: { width: 'w-24', height: 'h-24', titleSize: 'text-4xl', subSize: 'text-[15px]' }
   };
 
   const current = dimensions[size];

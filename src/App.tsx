@@ -293,9 +293,14 @@ export default function App() {
             }`}>
               {/* About brand column (5 columns) */}
               <div className="md:col-span-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white font-extrabold text-base">
-                    GM
+                <div className="flex items-center gap-2.5">
+                  <div className="relative h-10 w-10 shrink-0 p-0.5 rounded-full border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center overflow-hidden">
+                    <img
+                      src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
+                      alt="GM Agency"
+                      className="w-full h-full object-cover rounded-full"
+                      referrerPolicy="no-referrer"
+                    />
                   </div>
                   <span className={`text-lg font-black tracking-widest ${
                     theme === 'dark' ? 'text-white' : 'text-slate-900'
@@ -344,7 +349,7 @@ export default function App() {
                 <ul className="space-y-3 text-sm font-light">
                   <li className="flex items-start gap-2.5">
                     <MapPin className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-                    <span>Getak Mumbul, Bali, Indonesia</span>
+                    <span>Jakarta Selatan, Indonesia</span>
                   </li>
                   <li className="flex items-center gap-2.5">
                     <Phone className="h-4 w-4 text-blue-500 shrink-0" />
