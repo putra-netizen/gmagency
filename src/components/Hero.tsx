@@ -424,21 +424,20 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
             </div>
 
             {/* Manual Slide Selector Quick Tabs */}
-            <div className="mt-4 flex flex-wrap justify-center gap-1.5 sm:gap-2">
+            <div className="mt-5 flex flex-wrap justify-center gap-2.5">
               {SLIDES.map((s, index) => (
                 <button
                   key={s.id}
                   onClick={() => setActiveSlide(index)}
-                  className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold border transition-all duration-300 cursor-pointer ${
+                  className={`h-2.5 w-2.5 rounded-full transition-all duration-300 cursor-pointer ${
                     activeSlide === index 
-                      ? 'bg-blue-600 border-blue-500 text-white shadow-md' 
+                      ? 'bg-blue-600 w-6' 
                       : (isDark 
-                          ? 'bg-slate-850 border-slate-800 text-slate-400 hover:text-slate-200' 
-                          : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800')
+                          ? 'bg-slate-700 hover:bg-slate-500' 
+                          : 'bg-slate-300 hover:bg-slate-400')
                   }`}
-                >
-                  {index + 1}. {currentLang === 'id' ? s.title.id.split(' ')[1] || s.title.id.split(' ')[0] : s.title.en.split(' ')[0]}
-                </button>
+                  aria-label={`Go to slide ${index + 1}`}
+                />
               ))}
             </div>
 
