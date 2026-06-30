@@ -146,6 +146,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [searchReview, setSearchReview] = useState('');
   const [sortReview, setSortReview] = useState<'pending' | 'progress' | 'done'>('pending');
   const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'week' | 'month'>('all');
+  const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS/REVIEW APPS'>('SEMUA');
 
   const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'week' | 'month') => {
     if (timeframe === 'all' || !createdAtStr) return true;
@@ -981,6 +982,15 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     .filter(o => o.payment_status !== 'PAID')
     .filter(o => isWithinTimeframe(o.created_at, timeFilterUnpaid))
     .filter(o => {
+      const isPending = !o.worker_status || o.worker_status === 'unassigned';
+      const isProgress = o.worker_status === 'taken';
+      const isDone = o.worker_status === 'done';
+      if (sortUnpaid === 'pending') return isPending;
+      if (sortUnpaid === 'progress') return isProgress;
+      if (sortUnpaid === 'done') return isDone;
+      return true;
+    })
+    .filter(o => {
       if (!searchUnpaid) return true;
       const q = searchUnpaid.toLowerCase();
       return (
@@ -991,16 +1001,20 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         (o.notes || '').toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => {
-      if (sortUnpaid === 'pending') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      if (sortUnpaid === 'progress') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      if (sortUnpaid === 'done') return b.total_price - a.total_price;
-      return 0;
-    });
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const filteredPaidOrders = orders
     .filter(o => o.payment_status === 'PAID')
     .filter(o => isWithinTimeframe(o.created_at, timeFilterPaid))
+    .filter(o => {
+      const isPending = !o.worker_status || o.worker_status === 'unassigned';
+      const isProgress = o.worker_status === 'taken';
+      const isDone = o.worker_status === 'done';
+      if (sortPaid === 'pending') return isPending;
+      if (sortPaid === 'progress') return isProgress;
+      if (sortPaid === 'done') return isDone;
+      return true;
+    })
     .filter(o => {
       if (!searchPaid) return true;
       const q = searchPaid.toLowerCase();
@@ -1012,40 +1026,18 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         (o.notes || '').toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => {
-      const getStatusScore = (o: any) => {
-        const isPending = !o.worker_status || o.worker_status === 'unassigned';
-        const isProgress = o.worker_status === 'taken';
-        const isDone = o.worker_status === 'done';
-        if (sortPaid === 'pending') {
-          if (isPending) return 0;
-          if (isProgress) return 1;
-          return 2;
-        }
-        if (sortPaid === 'progress') {
-          if (isProgress) return 0;
-          if (isPending) return 1;
-          return 2;
-        }
-        if (sortPaid === 'done') {
-          if (isDone) return 0;
-          if (isProgress) return 1;
-          return 2;
-        }
-        return 0;
-      };
-
-      const scoreA = getStatusScore(a);
-      const scoreB = getStatusScore(b);
-      if (scoreA !== scoreB) {
-        return scoreA - scoreB;
-      }
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   // Filtered and Sorted Shopee Orders
   const filteredShopeeOrders = shopeeOrders
     .filter(o => isWithinTimeframe(o.created_at, timeFilterShopee))
+    .filter(o => {
+      const stat = o.status || 'PENDING';
+      if (sortShopee === 'pending') return stat === 'PENDING';
+      if (sortShopee === 'progress') return stat === 'PROGRESS';
+      if (sortShopee === 'done') return stat === 'DONE';
+      return true;
+    })
     .filter(o => {
       if (!searchShopee) return true;
       const q = searchShopee.toLowerCase();
@@ -1059,38 +1051,27 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         (o.worker_id || '').toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => {
-      const getStatusScore = (o: any) => {
-        const stat = o.status || 'PENDING';
-        if (sortShopee === 'pending') {
-          if (stat === 'PENDING') return 0;
-          if (stat === 'PROGRESS') return 1;
-          return 2;
-        }
-        if (sortShopee === 'progress') {
-          if (stat === 'PROGRESS') return 0;
-          if (stat === 'PENDING') return 1;
-          return 2;
-        }
-        if (sortShopee === 'done') {
-          if (stat === 'DONE') return 0;
-          if (stat === 'PROGRESS') return 1;
-          return 2;
-        }
-        return 0;
-      };
-
-      const scoreA = getStatusScore(a);
-      const scoreB = getStatusScore(b);
-      if (scoreA !== scoreB) {
-        return scoreA - scoreB;
-      }
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   // Filtered and Sorted Maps Reviews
   const filteredMapsReviews = mapsReviews
     .filter(r => isWithinTimeframe(r.created_at, timeFilterReview))
+    .filter(r => {
+      const stat = r.status || 'PENDING';
+      if (sortReview === 'pending') return stat === 'PENDING';
+      if (sortReview === 'progress') return stat === 'PROGRESS';
+      if (sortReview === 'done') return stat === 'DONE';
+      return true;
+    })
+    .filter(r => {
+      if (reviewTypeFilter === 'TRIPAD') {
+        return r.review_type === 'TRIPAD';
+      }
+      if (reviewTypeFilter === 'GMAPS/REVIEW APPS') {
+        return r.review_type === 'G_MAPS' || r.review_type === 'REVIEW_APPS' || !r.review_type;
+      }
+      return true;
+    })
     .filter(r => {
       if (!searchReview) return true;
       const q = searchReview.toLowerCase();
@@ -1103,34 +1084,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
         (r.review_type || '').toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => {
-      const getStatusScore = (o: any) => {
-        const stat = o.status || 'PENDING';
-        if (sortReview === 'pending') {
-          if (stat === 'PENDING') return 0;
-          if (stat === 'PROGRESS') return 1;
-          return 2;
-        }
-        if (sortReview === 'progress') {
-          if (stat === 'PROGRESS') return 0;
-          if (stat === 'PENDING') return 1;
-          return 2;
-        }
-        if (sortReview === 'done') {
-          if (stat === 'DONE') return 0;
-          if (stat === 'PROGRESS') return 1;
-          return 2;
-        }
-        return 0;
-      };
-
-      const scoreA = getStatusScore(a);
-      const scoreB = getStatusScore(b);
-      if (scoreA !== scoreB) {
-        return scoreA - scoreB;
-      }
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="admin-panel-container">
@@ -2016,14 +1970,35 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
               
               {/* Search & Sort Bar */}
               <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
-                <div className="relative w-full lg:w-80">
-                  <input
-                    type="text"
-                    value={searchReview}
-                    onChange={(e) => setSearchReview(e.target.value)}
-                    placeholder="Cari store, klien, tipe review, notes..."
-                    className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
-                  />
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full lg:w-auto">
+                  <div className="relative w-full sm:w-80">
+                    <input
+                      type="text"
+                      value={searchReview}
+                      onChange={(e) => setSearchReview(e.target.value)}
+                      placeholder="Cari store, klien, tipe review, notes..."
+                      className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
+                    />
+                  </div>
+
+                  {/* Tipe Review Filter - Coretan Warna Biru */}
+                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]" id="admin-tipe-review-filter">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Tipe Review:</span>
+                    {(['SEMUA', 'TRIPAD', 'GMAPS/REVIEW APPS'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setReviewTypeFilter(opt)}
+                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
+                          reviewTypeFilter === opt
+                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Minimalist sorting / filtering controls */}
