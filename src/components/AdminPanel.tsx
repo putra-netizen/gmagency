@@ -148,7 +148,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [searchReview, setSearchReview] = useState('');
   const [sortReview, setSortReview] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
   const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'week' | 'month'>('all');
-  const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS/REVIEW APPS'>('SEMUA');
+  const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('SEMUA');
 
   const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'week' | 'month') => {
     if (timeframe === 'all' || !createdAtStr) return true;
@@ -1073,8 +1073,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       if (reviewTypeFilter === 'TRIPAD') {
         return r.review_type === 'TRIPAD';
       }
-      if (reviewTypeFilter === 'GMAPS/REVIEW APPS') {
-        return r.review_type === 'G_MAPS' || r.review_type === 'REVIEW_APPS' || !r.review_type;
+      if (reviewTypeFilter === 'GMAPS') {
+        return r.review_type === 'G_MAPS' || !r.review_type;
+      }
+      if (reviewTypeFilter === 'REVIEW APPS') {
+        return r.review_type === 'REVIEW_APPS';
       }
       return true;
     })
@@ -2079,7 +2082,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   {/* Tipe Review Filter - Coretan Warna Biru */}
                   <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]" id="admin-tipe-review-filter">
                     <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Tipe Review:</span>
-                    {(['SEMUA', 'TRIPAD', 'GMAPS/REVIEW APPS'] as const).map((opt) => (
+                    {(['SEMUA', 'TRIPAD', 'GMAPS', 'REVIEW APPS'] as const).map((opt) => (
                       <button
                         key={opt}
                         type="button"
