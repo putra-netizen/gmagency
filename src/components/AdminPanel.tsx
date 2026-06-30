@@ -43,6 +43,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedShopeeId, setCopiedShopeeId] = useState<string | null>(null);
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [copiedReviewId, setCopiedReviewId] = useState<string | null>(null);
   const [tempAccountInput, setTempAccountInput] = useState<Record<string, string>>({});
   const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'order' | 'product' } | null>(null);
@@ -1477,11 +1479,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
                               {/* Payment status select & action */}
                               <td className="px-4 py-3">
-                                <div className="flex items-center justify-between gap-1.5">
+                                <div className="flex flex-col gap-1.5 items-stretch">
                                   <select
                                     value={order.payment_status}
                                     onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as PaymentStatus)}
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-bold outline-none cursor-pointer flex-1 ${
+                                    className={`w-full rounded-lg border px-2 py-1 text-[10px] font-bold outline-none cursor-pointer ${
                                       order.payment_status === 'PAID'
                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                         : order.payment_status === 'PENDING'
@@ -1493,9 +1495,40 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                     <option value="PAID">LUNAS</option>
                                     <option value="FAILED">BATAL</option>
                                   </select>
+
                                   <button
+                                    type="button"
+                                    onClick={() => {
+                                      const target = order.target_link || order.target_spam_phone || '-';
+                                      const copypasta = `Layanan: ${order.product_name}\nNama Cust: ${order.buyer_name}\nNo WA: ${order.phone_number}\nTarget: ${target}\nJumlah: ${order.quantity}\nTotal Harga: ${formatRupiah(order.total_price)}\nCatatan: ${order.notes || '-'}`;
+                                      navigator.clipboard.writeText(copypasta);
+                                      setCopiedOrderId(order.id);
+                                      setTimeout(() => setCopiedOrderId(null), 2000);
+                                    }}
+                                    className={`w-full px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                      copiedOrderId === order.id
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                    }`}
+                                    title="Salin Format"
+                                  >
+                                    {copiedOrderId === order.id ? (
+                                      <>
+                                        <Check className="h-3 w-3 text-emerald-600" />
+                                        <span>Tersalin!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="h-3 w-3 text-blue-600" />
+                                        <span>Salin Format</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  <button
+                                    type="button"
                                     onClick={() => handleDeleteOrder(order.id)}
-                                    className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors shrink-0"
+                                    className="block mx-auto text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                                     title="Delete Order"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
@@ -1583,9 +1616,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                       <col className="w-[20%]" />
                       <col className="w-[20%]" />
                       <col className="w-[20%]" />
-                      <col className="w-[20%]" />
-                      <col className="w-[14%]" />
-                      <col className="w-[6%]" />
+                      <col className="w-[25%]" />
+                      <col className="w-[15%]" />
                     </colgroup>
                     <thead>
                       <tr className="bg-slate-50/20 border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider">
@@ -1593,14 +1625,13 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                         <th className="px-4 py-3">Pembeli & No WA</th>
                         <th className="px-4 py-3">Layanan</th>
                         <th className="px-4 py-3">Target Details</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3 text-center">Aksi</th>
+                        <th className="px-4 py-3 text-center">Status / Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                       {filteredPaidOrders.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
                             {currentLang === 'id' ? 'Belum ada pesanan lunas.' : 'No paid orders yet.'}
                           </td>
                         </tr>
@@ -1693,7 +1724,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   <select
                                     value={order.worker_status || 'unassigned'}
                                     onChange={(e) => handleUpdateWorkerStatus(order.id, e.target.value as any)}
-                                    className={`w-full rounded border px-1.5 py-0.5 text-[10px] font-bold outline-none cursor-pointer ${
+                                    className={`w-full rounded-lg border px-2 py-1 text-[10px] font-bold outline-none cursor-pointer ${
                                       isDone 
                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                                         : isTaken 
@@ -1705,20 +1736,47 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                     <option value="taken">Diproses</option>
                                     <option value="done">Selesai</option>
                                   </select>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const target = order.target_link || order.target_spam_phone || '-';
+                                      const copypasta = `Layanan: ${order.product_name}\nNama Cust: ${order.buyer_name}\nNo WA: ${order.phone_number}\nTarget: ${target}\nJumlah: ${order.quantity}\nTotal Harga: ${formatRupiah(order.total_price)}\nCatatan: ${order.notes || '-'}`;
+                                      navigator.clipboard.writeText(copypasta);
+                                      setCopiedOrderId(order.id);
+                                      setTimeout(() => setCopiedOrderId(null), 2000);
+                                    }}
+                                    className={`w-full mt-1.5 px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                      copiedOrderId === order.id
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                    }`}
+                                    title="Salin Format"
+                                  >
+                                    {copiedOrderId === order.id ? (
+                                      <>
+                                        <Check className="h-3 w-3 text-emerald-600" />
+                                        <span>Tersalin!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="h-3 w-3 text-blue-600" />
+                                        <span>Salin Format</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteOrder(order.id)}
+                                    className="block mx-auto mt-1.5 text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                                    title="Delete Order"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
                                 </td>
 
-                                {/* Delete Action */}
-                                <td className="px-4 py-3">
-                                  <div className="flex flex-col items-center justify-center">
-                                    <button
-                                      onClick={() => handleDeleteOrder(order.id)}
-                                      className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors shrink-0"
-                                      title="Delete Order"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
+
                               </tr>
                             );
                           })
@@ -1943,11 +2001,38 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   <option value="PROGRESS">PROGRESS</option>
                                   <option value="DONE">DONE</option>
                                 </select>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(order.formatted_text);
+                                    setCopiedShopeeId(order.id);
+                                    setTimeout(() => setCopiedShopeeId(null), 2000);
+                                  }}
+                                  className={`w-full px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                    copiedShopeeId === order.id
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                  }`}
+                                  title="Salin Format"
+                                >
+                                  {copiedShopeeId === order.id ? (
+                                    <>
+                                      <Check className="h-3 w-3 text-emerald-600" />
+                                      <span>Tersalin!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="h-3 w-3 text-blue-600" />
+                                      <span>Salin Format</span>
+                                    </>
+                                  )}
+                                </button>
                                 
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteShopeeOrder(order.id)}
-                                  className="inline-flex items-center justify-center gap-1 text-[10px] font-bold text-red-600 hover:bg-red-50 py-1 rounded-lg transition-colors cursor-pointer border border-dashed border-red-200 font-sans"
+                                  className="inline-flex items-center justify-center gap-1 text-[10px] font-bold text-red-600 hover:bg-red-50 py-1.5 rounded-lg transition-colors cursor-pointer border border-dashed border-red-200 font-sans"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                   <span>Hapus</span>
@@ -2065,8 +2150,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                       <col className="w-[20%]" />
                       <col className="w-[11%]" />
                       <col className="w-[11%]" />
-                      <col className="w-[8%]" />
-                      <col className="w-[7%]" />
+                      <col className="w-[15%]" />
                     </colgroup>
                     <thead>
                       <tr className="bg-slate-50/20 border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider">
@@ -2077,14 +2161,13 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                         <th className="px-4 py-3">Input Progres Akun</th>
                         <th className="px-4 py-3">Catatan</th>
                         <th className="px-4 py-3">Link Bukti</th>
-                        <th className="px-4 py-3 text-center">Status</th>
-                        <th className="px-4 py-3 text-center">Aksi</th>
+                        <th className="px-4 py-3 text-center">Status / Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                       {filteredMapsReviews.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                          <td colSpan={8} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
                             Belum ada laporan review yang cocok / terdaftar.
                           </td>
                         </tr>
@@ -2289,19 +2372,46 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                 <option value="PROGRESS">PROGRESS</option>
                                 <option value="DONE">DONE</option>
                               </select>
-                            </td>
 
-                            {/* Action delete */}
-                            <td className="px-4 py-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const copypasta = `Link: ${review.maps_link}\nNama cust: ${review.client_name}\nNama st: ${review.store_name || '-'}\nclue: ${review.notes || '-'}`;
+                                  navigator.clipboard.writeText(copypasta);
+                                  setCopiedReviewId(review.id);
+                                  setTimeout(() => setCopiedReviewId(null), 2000);
+                                }}
+                                className={`w-full mt-1.5 px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                  copiedReviewId === review.id
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                }`}
+                                title="Salin Format"
+                              >
+                                {copiedReviewId === review.id ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    <span>Tersalin!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3 w-3 text-blue-600" />
+                                    <span>Salin Format</span>
+                                  </>
+                                )}
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => handleDeleteMapsReview(review.id)}
-                                className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors shrink-0"
+                                className="block mx-auto mt-1.5 text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                                 title="Hapus Laporan"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
                             </td>
+
+
                           </tr>
                         ))
                       )}
