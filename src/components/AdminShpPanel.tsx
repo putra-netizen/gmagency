@@ -127,11 +127,11 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
 
   // Search & Sort states for tables
   const [searchShopee, setSearchShopee] = useState('');
-  const [sortShopee, setSortShopee] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [sortShopee, setSortShopee] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
   const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchMaps, setSearchMaps] = useState('');
-  const [sortMaps, setSortMaps] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [sortMaps, setSortMaps] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
   const [timeFilterMaps, setTimeFilterMaps] = useState<'all' | 'week' | 'month'>('all');
 
   const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'week' | 'month') => {
@@ -1015,12 +1015,30 @@ Format Chat : ${data.notes || '-'}`;
         if (sortShopee === 'pending') {
           if (stat === 'PENDING') return 0;
           if (stat === 'PROGRESS') return 1;
-          return 2;
+          if (stat === 'READY') return 2;
+          if (stat === 'SUDAH DIREKAP') return 3;
+          return 4;
         }
         if (sortShopee === 'progress') {
           if (stat === 'PROGRESS') return 0;
           if (stat === 'PENDING') return 1;
-          return 2;
+          if (stat === 'READY') return 2;
+          if (stat === 'SUDAH DIREKAP') return 3;
+          return 4;
+        }
+        if (sortShopee === 'ready') {
+          if (stat === 'READY') return 0;
+          if (stat === 'PROGRESS') return 1;
+          if (stat === 'SUDAH DIREKAP') return 2;
+          if (stat === 'PENDING') return 3;
+          return 4;
+        }
+        if (sortShopee === 'sudah_direkap') {
+          if (stat === 'SUDAH DIREKAP') return 0;
+          if (stat === 'READY') return 1;
+          if (stat === 'PROGRESS') return 2;
+          if (stat === 'PENDING') return 3;
+          return 4;
         }
         if (sortShopee === 'done') {
           if (stat === 'DONE') return 0;
@@ -1058,12 +1076,30 @@ Format Chat : ${data.notes || '-'}`;
         if (sortMaps === 'pending') {
           if (stat === 'PENDING') return 0;
           if (stat === 'PROGRESS') return 1;
-          return 2;
+          if (stat === 'READY') return 2;
+          if (stat === 'SUDAH DIREKAP') return 3;
+          return 4;
         }
         if (sortMaps === 'progress') {
           if (stat === 'PROGRESS') return 0;
           if (stat === 'PENDING') return 1;
-          return 2;
+          if (stat === 'READY') return 2;
+          if (stat === 'SUDAH DIREKAP') return 3;
+          return 4;
+        }
+        if (sortMaps === 'ready') {
+          if (stat === 'READY') return 0;
+          if (stat === 'PROGRESS') return 1;
+          if (stat === 'SUDAH DIREKAP') return 2;
+          if (stat === 'PENDING') return 3;
+          return 4;
+        }
+        if (sortMaps === 'sudah_direkap') {
+          if (stat === 'SUDAH DIREKAP') return 0;
+          if (stat === 'READY') return 1;
+          if (stat === 'PROGRESS') return 2;
+          if (stat === 'PENDING') return 3;
+          return 4;
         }
         if (sortMaps === 'done') {
           if (stat === 'DONE') return 0;
@@ -1488,42 +1524,34 @@ Format Chat : ${data.notes || '-'}`;
 
                   {/* Minimalist sorting / filtering controls */}
                   <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                    {/* Status / Progres Filter (Minimalist badge/pills style) */}
-                    <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
-                      <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Progres:</span>
-                      {(['pending', 'progress', 'done'] as const).map((opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => setSortShopee(opt)}
-                          className={`px-3 py-1.5 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase text-[10px] ${
-                            sortShopee === opt
-                              ? 'bg-orange-50 text-orange-600 border border-orange-150/40 font-extrabold shadow-sm'
-                              : 'text-slate-400 hover:text-slate-700 hover:bg-white'
-                          }`}
-                        >
-                          {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
-                        </button>
-                      ))}
+                    {/* Status / Progres Filter (Beautiful Dropdown) */}
+                    <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-100 text-[10px] w-full sm:w-auto">
+                      <span className="text-slate-450 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
+                      <select
+                        value={sortShopee}
+                        onChange={(e) => setSortShopee(e.target.value as any)}
+                        className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase"
+                      >
+                        <option value="pending">PENDING</option>
+                        <option value="progress">PROGRES</option>
+                        <option value="ready">READY</option>
+                        <option value="sudah_direkap">SUDAH DIREKAP</option>
+                        <option value="done">DONE</option>
+                      </select>
                     </div>
 
-                    {/* Timeframe Filter (Minimalist badge/pills style) */}
-                    <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
-                      <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Waktu:</span>
-                      {(['all', 'week', 'month'] as const).map((opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => setTimeFilterShopee(opt)}
-                          className={`px-3 py-1.5 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase text-[10px] ${
-                            timeFilterShopee === opt
-                              ? 'bg-blue-50 text-blue-600 border border-blue-150/40 font-extrabold shadow-sm'
-                              : 'text-slate-400 hover:text-slate-700 hover:bg-white'
-                          }`}
-                        >
-                          {opt === 'all' ? 'Semua' : opt === 'week' ? 'Minggu' : 'Bulan'}
-                        </button>
-                      ))}
+                    {/* Timeframe Filter (Beautiful Dropdown) */}
+                    <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-100 text-[10px] w-full sm:w-auto">
+                      <span className="text-slate-455 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
+                      <select
+                        value={timeFilterShopee}
+                        onChange={(e) => setTimeFilterShopee(e.target.value as any)}
+                        className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase"
+                      >
+                        <option value="all">SEMUA</option>
+                        <option value="week">MINGGU</option>
+                        <option value="month">BULAN</option>
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -1937,39 +1965,31 @@ Format Chat : ${data.notes || '-'}`;
                          {/* Status / Progres Filter (Minimalist badge/pills style) */}
                          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
                            <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Progres:</span>
-                           {(['pending', 'progress', 'done'] as const).map((opt) => (
-                             <button
-                               key={opt}
-                               type="button"
-                               onClick={() => setSortMaps(opt)}
-                               className={`px-3 py-1.5 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase text-[10px] ${
-                                 sortMaps === opt
-                                   ? 'bg-blue-50 text-blue-650 border border-blue-150/40 font-extrabold shadow-sm'
-                                   : 'text-slate-400 hover:text-slate-700 hover:bg-white'
-                               }`}
-                             >
-                               {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
-                             </button>
-                           ))}
+                           <select
+                             value={sortMaps}
+                             onChange={(e) => setSortMaps(e.target.value as any)}
+                             className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase ml-1.5"
+                           >
+                             <option value="pending">PENDING</option>
+                             <option value="progress">PROGRES</option>
+                             <option value="ready">READY</option>
+                             <option value="sudah_direkap">SUDAH DIREKAP</option>
+                             <option value="done">DONE</option>
+                           </select>
                          </div>
  
                          {/* Timeframe Filter (Minimalist badge/pills style) */}
                          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
                            <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Waktu:</span>
-                           {(['all', 'week', 'month'] as const).map((opt) => (
-                             <button
-                               key={opt}
-                               type="button"
-                               onClick={() => setTimeFilterMaps(opt)}
-                               className={`px-3 py-1.5 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase text-[10px] ${
-                                 timeFilterMaps === opt
-                                   ? 'bg-blue-50 text-blue-650 border border-blue-150/40 font-extrabold shadow-sm'
-                                   : 'text-slate-400 hover:text-slate-700 hover:bg-white'
-                               }`}
-                             >
-                               {opt === 'all' ? 'Semua' : opt === 'week' ? 'Minggu' : 'Bulan'}
-                             </button>
-                           ))}
+                           <select
+                             value={timeFilterMaps}
+                             onChange={(e) => setTimeFilterMaps(e.target.value as any)}
+                             className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase ml-1.5"
+                           >
+                             <option value="all">SEMUA</option>
+                             <option value="week">MINGGU</option>
+                             <option value="month">BULAN</option>
+                           </select>
                          </div>
                        </div>
                      </div>

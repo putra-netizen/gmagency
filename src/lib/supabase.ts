@@ -107,6 +107,48 @@ export function dbIsSupabaseConnected(): boolean {
   return isSupabaseConfigured && !supabaseFailed;
 }
 
+// Helpers for mapping status values like 'READY' or 'SUDAH DIREKAP' to/from Supabase to avoid CHECK constraints
+export function serializeStatusAndNotes(notes: string | undefined, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' | undefined): { status: 'PENDING' | 'PROGRESS' | 'DONE'; notes: string } {
+  let cleanNotes = notes || '';
+  // Strip any existing metadata tags
+  cleanNotes = cleanNotes.replace(/\[STATUS:(READY|SUDAH DIREKAP)\]/g, '').trim();
+
+  let dbStatus: 'PENDING' | 'PROGRESS' | 'DONE' = 'PENDING';
+  if (status === 'READY') {
+    dbStatus = 'PROGRESS';
+    cleanNotes = (cleanNotes + '\n[STATUS:READY]').trim();
+  } else if (status === 'SUDAH DIREKAP') {
+    dbStatus = 'PROGRESS';
+    cleanNotes = (cleanNotes + '\n[STATUS:SUDAH DIREKAP]').trim();
+  } else if (status === 'PROGRESS') {
+    dbStatus = 'PROGRESS';
+  } else if (status === 'DONE') {
+    dbStatus = 'DONE';
+  }
+
+  return { status: dbStatus, notes: cleanNotes };
+}
+
+export function deserializeStatusAndNotes<T extends { notes?: string; status?: any }>(item: T): T {
+  if (!item) return item;
+  let status = item.status || 'PENDING';
+  let notes = item.notes || '';
+
+  if (notes.includes('[STATUS:READY]')) {
+    status = 'READY';
+    notes = notes.replace(/\[STATUS:READY\]/g, '').trim();
+  } else if (notes.includes('[STATUS:SUDAH DIREKAP]')) {
+    status = 'SUDAH DIREKAP';
+    notes = notes.replace(/\[STATUS:SUDAH DIREKAP\]/g, '').trim();
+  }
+
+  return {
+    ...item,
+    status,
+    notes
+  };
+}
+
 console.log(
   isSupabaseConfigured
     ? '⚡ GM Agency: Running with LIVE Supabase Integration'
@@ -946,6 +988,7 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
 
 // 4. SHOPEE ORDERS
 export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
+  let list: ShopeeOrder[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
@@ -953,9 +996,8 @@ export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data) {
-        return data as ShopeeOrder[];
-      }
-      if (error) {
+        list = data as ShopeeOrder[];
+      } else if (error) {
         console.warn('Supabase fetch shopee_orders warning, falling back to Local/API:', error);
         supabaseFailed = true;
       }
@@ -965,12 +1007,16 @@ export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
     }
   }
 
-  return safeFetch<ShopeeOrder[]>(
-    '/api/shopee_orders',
-    undefined,
-    'gmsolution_local_shopee_orders',
-    () => []
-  );
+  if (list.length === 0) {
+    list = await safeFetch<ShopeeOrder[]>(
+      '/api/shopee_orders',
+      undefined,
+      'gmsolution_local_shopee_orders',
+      () => []
+    );
+  }
+
+  return list.map(deserializeStatusAndNotes);
 }
 
 export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
@@ -992,15 +1038,22 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
     created_by: orderData.created_by || ''
   };
 
+  const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(completeOrder.notes, completeOrder.status);
+  const dbOrder = {
+    ...completeOrder,
+    status: dbStatus,
+    notes: dbNotes
+  };
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('shopee_orders')
-        .insert([completeOrder])
+        .insert([dbOrder])
         .select()
         .single();
       if (!error && data) {
-        return data as ShopeeOrder;
+        return deserializeStatusAndNotes(data as ShopeeOrder);
       }
       if (error) {
         console.warn('Supabase create shopee_order warning, falling back to Local/API:', error);
@@ -1016,35 +1069,58 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
     const response = await fetch('/api/shopee_orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData)
+      body: JSON.stringify(dbOrder)
     });
     if (response.ok) {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageShopeeOrder(data);
-        return data as ShopeeOrder;
+        return deserializeStatusAndNotes(data as ShopeeOrder);
       }
     }
   } catch (err) {
     console.warn('Failed to save Shopee order via API, saving to LocalStorage:', err);
   }
 
-  updateLocalStorageShopeeOrder(completeOrder);
+  updateLocalStorageShopeeOrder(dbOrder);
   return completeOrder;
 }
 
 export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
+  let currentItem: ShopeeOrder | null = null;
+  const list = getLocalShopeeOrders();
+  const ex = list.find(o => o.id === id);
+  if (ex) {
+    currentItem = deserializeStatusAndNotes(ex);
+  }
+
+  if (!currentItem && isSupabaseConfigured && supabase && !supabaseFailed) {
+    try {
+      const { data } = await supabase.from('shopee_orders').select('*').eq('id', id).maybeSingle();
+      if (data) currentItem = deserializeStatusAndNotes(data);
+    } catch {}
+  }
+
+  const finalData = { ...orderData };
+  if (orderData.status !== undefined || orderData.notes !== undefined) {
+    const notesToUse = orderData.notes !== undefined ? orderData.notes : (currentItem?.notes || '');
+    const statusToUse = orderData.status !== undefined ? orderData.status : (currentItem?.status || 'PENDING');
+    const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(notesToUse, statusToUse);
+    finalData.status = dbStatus;
+    finalData.notes = dbNotes;
+  }
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('shopee_orders')
-        .update(orderData)
+        .update(finalData)
         .eq('id', id)
         .select()
         .single();
       if (!error && data) {
-        return data as ShopeeOrder;
+        return deserializeStatusAndNotes(data as ShopeeOrder);
       }
       if (error) {
         console.warn('Supabase update shopee_order warning, falling back to Local/API:', error);
@@ -1060,30 +1136,31 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
     const response = await fetch(`/api/shopee_orders/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData)
+      body: JSON.stringify(finalData)
     });
     if (response.ok) {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageShopeeOrder(data);
-        return data as ShopeeOrder;
+        return deserializeStatusAndNotes(data as ShopeeOrder);
       }
     }
   } catch (err) {
     console.warn('Failed to update Shopee order via API, falling back to LocalStorage:', err);
   }
 
-  const list = getLocalShopeeOrders();
-  const index = list.findIndex(o => o.id === id);
-  if (index !== -1) {
+  if (ex) {
     const updated = {
-      ...list[index],
-      ...orderData
+      ...ex,
+      ...finalData
     } as ShopeeOrder;
-    list[index] = updated;
-    localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(list));
-    return updated;
+    const idx = list.findIndex(o => o.id === id);
+    if (idx !== -1) {
+      list[idx] = updated;
+      localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(list));
+    }
+    return deserializeStatusAndNotes(updated);
   }
   throw new Error('Shopee order not found in local storage fallback');
 }
@@ -1126,6 +1203,7 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
 
 // 5. MAPS REVIEWS
 export async function dbGetMapsReviews(): Promise<MapsReview[]> {
+  let list: MapsReview[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
@@ -1149,9 +1227,8 @@ export async function dbGetMapsReviews(): Promise<MapsReview[]> {
             reviewer_accounts: accounts
           };
         });
-        return mapped as MapsReview[];
-      }
-      if (error) {
+        list = mapped as MapsReview[];
+      } else if (error) {
         console.warn('Supabase fetch maps_reviews warning, falling back to Local/API:', error);
         supabaseFailed = true;
       }
@@ -1161,12 +1238,16 @@ export async function dbGetMapsReviews(): Promise<MapsReview[]> {
     }
   }
 
-  return safeFetch<MapsReview[]>(
-    '/api/maps_reviews',
-    undefined,
-    'gmsolution_local_maps_reviews',
-    () => []
-  );
+  if (list.length === 0) {
+    list = await safeFetch<MapsReview[]>(
+      '/api/maps_reviews',
+      undefined,
+      'gmsolution_local_maps_reviews',
+      () => []
+    );
+  }
+
+  return list.map(deserializeStatusAndNotes);
 }
 
 export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promise<MapsReview> {
@@ -1186,15 +1267,22 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
     created_by: reviewData.created_by || ''
   };
 
+  const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(completeReview.notes, completeReview.status);
+  const dbReview = {
+    ...completeReview,
+    status: dbStatus,
+    notes: dbNotes
+  };
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('maps_reviews')
-        .insert([completeReview])
+        .insert([dbReview])
         .select()
         .single();
       if (!error && data) {
-        return data as MapsReview;
+        return deserializeStatusAndNotes(data as MapsReview);
       }
       if (error) {
         console.warn('Supabase create maps_review warning, falling back to Local/API:', error);
@@ -1210,35 +1298,58 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
     const response = await fetch('/api/maps_reviews', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(reviewData)
+      body: JSON.stringify(dbReview)
     });
     if (response.ok) {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageMapsReview(data);
-        return data as MapsReview;
+        return deserializeStatusAndNotes(data as MapsReview);
       }
     }
   } catch (err) {
     console.warn('Failed to create Maps review via API, saving to LocalStorage:', err);
   }
 
-  updateLocalStorageMapsReview(completeReview);
+  updateLocalStorageMapsReview(dbReview);
   return completeReview;
 }
 
 export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsReview>): Promise<MapsReview> {
+  let currentItem: MapsReview | null = null;
+  const list = getLocalMapsReviews();
+  const ex = list.find(r => r.id === id);
+  if (ex) {
+    currentItem = deserializeStatusAndNotes(ex);
+  }
+
+  if (!currentItem && isSupabaseConfigured && supabase && !supabaseFailed) {
+    try {
+      const { data } = await supabase.from('maps_reviews').select('*').eq('id', id).maybeSingle();
+      if (data) currentItem = deserializeStatusAndNotes(data);
+    } catch {}
+  }
+
+  const finalData = { ...reviewData };
+  if (reviewData.status !== undefined || reviewData.notes !== undefined) {
+    const notesToUse = reviewData.notes !== undefined ? reviewData.notes : (currentItem?.notes || '');
+    const statusToUse = reviewData.status !== undefined ? reviewData.status : (currentItem?.status || 'PENDING');
+    const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(notesToUse, statusToUse);
+    finalData.status = dbStatus;
+    finalData.notes = dbNotes;
+  }
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('maps_reviews')
-        .update(reviewData)
+        .update(finalData)
         .eq('id', id)
         .select()
         .single();
       if (!error && data) {
-        return data as MapsReview;
+        return deserializeStatusAndNotes(data as MapsReview);
       }
       if (error) {
         console.warn('Supabase update maps_review warning, falling back to Local/API:', error);
@@ -1254,30 +1365,31 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
     const response = await fetch(`/api/maps_reviews/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(reviewData)
+      body: JSON.stringify(finalData)
     });
     if (response.ok) {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageMapsReview(data);
-        return data as MapsReview;
+        return deserializeStatusAndNotes(data as MapsReview);
       }
     }
   } catch (err) {
     console.warn('Failed to update Maps review via API, falling back to LocalStorage:', err);
   }
 
-  const list = getLocalMapsReviews();
-  const index = list.findIndex(r => r.id === id);
-  if (index !== -1) {
+  if (ex) {
     const updated = {
-      ...list[index],
-      ...reviewData
+      ...ex,
+      ...finalData
     } as MapsReview;
-    list[index] = updated;
-    localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(list));
-    return updated;
+    const idx = list.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      list[idx] = updated;
+      localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(list));
+    }
+    return deserializeStatusAndNotes(updated);
   }
   throw new Error('Maps review not found in local storage fallback');
 }

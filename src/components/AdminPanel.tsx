@@ -428,6 +428,17 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     }
   };
 
+  const handleUpdateNotes = async (reviewId: string, value: string) => {
+    try {
+      await dbUpdateMapsReview(reviewId, {
+        notes: value
+      });
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, notes: value } : r));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleDeleteMapsReview = async (id: string) => {
     if (confirm('Apakah Anda yakin ingin menghapus laporan review ini?')) {
       try {
@@ -1814,42 +1825,34 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
                 {/* Minimalist sorting / filtering controls */}
                 <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Status / Progres Filter (Minimalist badge/pills style) */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
-                    {(['pending', 'progress', 'ready', 'sudah_direkap', 'done'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setSortShopee(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          sortShopee === opt
-                            ? 'bg-slate-900 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : opt === 'ready' ? 'Ready' : opt === 'sudah_direkap' ? 'Sudah Direkap' : 'Done'}
-                      </button>
-                    ))}
+                  {/* Status / Progres Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
+                    <select
+                      value={sortShopee}
+                      onChange={(e) => setSortShopee(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="pending">PENDING</option>
+                      <option value="progress">PROGRES</option>
+                      <option value="ready">READY</option>
+                      <option value="sudah_direkap">SUDAH DIREKAP</option>
+                      <option value="done">DONE</option>
+                    </select>
                   </div>
 
-                  {/* Timeframe Filter (Minimalist badge/pills style) */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
-                    {(['all', 'week', 'month'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setTimeFilterShopee(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          timeFilterShopee === opt
-                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt === 'all' ? (currentLang === 'id' ? 'Semua' : 'All') : opt === 'week' ? (currentLang === 'id' ? 'Minggu' : 'Week') : (currentLang === 'id' ? 'Bulan' : 'Month')}
-                      </button>
-                    ))}
+                  {/* Timeframe Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
+                    <select
+                      value={timeFilterShopee}
+                      onChange={(e) => setTimeFilterShopee(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
+                      <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
+                      <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -2079,64 +2082,52 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                     />
                   </div>
 
-                  {/* Tipe Review Filter - Coretan Warna Biru */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]" id="admin-tipe-review-filter">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Tipe Review:</span>
-                    {(['SEMUA', 'TRIPAD', 'GMAPS', 'REVIEW APPS'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setReviewTypeFilter(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          reviewTypeFilter === opt
-                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
+                  {/* Tipe Review Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto" id="admin-tipe-review-filter">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tipe Review:</span>
+                    <select
+                      value={reviewTypeFilter}
+                      onChange={(e) => setReviewTypeFilter(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="SEMUA">SEMUA</option>
+                      <option value="TRIPAD">TRIPAD</option>
+                      <option value="GMAPS">GMAPS</option>
+                      <option value="REVIEW APPS">REVIEW APPS</option>
+                    </select>
                   </div>
                 </div>
 
                 {/* Minimalist sorting / filtering controls */}
                 <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Status / Progres Filter (Minimalist badge/pills style) */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
-                    {(['pending', 'progress', 'ready', 'sudah_direkap', 'done'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setSortReview(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          sortReview === opt
-                            ? 'bg-slate-900 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : opt === 'ready' ? 'Ready' : opt === 'sudah_direkap' ? 'Sudah Direkap' : 'Done'}
-                      </button>
-                    ))}
+                  {/* Status / Progres Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
+                    <select
+                      value={sortReview}
+                      onChange={(e) => setSortReview(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="pending">PENDING</option>
+                      <option value="progress">PROGRES</option>
+                      <option value="ready">READY</option>
+                      <option value="sudah_direkap">SUDAH DIREKAP</option>
+                      <option value="done">DONE</option>
+                    </select>
                   </div>
 
-                  {/* Timeframe Filter (Minimalist badge/pills style) */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
-                    {(['all', 'week', 'month'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setTimeFilterReview(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          timeFilterReview === opt
-                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt === 'all' ? (currentLang === 'id' ? 'Semua' : 'All') : opt === 'week' ? (currentLang === 'id' ? 'Minggu' : 'Week') : (currentLang === 'id' ? 'Bulan' : 'Month')}
-                      </button>
-                    ))}
+                  {/* Timeframe Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
+                    <select
+                      value={timeFilterReview}
+                      onChange={(e) => setTimeFilterReview(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
+                      <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
+                      <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -2172,7 +2163,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                         <th className="px-4 py-3">Tipe Review</th>
                         <th className="px-4 py-3">Target Link</th>
                         <th className="px-4 py-3">Input Progres Akun</th>
-                        <th className="px-4 py-3">Catatan</th>
+                        <th className="px-4 py-3">Clue</th>
                         <th className="px-4 py-3">Link Bukti</th>
                         <th className="px-4 py-3 text-center">Status / Aksi</th>
                       </tr>
@@ -2335,15 +2326,15 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                               })()}
                             </td>
 
-                            {/* Notes */}
+                            {/* Notes / Clue */}
                             <td className="px-4 py-3">
-                              {review.notes ? (
-                                <p className="text-[11px] text-slate-600 italic truncate" title={review.notes}>
-                                  "{review.notes}"
-                                </p>
-                              ) : (
-                                <span className="text-slate-400">-</span>
-                              )}
+                              <textarea
+                                rows={3}
+                                placeholder="Input clue/catatan..."
+                                value={review.notes || ''}
+                                onChange={e => handleUpdateNotes(review.id, e.target.value)}
+                                className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[60px]"
+                              />
                             </td>
 
                             {/* Link Bukti Pengerjaan */}
