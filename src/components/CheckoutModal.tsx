@@ -70,6 +70,7 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
     try {
       const orderPayload: Partial<Order> = {
         product_id: product.id,
+        product_name: product.name,
         buyer_name: buyerName,
         phone_number: phoneNumber,
         notes: notes,
