@@ -1446,8 +1446,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
                               {/* Service Details */}
                               <td className="px-4 py-3">
-                                <span className="font-semibold text-slate-900 block truncate" title={order.product_name}>
-                                  {order.product_name}
+                                <span className="font-semibold text-slate-900 block truncate" title={order.product_name || products.find(p => p.id === order.product_id)?.name || 'Layanan'}>
+                                  {order.product_name || products.find(p => p.id === order.product_id)?.name || 'Layanan'}
                                 </span>
                                 <span className="text-[10px] text-slate-500 font-bold mt-0.5 inline-block bg-slate-100 px-2 py-0.5 rounded-full font-mono">
                                   {order.quantity} pcs
@@ -1689,8 +1689,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
                                 {/* Service Details */}
                                 <td className="px-4 py-3">
-                                  <span className="font-semibold text-slate-900 block truncate" title={order.product_name}>
-                                    {order.product_name}
+                                  <span className="font-semibold text-slate-900 block truncate" title={order.product_name || products.find(p => p.id === order.product_id)?.name || 'Layanan'}>
+                                    {order.product_name || products.find(p => p.id === order.product_id)?.name || 'Layanan'}
                                   </span>
                                   <span className="text-[10px] text-slate-500 font-bold mt-0.5 inline-block bg-slate-100 px-2 py-0.5 rounded-full font-mono">
                                     {order.quantity} pcs

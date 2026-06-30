@@ -692,11 +692,31 @@ export async function dbGetOrders(): Promise<Order[]> {
             .insert(MOCK_ORDERS_TO_SEED)
             .select();
           if (!seedError && seededData) {
-            return (seededData as Order[]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            const orders = (seededData as Order[]).map(o => {
+              if (!o.product_name) {
+                const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
+                return {
+                  ...o,
+                  product_name: matchedProduct ? matchedProduct.name : 'Layanan'
+                };
+              }
+              return o;
+            });
+            return orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           }
           console.warn('Supabase seeding orders warning:', seedError);
         } else {
-          return data as Order[];
+          const orders = (data as Order[]).map(o => {
+            if (!o.product_name) {
+              const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
+              return {
+                ...o,
+                product_name: matchedProduct ? matchedProduct.name : 'Layanan'
+              };
+            }
+            return o;
+          });
+          return orders;
         }
       } else if (error) {
         console.warn('Supabase fetch orders warning, falling back to Local/API:', error);

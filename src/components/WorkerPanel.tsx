@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Order, Language } from '../types';
 import { dbGetOrders, dbUpdateOrder } from '../lib/supabase';
+import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { toast } from '../utils/toast';
 import { 
   Database, 
@@ -366,7 +367,7 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
                     <div className="flex justify-between items-start">
                       <div className="space-y-0.5">
                         <span className="text-[10px] font-bold text-slate-400 font-mono block uppercase">{order.id}</span>
-                        <h4 className="text-sm font-bold text-slate-800">{order.product_name}</h4>
+                        <h4 className="text-sm font-bold text-slate-800">{order.product_name || INITIAL_PRODUCTS.find(p => p.id === order.product_id)?.name || 'Layanan'}</h4>
                       </div>
                       <span className="rounded-full bg-amber-50 border border-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-600 uppercase">
                         Sedang Diproses
@@ -496,7 +497,7 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
 
                         <div className="space-y-1">
                           <h4 className="text-sm font-bold text-slate-800 leading-tight">
-                            {order.product_name}
+                            {order.product_name || INITIAL_PRODUCTS.find(p => p.id === order.product_id)?.name || 'Layanan'}
                           </h4>
                           <p className="text-xs text-slate-500 font-light flex items-center gap-1.5 flex-wrap">
                             <span>Nama: <strong className="font-semibold text-slate-700">{order.buyer_name}</strong></span>
@@ -606,7 +607,7 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
                   Selesaikan Tugas ({selectedDoneOrder.id})
                 </h3>
                 <p className="text-[11px] text-slate-400 font-medium">
-                  {selectedDoneOrder.product_name}
+                  {selectedDoneOrder.product_name || INITIAL_PRODUCTS.find(p => p.id === selectedDoneOrder.product_id)?.name || 'Layanan'}
                 </p>
               </div>
             </div>
