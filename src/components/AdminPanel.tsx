@@ -708,15 +708,9 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
   // Handle worker job status override by admin
   const handleUpdateWorkerStatus = async (orderId: string, status: 'unassigned' | 'taken' | 'done') => {
-    const currentOrder = orders.find(o => o.id === orderId);
-    if ((status === 'taken' || status === 'done') && (!currentOrder || !currentOrder.worker_id)) {
-      toast.error(currentLang === 'id' ? 'Harap masukkan worker terlebih dahulu baru bisa mengubah status diproses/selesai!' : 'Please assign a worker first before changing status to in progress/done!');
-      return;
-    }
     try {
       const updatePayload: Partial<Order> = {
         worker_status: status,
-        ...(status === 'unassigned' ? { worker_id: undefined, worker_proof_url: undefined } : {})
       };
       await dbUpdateOrder(orderId, updatePayload);
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...updatePayload } : o));
