@@ -142,11 +142,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [timeFilterPaid, setTimeFilterPaid] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchShopee, setSearchShopee] = useState('');
-  const [sortShopee, setSortShopee] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [sortShopee, setSortShopee] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
   const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchReview, setSearchReview] = useState('');
-  const [sortReview, setSortReview] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [sortReview, setSortReview] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
   const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'week' | 'month'>('all');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS/REVIEW APPS'>('SEMUA');
 
@@ -395,7 +395,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     }
   };
 
-  const handleUpdateShopeeStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'DONE') => {
+  const handleUpdateShopeeStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE') => {
     try {
       await dbUpdateShopeeOrder(id, { status });
       setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
@@ -405,7 +405,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     }
   };
 
-  const handleUpdateMapsStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'DONE') => {
+  const handleUpdateMapsStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE') => {
     try {
       await dbUpdateMapsReview(id, { status });
       setMapsReviews(prev => prev.map(r => r.id === id ? { ...r, status } : r));
@@ -1037,6 +1037,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       const stat = o.status || 'PENDING';
       if (sortShopee === 'pending') return stat === 'PENDING';
       if (sortShopee === 'progress') return stat === 'PROGRESS';
+      if (sortShopee === 'ready') return stat === 'READY';
+      if (sortShopee === 'sudah_direkap') return stat === 'SUDAH DIREKAP';
       if (sortShopee === 'done') return stat === 'DONE';
       return true;
     })
@@ -1062,6 +1064,8 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       const stat = r.status || 'PENDING';
       if (sortReview === 'pending') return stat === 'PENDING';
       if (sortReview === 'progress') return stat === 'PROGRESS';
+      if (sortReview === 'ready') return stat === 'READY';
+      if (sortReview === 'sudah_direkap') return stat === 'SUDAH DIREKAP';
       if (sortReview === 'done') return stat === 'DONE';
       return true;
     })
@@ -1810,7 +1814,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   {/* Status / Progres Filter (Minimalist badge/pills style) */}
                   <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
                     <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
-                    {(['pending', 'progress', 'done'] as const).map((opt) => (
+                    {(['pending', 'progress', 'ready', 'sudah_direkap', 'done'] as const).map((opt) => (
                       <button
                         key={opt}
                         type="button"
@@ -1821,7 +1825,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                             : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
                         }`}
                       >
-                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : opt === 'ready' ? 'Ready' : opt === 'sudah_direkap' ? 'Sudah Direkap' : 'Done'}
                       </button>
                     ))}
                   </div>
@@ -1994,11 +1998,17 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                       : order.status === 'PROGRESS'
                                       ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : order.status === 'READY'
+                                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                      : order.status === 'SUDAH DIREKAP'
+                                      ? 'bg-teal-50 text-teal-700 border-teal-200'
                                       : 'bg-amber-50 text-amber-700 border-amber-200'
                                   }`}
                                 >
                                   <option value="PENDING">PENDING</option>
                                   <option value="PROGRESS">PROGRESS</option>
+                                  <option value="READY">READY</option>
+                                  <option value="SUDAH DIREKAP">SUDAH DIREKAP</option>
                                   <option value="DONE">DONE</option>
                                 </select>
 
@@ -2091,7 +2101,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   {/* Status / Progres Filter (Minimalist badge/pills style) */}
                   <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
                     <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
-                    {(['pending', 'progress', 'done'] as const).map((opt) => (
+                    {(['pending', 'progress', 'ready', 'sudah_direkap', 'done'] as const).map((opt) => (
                       <button
                         key={opt}
                         type="button"
@@ -2102,7 +2112,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                             : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
                         }`}
                       >
-                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
+                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : opt === 'ready' ? 'Ready' : opt === 'sudah_direkap' ? 'Sudah Direkap' : 'Done'}
                       </button>
                     ))}
                   </div>
@@ -2365,11 +2375,17 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                     : review.status === 'PROGRESS'
                                     ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : review.status === 'READY'
+                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                    : review.status === 'SUDAH DIREKAP'
+                                    ? 'bg-teal-50 text-teal-700 border-teal-200'
                                     : 'bg-amber-50 text-amber-700 border-amber-200'
                                 }`}
                               >
                                 <option value="PENDING">PENDING</option>
                                 <option value="PROGRESS">PROGRESS</option>
+                                <option value="READY">READY</option>
+                                <option value="SUDAH DIREKAP">SUDAH DIREKAP</option>
                                 <option value="DONE">DONE</option>
                               </select>
 

@@ -61,7 +61,7 @@ export interface ShopeeOrder {
   worker_id?: string;
   work_order?: string;
   created_at: string;
-  status?: 'PENDING' | 'PROGRESS' | 'DONE';
+  status?: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE';
   created_by?: string;
 }
 
@@ -72,7 +72,7 @@ export interface MapsReview {
   target_count: number;
   reviewer_accounts: string[];
   proof_link?: string;
-  status: 'PENDING' | 'PROGRESS' | 'DONE';
+  status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE';
   created_at: string;
   store_name?: string;
   notes?: string;

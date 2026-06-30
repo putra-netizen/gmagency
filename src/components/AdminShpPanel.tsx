@@ -1590,6 +1590,10 @@ Format Chat : ${data.notes || '-'}`;
                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                       : order.status === 'PROGRESS'
                                       ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : order.status === 'READY'
+                                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                      : order.status === 'SUDAH DIREKAP'
+                                      ? 'bg-teal-50 text-teal-700 border-teal-200'
                                       : 'bg-amber-50 text-amber-700 border-amber-200'
                                   }`}>
                                     {order.status || 'PENDING'}
@@ -2151,6 +2155,10 @@ Format Chat : ${data.notes || '-'}`;
                                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                         : item.status === 'PROGRESS'
                                         ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                        : item.status === 'READY'
+                                        ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                        : item.status === 'SUDAH DIREKAP'
+                                        ? 'bg-teal-100 text-teal-800 border border-teal-200'
                                         : 'bg-amber-100 text-amber-800 border border-amber-200'
                                     }`}>
                                       <span className={`h-1.5 w-1.5 rounded-full ${
@@ -2158,9 +2166,13 @@ Format Chat : ${data.notes || '-'}`;
                                           ? 'bg-emerald-500' 
                                           : item.status === 'PROGRESS'
                                           ? 'bg-blue-500 animate-pulse'
+                                          : item.status === 'READY'
+                                          ? 'bg-indigo-500'
+                                          : item.status === 'SUDAH DIREKAP'
+                                          ? 'bg-teal-500'
                                           : 'bg-amber-500 animate-pulse'
                                       }`} />
-                                      <span>{isFinished ? 'DONE' : item.status === 'PROGRESS' ? 'PROGRESS' : 'PENDING'}</span>
+                                      <span>{item.status || 'PENDING'}</span>
                                     </span>
 
                                     <button
