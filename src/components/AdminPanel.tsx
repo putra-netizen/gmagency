@@ -144,6 +144,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [searchShopee, setSearchShopee] = useState('');
   const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
   const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
+  const [shopeeTypeFilter, setShopeeTypeFilter] = useState<'all' | 'report' | 'spam_wa'>('all');
 
   const [searchReview, setSearchReview] = useState('');
   const [sortReview, setSortReview] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
@@ -1048,6 +1049,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
       return true;
     })
     .filter(o => {
+      if (shopeeTypeFilter === 'report') return o.order_type === 'REPORT_ALL_SOSMED';
+      if (shopeeTypeFilter === 'spam_wa') return o.order_type === 'SPAM_WA';
+      return true;
+    })
+    .filter(o => {
       if (!searchShopee) return true;
       const q = searchShopee.toLowerCase();
       return (
@@ -1819,6 +1825,20 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
                 {/* Minimalist sorting / filtering controls */}
                 <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Tipe Jasa Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tipe Jasa:</span>
+                    <select
+                      value={shopeeTypeFilter}
+                      onChange={(e) => setShopeeTypeFilter(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">SEMUA</option>
+                      <option value="report">REPORT</option>
+                      <option value="spam_wa">SPAM WA</option>
+                    </select>
+                  </div>
+
                   {/* Status / Progres Filter (Beautiful Dropdown) */}
                   <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
                     <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
