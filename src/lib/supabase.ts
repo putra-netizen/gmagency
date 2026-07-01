@@ -859,34 +859,28 @@ export async function dbDeleteOrder(id: string): Promise<boolean> {
         .delete()
         .eq('id', id);
       
-      if (!error) return true;
-      console.warn('Supabase delete order warning, falling back to Local/API:', error);
-      supabaseFailed = true;
+      if (error) {
+        console.warn('Supabase delete order warning, falling back to Local/API:', error);
+        supabaseFailed = true;
+      }
     } catch (err) {
       console.warn('Supabase delete order exception, falling back to Local/API:', err);
       supabaseFailed = true;
     }
   }
 
+  // Always delete from local storage to keep client state synchronized
+  deleteLocalStorageOrder(id);
+
+  // Always notify the server-side API to keep db.json in sync
   try {
-    const response = await fetch(`/api/orders/${id}`, {
+    await fetch(`/api/orders/${id}`, {
       method: 'DELETE',
     });
-    if (response.ok) {
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const result = await response.json();
-        if (result.success) {
-          deleteLocalStorageOrder(id);
-          return true;
-        }
-      }
-    }
   } catch (err) {
-    console.warn('Failed to delete order via API, falling back to LocalStorage:', err);
+    console.warn('Failed to delete order via API:', err);
   }
 
-  deleteLocalStorageOrder(id);
   return true;
 }
 
@@ -1195,8 +1189,6 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
       if (error) {
         console.warn('Supabase delete shopee_order warning:', error);
         supabaseFailed = true;
-      } else {
-        return true;
       }
     } catch (err) {
       console.warn('Supabase delete shopee_order exception:', err);
@@ -1204,19 +1196,18 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
     }
   }
 
+  // Always delete from local storage to keep client state synchronized
+  deleteLocalStorageShopeeOrder(id);
+
+  // Always notify the server-side API to keep db.json in sync
   try {
-    const response = await fetch(`/api/shopee_orders/${id}`, {
+    await fetch(`/api/shopee_orders/${id}`, {
       method: 'DELETE'
     });
-    if (response.ok) {
-      deleteLocalStorageShopeeOrder(id);
-      return true;
-    }
   } catch (err) {
-    console.warn('Failed to delete Shopee order via API, falling back to LocalStorage:', err);
+    console.warn('Failed to delete Shopee order via API:', err);
   }
 
-  deleteLocalStorageShopeeOrder(id);
   return true;
 }
 
@@ -1424,8 +1415,6 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
       if (error) {
         console.warn('Supabase delete maps_review warning:', error);
         supabaseFailed = true;
-      } else {
-        return true;
       }
     } catch (err) {
       console.warn('Supabase delete maps_review exception:', err);
@@ -1433,19 +1422,18 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
     }
   }
 
+  // Always delete from local storage to keep client state synchronized
+  deleteLocalStorageMapsReview(id);
+
+  // Always notify the server-side API to keep db.json in sync
   try {
-    const response = await fetch(`/api/maps_reviews/${id}`, {
+    await fetch(`/api/maps_reviews/${id}`, {
       method: 'DELETE'
     });
-    if (response.ok) {
-      deleteLocalStorageMapsReview(id);
-      return true;
-    }
   } catch (err) {
-    console.warn('Failed to delete Maps review via API, falling back to LocalStorage:', err);
+    console.warn('Failed to delete Maps review via API:', err);
   }
 
-  deleteLocalStorageMapsReview(id);
   return true;
 }
 
