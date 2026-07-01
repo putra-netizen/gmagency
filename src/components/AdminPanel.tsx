@@ -142,11 +142,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [timeFilterPaid, setTimeFilterPaid] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchShopee, setSearchShopee] = useState('');
-  const [sortShopee, setSortShopee] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
+  const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
   const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchReview, setSearchReview] = useState('');
-  const [sortReview, setSortReview] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
+  const [sortReview, setSortReview] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
   const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'week' | 'month'>('all');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('SEMUA');
 
@@ -1827,6 +1827,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                       onChange={(e) => setSortShopee(e.target.value as any)}
                       className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
                     >
+                      <option value="all">SEMUA</option>
                       <option value="pending">PENDING</option>
                       <option value="progress">PROGRES</option>
                       <option value="ready">READY</option>
@@ -2102,6 +2103,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                       onChange={(e) => setSortReview(e.target.value as any)}
                       className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
                     >
+                      <option value="all">SEMUA</option>
                       <option value="pending">PENDING</option>
                       <option value="progress">PROGRES</option>
                       <option value="ready">READY</option>
