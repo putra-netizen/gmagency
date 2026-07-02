@@ -138,10 +138,21 @@ function readDatabase() {
     const parsed = JSON.parse(data);
     if (!parsed.shopee_orders) parsed.shopee_orders = [];
     if (!parsed.maps_reviews) parsed.maps_reviews = [];
+    if (!parsed.deleted_orders) parsed.deleted_orders = [];
+    if (!parsed.deleted_shopee_orders) parsed.deleted_shopee_orders = [];
+    if (!parsed.deleted_maps_reviews) parsed.deleted_maps_reviews = [];
     return parsed;
   } catch (error) {
     console.error('Error reading database:', error);
-    return { products: INITIAL_PRODUCTS, orders: [], shopee_orders: [], maps_reviews: [] };
+    return {
+      products: INITIAL_PRODUCTS,
+      orders: [],
+      shopee_orders: [],
+      maps_reviews: [],
+      deleted_orders: [],
+      deleted_shopee_orders: [],
+      deleted_maps_reviews: []
+    };
   }
 }
 
@@ -338,6 +349,9 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // 2. ORDERS API
 app.get('/api/orders', async (req, res) => {
+  const db = readDatabase();
+  const deletedOrders = db.deleted_orders || [];
+
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -345,7 +359,8 @@ app.get('/api/orders', async (req, res) => {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data) {
-        return res.json(data);
+        const filtered = data.filter((o: any) => !deletedOrders.includes(o.id));
+        return res.json(filtered);
       }
       console.error('Supabase error fetching orders:', error);
     } catch (err) {
@@ -353,10 +368,11 @@ app.get('/api/orders', async (req, res) => {
     }
   }
 
-  const db = readDatabase();
-  const sortedOrders = [...db.orders].sort((a: Order, b: Order) => 
-    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  const sortedOrders = [...db.orders]
+    .filter((o: Order) => !deletedOrders.includes(o.id))
+    .sort((a: Order, b: Order) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
   res.json(sortedOrders);
 });
 
@@ -516,22 +532,24 @@ app.delete('/api/orders/:id', async (req, res) => {
   }
 
   const db = readDatabase();
-  const initialLength = db.orders.length;
+  
+  // Track in blacklist so it never reappears on GET
+  if (!db.deleted_orders) db.deleted_orders = [];
+  if (!db.deleted_orders.includes(id)) {
+    db.deleted_orders.push(id);
+  }
+
   db.orders = db.orders.filter((o: Order) => o.id !== id);
+  writeDatabase(db);
 
-  if (db.orders.length < initialLength) {
-    writeDatabase(db);
-  }
-
-  if (supabaseDeleted || db.orders.length < initialLength) {
-    res.json({ success: true, message: 'Order deleted' });
-  } else {
-    res.status(404).json({ error: 'Order not found' });
-  }
+  res.json({ success: true, message: 'Order deleted and blacklisted' });
 });
 
 // --- SHOPEE ORDERS API ---
 app.get('/api/shopee_orders', async (req, res) => {
+  const db = readDatabase();
+  const deletedShopee = db.deleted_shopee_orders || [];
+
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -539,7 +557,8 @@ app.get('/api/shopee_orders', async (req, res) => {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data) {
-        return res.json(data);
+        const filtered = data.filter((o: any) => !deletedShopee.includes(o.id));
+        return res.json(filtered);
       }
       console.error('Supabase error fetching shopee_orders:', error);
     } catch (err) {
@@ -547,8 +566,8 @@ app.get('/api/shopee_orders', async (req, res) => {
     }
   }
 
-  const db = readDatabase();
-  res.json(db.shopee_orders || []);
+  const filteredLocal = (db.shopee_orders || []).filter((o: any) => !deletedShopee.includes(o.id));
+  res.json(filteredLocal);
 });
 
 app.post('/api/shopee_orders', async (req, res) => {
@@ -636,22 +655,23 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
   }
 
   const db = readDatabase();
-  const len = db.shopee_orders.length;
-  db.shopee_orders = db.shopee_orders.filter((o: any) => o.id !== id);
   
-  if (db.shopee_orders.length < len) {
-    writeDatabase(db);
+  if (!db.deleted_shopee_orders) db.deleted_shopee_orders = [];
+  if (!db.deleted_shopee_orders.includes(id)) {
+    db.deleted_shopee_orders.push(id);
   }
 
-  if (supabaseDeleted || db.shopee_orders.length < len) {
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Shopee order not found' });
-  }
+  db.shopee_orders = (db.shopee_orders || []).filter((o: any) => o.id !== id);
+  writeDatabase(db);
+
+  res.json({ success: true, message: 'Shopee order deleted and blacklisted' });
 });
 
 // --- MAPS REVIEWS API ---
 app.get('/api/maps_reviews', async (req, res) => {
+  const db = readDatabase();
+  const deletedMaps = db.deleted_maps_reviews || [];
+
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -659,7 +679,8 @@ app.get('/api/maps_reviews', async (req, res) => {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data) {
-        return res.json(data);
+        const filtered = data.filter((o: any) => !deletedMaps.includes(o.id));
+        return res.json(filtered);
       }
       console.error('Supabase error fetching maps_reviews:', error);
     } catch (err) {
@@ -667,8 +688,8 @@ app.get('/api/maps_reviews', async (req, res) => {
     }
   }
 
-  const db = readDatabase();
-  res.json(db.maps_reviews || []);
+  const filteredLocal = (db.maps_reviews || []).filter((o: any) => !deletedMaps.includes(o.id));
+  res.json(filteredLocal);
 });
 
 app.post('/api/maps_reviews', async (req, res) => {
@@ -759,29 +780,31 @@ app.delete('/api/maps_reviews/:id', async (req, res) => {
   }
 
   const db = readDatabase();
-  const len = db.maps_reviews.length;
-  db.maps_reviews = db.maps_reviews.filter((o: any) => o.id !== id);
   
-  if (db.maps_reviews.length < len) {
-    writeDatabase(db);
+  if (!db.deleted_maps_reviews) db.deleted_maps_reviews = [];
+  if (!db.deleted_maps_reviews.includes(id)) {
+    db.deleted_maps_reviews.push(id);
   }
 
-  if (supabaseDeleted || db.maps_reviews.length < len) {
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Maps review not found' });
-  }
+  db.maps_reviews = (db.maps_reviews || []).filter((o: any) => o.id !== id);
+  writeDatabase(db);
+
+  res.json({ success: true, message: 'Maps review deleted and blacklisted' });
 });
 
 // 3. FINANCIAL & STATS DASHBOARD API
 app.get('/api/dashboard/stats', async (req, res) => {
+  const db = readDatabase();
+  const deletedOrders = db.deleted_orders || [];
+
   if (supabase) {
     try {
       const { data: productsData, error: prodError } = await supabase.from('products').select('*');
       const { data: ordersData, error: ordError } = await supabase.from('orders').select('*');
 
       if (!prodError && !ordError && ordersData && productsData) {
-        const orders = ordersData as Order[];
+        const rawOrders = ordersData as Order[];
+        const orders = rawOrders.filter((o: Order) => !deletedOrders.includes(o.id));
 
         const totalOrders = orders.length;
         const totalRevenue = orders
@@ -822,8 +845,8 @@ app.get('/api/dashboard/stats', async (req, res) => {
     }
   }
 
-  const db = readDatabase();
-  const orders = db.orders as Order[];
+  const rawOrders = db.orders as Order[];
+  const orders = rawOrders.filter((o: Order) => !deletedOrders.includes(o.id));
 
   const totalOrders = orders.length;
   const totalRevenue = orders

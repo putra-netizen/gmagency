@@ -273,19 +273,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
         console.error(e);
       }
 
-      const filteredOrders = orders.filter(o => 
-        !o.created_by || 
-        o.created_by === currentAdminUser || 
-        !ADMIN_ACCOUNTS.includes(o.created_by)
-      );
-      const filteredReviews = reviews.filter(r => 
-        !r.created_by || 
-        r.created_by === currentAdminUser || 
-        !ADMIN_ACCOUNTS.includes(r.created_by)
-      );
-
-      setShopeeOrders(filteredOrders);
-      setMapsReviews(filteredReviews);
+      setShopeeOrders(orders);
+      setMapsReviews(reviews);
     } catch (error) {
       console.error('Error loading Shopee and Maps data:', error);
     } finally {
@@ -1626,6 +1615,16 @@ Format Chat : ${data.notes || '-'}`;
                                   }`}>
                                     {order.status || 'PENDING'}
                                   </span>
+                                  {order.created_by && (
+                                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 mt-1 border ${
+                                      order.created_by === currentAdminUser 
+                                        ? 'bg-slate-100 text-slate-600 border-slate-200' 
+                                        : 'bg-violet-50 text-violet-700 border-violet-200'
+                                    }`}>
+                                      {order.created_by !== currentAdminUser && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
+                                      <span>diinput oleh {getSlotRouteName(order.created_by)}</span>
+                                    </span>
+                                  )}
                                 </div>
                               </td>
 
@@ -1695,7 +1694,12 @@ Format Chat : ${data.notes || '-'}`;
                                   placeholder="Input work order..."
                                   value={order.work_order || ''}
                                   onChange={e => handleUpdateWorkOrder(order.id, e.target.value)}
-                                  className="w-full rounded-xl border border-slate-200 bg-white p-2 text-[10px] font-medium text-slate-800 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 font-sans resize-y min-h-[50px]"
+                                  disabled={order.created_by !== undefined && order.created_by !== currentAdminUser}
+                                  className={`w-full rounded-xl border border-slate-200 p-2 text-[10px] font-medium text-slate-800 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 font-sans resize-y min-h-[50px] ${
+                                    order.created_by && order.created_by !== currentAdminUser 
+                                      ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                      : 'bg-white'
+                                  }`}
                                 />
                               </td>
 
@@ -1704,7 +1708,12 @@ Format Chat : ${data.notes || '-'}`;
                                 <select
                                   value={order.worker_id || ''}
                                   onChange={e => handleAssignWorker(order.id, e.target.value)}
-                                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-bold text-slate-700 outline-none focus:border-orange-500 cursor-pointer"
+                                  disabled={order.created_by !== undefined && order.created_by !== currentAdminUser}
+                                  className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-bold text-slate-700 outline-none focus:border-orange-500 cursor-pointer ${
+                                    order.created_by && order.created_by !== currentAdminUser 
+                                      ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                      : 'bg-white'
+                                  }`}
                                 >
                                   <option value="">-- No Worker --</option>
                                   {WORKERS.map(w => (
@@ -1720,13 +1729,15 @@ Format Chat : ${data.notes || '-'}`;
                                       <span>Pending</span>
                                     )}
                                   </span>
-                                  <button
-                                    onClick={() => handleDeleteShopeeOrder(order.id)}
-                                    className="p-1 text-red-400 hover:bg-red-50 hover:text-red-600 rounded transition-colors cursor-pointer"
-                                    title="Hapus Order"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  {(!order.created_by || order.created_by === currentAdminUser) && (
+                                    <button
+                                      onClick={() => handleDeleteShopeeOrder(order.id)}
+                                      className="p-1 text-red-400 hover:bg-red-50 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                      title="Hapus Order"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2048,6 +2059,16 @@ Format Chat : ${data.notes || '-'}`;
                                       ) : (
                                         <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">G Maps</span>
                                       )}
+                                      {item.created_by && (
+                                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border ${
+                                          item.created_by === currentAdminUser 
+                                            ? 'bg-slate-100 text-slate-600 border-slate-200' 
+                                            : 'bg-violet-50 text-violet-700 border-violet-200'
+                                        }`}>
+                                          {item.created_by !== currentAdminUser && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
+                                          <span>diinput oleh {getSlotRouteName(item.created_by)}</span>
+                                        </span>
+                                      )}
                                     </div>
                                     <span className="font-bold text-slate-900 block truncate" title={item.client_name}>
                                       {item.client_name}
@@ -2142,7 +2163,12 @@ Format Chat : ${data.notes || '-'}`;
                                       placeholder="Input clue/notes..."
                                       value={item.notes || ''}
                                       onChange={e => handleUpdateNotes(item.id, e.target.value)}
-                                      className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[60px]"
+                                      disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                      className={`w-full rounded-lg border border-slate-200 p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[60px] ${
+                                        item.created_by && item.created_by !== currentAdminUser 
+                                          ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                          : 'bg-white'
+                                      }`}
                                     />
                                   </td>
 
@@ -2153,7 +2179,12 @@ Format Chat : ${data.notes || '-'}`;
                                       placeholder="Link bukti pengerjaan..."
                                       value={item.proof_link || ''}
                                       onChange={e => handleUpdateProofLink(item.id, e.target.value)}
-                                      className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-emerald-500 text-slate-700 font-mono bg-white"
+                                      disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                      className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-emerald-500 text-slate-700 font-mono ${
+                                        item.created_by && item.created_by !== currentAdminUser 
+                                          ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                          : 'bg-white'
+                                      }`}
                                     />
                                     {item.proof_link && (
                                       <a
@@ -2222,13 +2253,15 @@ Format Chat : ${data.notes || '-'}`;
                                       )}
                                     </button>
 
-                                    <button
-                                      onClick={() => handleDeleteMapsReview(item.id)}
-                                      className="block mx-auto text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                                      title="Hapus Target"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
+                                    {(!item.created_by || item.created_by === currentAdminUser) && (
+                                      <button
+                                        onClick={() => handleDeleteMapsReview(item.id)}
+                                        className="block mx-auto text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                                        title="Hapus Target"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                               );

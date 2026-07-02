@@ -107,6 +107,69 @@ export function dbIsSupabaseConnected(): boolean {
   return isSupabaseConfigured && !supabaseFailed;
 }
 
+export function getClientDeletedOrders(): string[] {
+  try {
+    const data = localStorage.getItem('gmsolution_blacklist_orders');
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function blacklistClientOrder(id: string) {
+  try {
+    const list = getClientDeletedOrders();
+    if (!list.includes(id)) {
+      list.push(id);
+      localStorage.setItem('gmsolution_blacklist_orders', JSON.stringify(list));
+    }
+  } catch (err) {
+    console.warn('Failed to save order blacklist to localStorage:', err);
+  }
+}
+
+export function getClientDeletedShopeeOrders(): string[] {
+  try {
+    const data = localStorage.getItem('gmsolution_blacklist_shopee_orders');
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function blacklistClientShopeeOrder(id: string) {
+  try {
+    const list = getClientDeletedShopeeOrders();
+    if (!list.includes(id)) {
+      list.push(id);
+      localStorage.setItem('gmsolution_blacklist_shopee_orders', JSON.stringify(list));
+    }
+  } catch (err) {
+    console.warn('Failed to save shopee order blacklist to localStorage:', err);
+  }
+}
+
+export function getClientDeletedMapsReviews(): string[] {
+  try {
+    const data = localStorage.getItem('gmsolution_blacklist_maps_reviews');
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function blacklistClientMapsReview(id: string) {
+  try {
+    const list = getClientDeletedMapsReviews();
+    if (!list.includes(id)) {
+      list.push(id);
+      localStorage.setItem('gmsolution_blacklist_maps_reviews', JSON.stringify(list));
+    }
+  } catch (err) {
+    console.warn('Failed to save maps review blacklist to localStorage:', err);
+  }
+}
+
 // Helpers for mapping status values like 'READY' or 'SUDAH DIREKAP' to/from Supabase to avoid CHECK constraints
 export function serializeStatusAndNotes(notes: string | undefined, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' | undefined): { status: 'PENDING' | 'PROGRESS' | 'DONE'; notes: string } {
   let cleanNotes = notes || '';
@@ -683,6 +746,8 @@ export async function dbDeleteProduct(id: string): Promise<boolean> {
 
 // 2. ORDERS
 export async function dbGetOrders(): Promise<Order[]> {
+  const deletedOrders = getClientDeletedOrders();
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
@@ -711,7 +776,8 @@ export async function dbGetOrders(): Promise<Order[]> {
                 }
                 return o;
               });
-              return orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+              const sorted = orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+              return sorted.filter(o => !deletedOrders.includes(o.id));
             }
             console.warn('Supabase seeding orders warning:', seedError);
           }
@@ -728,7 +794,7 @@ export async function dbGetOrders(): Promise<Order[]> {
             }
             return o;
           });
-          return orders;
+          return orders.filter(o => !deletedOrders.includes(o.id));
         }
       } else if (error) {
         console.warn('Supabase fetch orders warning, falling back to Local/API:', error);
@@ -740,12 +806,13 @@ export async function dbGetOrders(): Promise<Order[]> {
     }
   }
 
-  return safeFetch<Order[]>(
+  const res = await safeFetch<Order[]>(
     '/api/orders',
     undefined,
     'gmsolution_local_orders',
     () => MOCK_ORDERS_TO_SEED
   );
+  return (res || []).filter(o => !deletedOrders.includes(o.id));
 }
 
 export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
@@ -864,6 +931,9 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
 }
 
 export async function dbDeleteOrder(id: string): Promise<boolean> {
+  // Add to client-side blacklist immediately
+  blacklistClientOrder(id);
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { error } = await supabase
@@ -1030,6 +1100,7 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
 
 // 4. SHOPEE ORDERS
 export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
+  const deletedShopee = getClientDeletedShopeeOrders();
   let list: ShopeeOrder[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
@@ -1058,7 +1129,8 @@ export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
     );
   }
 
-  return list.map(deserializeStatusAndNotes);
+  const filtered = list.filter(o => !deletedShopee.includes(o.id));
+  return filtered.map(deserializeStatusAndNotes);
 }
 
 export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
@@ -1208,6 +1280,9 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
 }
 
 export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
+  // Add to client-side blacklist immediately
+  blacklistClientShopeeOrder(id);
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { error } = await supabase
@@ -1242,6 +1317,7 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
 
 // 5. MAPS REVIEWS
 export async function dbGetMapsReviews(): Promise<MapsReview[]> {
+  const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
@@ -1286,7 +1362,8 @@ export async function dbGetMapsReviews(): Promise<MapsReview[]> {
     );
   }
 
-  return list.map(deserializeStatusAndNotes);
+  const filtered = list.filter(o => !deletedMaps.includes(o.id));
+  return filtered.map(deserializeStatusAndNotes);
 }
 
 export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promise<MapsReview> {
@@ -1434,6 +1511,9 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
 }
 
 export async function dbDeleteMapsReview(id: string): Promise<boolean> {
+  // Add to client-side blacklist immediately
+  blacklistClientMapsReview(id);
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { error } = await supabase
