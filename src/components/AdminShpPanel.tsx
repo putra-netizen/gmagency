@@ -1300,9 +1300,9 @@ Format Chat : ${data.notes || '-'}`;
                                 Link Target <span className="text-red-500">*</span>
                               </label>
                               <input
-                                type="url"
+                                type="text"
                                 required
-                                placeholder="https://example.com/target"
+                                placeholder="Contoh: wa.me/+628211116955 atau +628211116955"
                                 value={formSosmed.targetLink}
                                 onChange={e => setFormSosmed(prev => ({ ...prev, targetLink: e.target.value }))}
                                 className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 font-mono"

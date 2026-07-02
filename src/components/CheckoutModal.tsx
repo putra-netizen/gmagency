@@ -248,7 +248,7 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
                     <div className="relative">
                       <Link2 className="absolute top-2.5 left-3 h-3.5 w-3.5 text-slate-400" />
                       <input
-                        type="url"
+                        type="text"
                         required
                         value={targetLink}
                         onChange={(e) => setTargetLink(e.target.value)}
