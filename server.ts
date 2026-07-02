@@ -497,6 +497,7 @@ app.put('/api/orders/:id', async (req, res) => {
 
 app.delete('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
+  let supabaseDeleted = false;
 
   if (supabase) {
     try {
@@ -505,9 +506,10 @@ app.delete('/api/orders/:id', async (req, res) => {
         .delete()
         .eq('id', id);
       if (!error) {
-        return res.json({ success: true, message: 'Order deleted' });
+        supabaseDeleted = true;
+      } else {
+        console.error('Supabase error deleting order:', error);
       }
-      console.error('Supabase error deleting order:', error);
     } catch (err) {
       console.error('Supabase order delete exception:', err);
     }
@@ -519,6 +521,9 @@ app.delete('/api/orders/:id', async (req, res) => {
 
   if (db.orders.length < initialLength) {
     writeDatabase(db);
+  }
+
+  if (supabaseDeleted || db.orders.length < initialLength) {
     res.json({ success: true, message: 'Order deleted' });
   } else {
     res.status(404).json({ error: 'Order not found' });
@@ -612,6 +617,7 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
 
 app.delete('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
+  let supabaseDeleted = false;
 
   if (supabase) {
     try {
@@ -620,9 +626,10 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
         .delete()
         .eq('id', id);
       if (!error) {
-        return res.json({ success: true });
+        supabaseDeleted = true;
+      } else {
+        console.error('Supabase error deleting shopee_order:', error);
       }
-      console.error('Supabase error deleting shopee_order:', error);
     } catch (err) {
       console.error('Supabase shopee_order delete exception:', err);
     }
@@ -631,8 +638,12 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
   const db = readDatabase();
   const len = db.shopee_orders.length;
   db.shopee_orders = db.shopee_orders.filter((o: any) => o.id !== id);
+  
   if (db.shopee_orders.length < len) {
     writeDatabase(db);
+  }
+
+  if (supabaseDeleted || db.shopee_orders.length < len) {
     res.json({ success: true });
   } else {
     res.status(404).json({ error: 'Shopee order not found' });
@@ -729,6 +740,7 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
 
 app.delete('/api/maps_reviews/:id', async (req, res) => {
   const { id } = req.params;
+  let supabaseDeleted = false;
 
   if (supabase) {
     try {
@@ -737,9 +749,10 @@ app.delete('/api/maps_reviews/:id', async (req, res) => {
         .delete()
         .eq('id', id);
       if (!error) {
-        return res.json({ success: true });
+        supabaseDeleted = true;
+      } else {
+        console.error('Supabase error deleting maps_review:', error);
       }
-      console.error('Supabase error deleting maps_review:', error);
     } catch (err) {
       console.error('Supabase maps_review delete exception:', err);
     }
@@ -748,8 +761,12 @@ app.delete('/api/maps_reviews/:id', async (req, res) => {
   const db = readDatabase();
   const len = db.maps_reviews.length;
   db.maps_reviews = db.maps_reviews.filter((o: any) => o.id !== id);
+  
   if (db.maps_reviews.length < len) {
     writeDatabase(db);
+  }
+
+  if (supabaseDeleted || db.maps_reviews.length < len) {
     res.json({ success: true });
   } else {
     res.status(404).json({ error: 'Maps review not found' });

@@ -455,16 +455,22 @@ export async function dbGetProducts(): Promise<Product[]> {
       
       if (!error && data) {
         if (data.length === 0) {
-          console.log('Supabase products table is empty. Auto-seeding INITIAL_PRODUCTS...');
-          const { data: seededData, error: seedError } = await supabase
-            .from('products')
-            .insert(INITIAL_PRODUCTS)
-            .select();
-          if (!seedError && seededData) {
-            return seededData as Product[];
+          const hasSeeded = localStorage.getItem('gmsolution_seeded_products');
+          if (!hasSeeded) {
+            console.log('Supabase products table is empty. Auto-seeding INITIAL_PRODUCTS...');
+            const { data: seededData, error: seedError } = await supabase
+              .from('products')
+              .insert(INITIAL_PRODUCTS)
+              .select();
+            if (!seedError && seededData) {
+              localStorage.setItem('gmsolution_seeded_products', 'true');
+              return seededData as Product[];
+            }
+            console.warn('Supabase seeding products warning:', seedError);
           }
-          console.warn('Supabase seeding products warning:', seedError);
+          return [];
         } else {
+          localStorage.setItem('gmsolution_seeded_products', 'true');
           return data as Product[];
         }
       } else if (error) {
@@ -686,26 +692,32 @@ export async function dbGetOrders(): Promise<Order[]> {
       
       if (!error && data) {
         if (data.length === 0) {
-          console.log('Supabase orders table is empty. Auto-seeding MOCK_ORDERS_TO_SEED...');
-          const { data: seededData, error: seedError } = await supabase
-            .from('orders')
-            .insert(MOCK_ORDERS_TO_SEED)
-            .select();
-          if (!seedError && seededData) {
-            const orders = (seededData as Order[]).map(o => {
-              if (!o.product_name) {
-                const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
-                return {
-                  ...o,
-                  product_name: matchedProduct ? matchedProduct.name : 'Layanan'
-                };
-              }
-              return o;
-            });
-            return orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          const hasSeeded = localStorage.getItem('gmsolution_seeded_orders');
+          if (!hasSeeded) {
+            console.log('Supabase orders table is empty. Auto-seeding MOCK_ORDERS_TO_SEED...');
+            const { data: seededData, error: seedError } = await supabase
+              .from('orders')
+              .insert(MOCK_ORDERS_TO_SEED)
+              .select();
+            if (!seedError && seededData) {
+              localStorage.setItem('gmsolution_seeded_orders', 'true');
+              const orders = (seededData as Order[]).map(o => {
+                if (!o.product_name) {
+                  const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
+                  return {
+                    ...o,
+                    product_name: matchedProduct ? matchedProduct.name : 'Layanan'
+                  };
+                }
+                return o;
+              });
+              return orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            }
+            console.warn('Supabase seeding orders warning:', seedError);
           }
-          console.warn('Supabase seeding orders warning:', seedError);
+          return [];
         } else {
+          localStorage.setItem('gmsolution_seeded_orders', 'true');
           const orders = (data as Order[]).map(o => {
             if (!o.product_name) {
               const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
@@ -897,15 +909,31 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
       }
 
       if (!productsData || productsData.length === 0) {
-        console.log('Stats: products empty. Seeding...');
-        const { data: seeded } = await supabase.from('products').insert(INITIAL_PRODUCTS).select();
-        if (seeded) productsData = seeded;
+        const hasSeeded = localStorage.getItem('gmsolution_seeded_products');
+        if (!hasSeeded) {
+          console.log('Stats: products empty. Seeding...');
+          const { data: seeded } = await supabase.from('products').insert(INITIAL_PRODUCTS).select();
+          if (seeded) {
+            productsData = seeded;
+            localStorage.setItem('gmsolution_seeded_products', 'true');
+          }
+        }
+      } else {
+        localStorage.setItem('gmsolution_seeded_products', 'true');
       }
 
       if (!ordersData || ordersData.length === 0) {
-        console.log('Stats: orders empty. Seeding...');
-        const { data: seeded } = await supabase.from('orders').insert(MOCK_ORDERS_TO_SEED).select();
-        if (seeded) ordersData = seeded;
+        const hasSeeded = localStorage.getItem('gmsolution_seeded_orders');
+        if (!hasSeeded) {
+          console.log('Stats: orders empty. Seeding...');
+          const { data: seeded } = await supabase.from('orders').insert(MOCK_ORDERS_TO_SEED).select();
+          if (seeded) {
+            ordersData = seeded;
+            localStorage.setItem('gmsolution_seeded_orders', 'true');
+          }
+        }
+      } else {
+        localStorage.setItem('gmsolution_seeded_orders', 'true');
       }
 
       const products = productsData || [];
