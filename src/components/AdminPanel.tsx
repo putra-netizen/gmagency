@@ -30,6 +30,15 @@ interface AdminPanelProps {
   currentLang: Language;
 }
 
+const getSlotIndicatorName = (slot: string): string => {
+  const clean = slot?.trim()?.toLowerCase();
+  if (clean === 'adminshp1' || clean === 'adminera') return 'ERA';
+  if (clean === 'adminshp2' || clean === 'admincika') return 'CIKA';
+  if (clean === 'adminshp3' || clean === 'adminvira') return 'VIRA';
+  if (clean === 'adminshp4' || clean === 'adminali') return 'ALI';
+  return slot;
+};
+
 export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const t = TRANSLATIONS[currentLang];
 
@@ -56,26 +65,32 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
   // Custom credentials state for adminshp1..4
   const [adminshpCreds, setAdminshpCreds] = useState<Record<string, { username: string; password: string }>>(() => {
+    const defaults = {
+      adminshp1: { username: 'adminera', password: 'gmadminshp1' },
+      adminshp2: { username: 'admincika', password: 'gmadminshp2' },
+      adminshp3: { username: 'adminvira', password: 'gmadminshp3' },
+      adminshp4: { username: 'adminali', password: 'gmadminshp4' }
+    };
     try {
       const saved = localStorage.getItem('gm_adminshp_creds');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
-          return {
-            adminshp1: parsed.adminshp1 || { username: 'adminshp1', password: 'gmadminshp1' },
-            adminshp2: parsed.adminshp2 || { username: 'adminshp2', password: 'gmadminshp2' },
-            adminshp3: parsed.adminshp3 || { username: 'adminshp3', password: 'gmadminshp3' },
-            adminshp4: parsed.adminshp4 || { username: 'adminshp4', password: 'gmadminshp4' }
-          };
+          const result: any = {};
+          for (const key of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
+            const u = parsed[key]?.username;
+            const p = parsed[key]?.password;
+            if (!u || u === key || u === 'adminshp1' || u === 'adminshp2' || u === 'adminshp3' || u === 'adminshp4') {
+              result[key] = (defaults as any)[key];
+            } else {
+              result[key] = { username: u, password: p || (defaults as any)[key].password };
+            }
+          }
+          return result;
         }
       }
     } catch (e) {}
-    return {
-      adminshp1: { username: 'adminshp1', password: 'gmadminshp1' },
-      adminshp2: { username: 'adminshp2', password: 'gmadminshp2' },
-      adminshp3: { username: 'adminshp3', password: 'gmadminshp3' },
-      adminshp4: { username: 'adminshp4', password: 'gmadminshp4' }
-    };
+    return defaults;
   });
 
   const [editingCreds, setEditingCreds] = useState(() => adminshpCreds);
@@ -83,6 +98,15 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   // Sync editingCreds when adminshpCreds changes
   useEffect(() => {
     setEditingCreds(adminshpCreds);
+  }, [adminshpCreds]);
+
+  // Synchronize validated credentials to localStorage on mount and changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('gm_adminshp_creds', JSON.stringify(adminshpCreds));
+    } catch (e) {
+      console.warn('Storage sync failed', e);
+    }
   }, [adminshpCreds]);
 
   // Log activity logs state
@@ -417,13 +441,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   };
 
   const handleUpdateProofLink = async (reviewId: string, value: string) => {
-    const status = value.trim() !== '' ? 'DONE' : 'PENDING';
     try {
       await dbUpdateMapsReview(reviewId, {
-        proof_link: value,
-        status: status
+        proof_link: value
       });
-      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, proof_link: value, status: status } : r));
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, proof_link: value } : r));
     } catch (err) {
       console.error(err);
     }
@@ -1437,7 +1459,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                 </span>
                                 {order.created_by && (
                                   <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                    diinput oleh {adminshpCreds[order.created_by]?.username || order.created_by}
+                                    diinput oleh {getSlotIndicatorName(order.created_by)}
                                   </span>
                                 )}
                               </td>
@@ -1677,7 +1699,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   </span>
                                   {order.created_by && (
                                     <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                      diinput oleh {adminshpCreds[order.created_by]?.username || order.created_by}
+                                      diinput oleh {getSlotIndicatorName(order.created_by)}
                                     </span>
                                   )}
                                   <span className="text-[11px] font-bold text-slate-900 block mt-1 font-mono">
@@ -1931,7 +1953,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                               </span>
                               {order.created_by && (
                                 <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                  diinput oleh {adminshpCreds[order.created_by]?.username || order.created_by}
+                                  diinput oleh {getSlotIndicatorName(order.created_by)}
                                 </span>
                               )}
                             </td>
@@ -2209,7 +2231,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                               </span>
                               {review.created_by && (
                                 <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                  diinput oleh {adminshpCreds[review.created_by]?.username || review.created_by}
+                                  diinput oleh {getSlotIndicatorName(review.created_by)}
                                 </span>
                               )}
                             </td>

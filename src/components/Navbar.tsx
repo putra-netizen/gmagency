@@ -46,12 +46,35 @@ export default function Navbar({
       const pathname = window.location.pathname;
       if (pathname === '/adminshp') return false;
       const clean = pathname.replace('/', '').toLowerCase();
-      const isValidSlot = ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].includes(clean);
-      if (!isValidSlot) return false;
+
+      let slot = null;
+      try {
+        const saved = localStorage.getItem('gm_adminshp_creds');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') {
+            for (const key of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
+              if (parsed[key]?.username?.trim()?.toLowerCase() === clean) {
+                slot = key;
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {}
+
+      if (!slot) {
+        if (clean === 'adminera' || clean === 'adminshp1') slot = 'adminshp1';
+        else if (clean === 'admincika' || clean === 'adminshp2') slot = 'adminshp2';
+        else if (clean === 'adminvira' || clean === 'adminshp3') slot = 'adminshp3';
+        else if (clean === 'adminali' || clean === 'adminshp4') slot = 'adminshp4';
+      }
+
+      if (!slot) return false;
 
       const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true';
       const authUser = sessionStorage.getItem('gm_adminshp_user');
-      return isAuth && authUser === clean;
+      return isAuth && authUser === slot;
     } catch (e) {
       return false;
     }

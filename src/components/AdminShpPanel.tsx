@@ -57,6 +57,10 @@ const getSlotRouteName = (slot: string): string => {
       }
     }
   } catch (e) {}
+  if (slot === 'adminshp1') return 'adminera';
+  if (slot === 'adminshp2') return 'admincika';
+  if (slot === 'adminshp3') return 'adminvira';
+  if (slot === 'adminshp4') return 'adminali';
   return slot;
 };
 
@@ -77,10 +81,20 @@ const getSlotFromRouteName = (routeName: string): string | null => {
     }
   } catch (e) {}
   // Default fallback
-  if (['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].includes(clean)) {
-    return clean;
-  }
+  if (clean === 'adminera' || clean === 'adminshp1') return 'adminshp1';
+  if (clean === 'admincika' || clean === 'adminshp2') return 'adminshp2';
+  if (clean === 'adminvira' || clean === 'adminshp3') return 'adminshp3';
+  if (clean === 'adminali' || clean === 'adminshp4') return 'adminshp4';
   return null;
+};
+
+const getSlotIndicatorName = (slot: string): string => {
+  const clean = slot?.trim()?.toLowerCase();
+  if (clean === 'adminshp1' || clean === 'adminera') return 'ERA';
+  if (clean === 'adminshp2' || clean === 'admincika') return 'CIKA';
+  if (clean === 'adminshp3' || clean === 'adminvira') return 'VIRA';
+  if (clean === 'adminshp4' || clean === 'adminali') return 'ALI';
+  return slot;
 };
 
 export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
@@ -312,11 +326,11 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     const p = adminPassword;
 
     const credsStr = localStorage.getItem('gm_adminshp_creds');
-    let validCreds: Record<string, string> = {
-      'adminshp1': 'gmadminshp1',
-      'adminshp2': 'gmadminshp2',
-      'adminshp3': 'gmadminshp3',
-      'adminshp4': 'gmadminshp4',
+    let validCreds: Record<string, { u: string; p: string }> = {
+      'adminshp1': { u: 'adminera', p: 'gmadminshp1' },
+      'adminshp2': { u: 'admincika', p: 'gmadminshp2' },
+      'adminshp3': { u: 'adminvira', p: 'gmadminshp3' },
+      'adminshp4': { u: 'adminali', p: 'gmadminshp4' },
     };
 
     let matchedSlot: string | null = null;
@@ -345,7 +359,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
             if (customCreds[slot]) isCustomized = true;
           } catch (e) {}
         }
-        if (!isCustomized && slot === u && validCreds[slot] === p) {
+        const target = validCreds[slot];
+        if (!isCustomized && target.u === u && target.p === p) {
           matchedSlot = slot;
         }
       }
@@ -854,16 +869,14 @@ Format Chat : ${data.notes || '-'}`;
     }
   };
 
-  // Update Bukti Link and check if Done
+  // Update Bukti Link
   const handleUpdateProofLink = async (reviewId: string, value: string) => {
-    const status = value.trim() !== '' ? 'DONE' : 'PENDING';
     const targetReview = mapsReviews.find(r => r.id === reviewId);
     try {
       await dbUpdateMapsReview(reviewId, {
-        proof_link: value,
-        status: status
+        proof_link: value
       });
-      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, proof_link: value, status: status } : r));
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, proof_link: value } : r));
       if (currentAdminUser) {
         logAdminShpAction(currentAdminUser, 'Update Bukti Link', `Memperbarui bukti link untuk review store "${targetReview?.store_name || 'unknown'}"`);
       }
@@ -1622,7 +1635,7 @@ Format Chat : ${data.notes || '-'}`;
                                         : 'bg-violet-50 text-violet-700 border-violet-200'
                                     }`}>
                                       {order.created_by !== currentAdminUser && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
-                                      <span>diinput oleh {getSlotRouteName(order.created_by)}</span>
+                                      <span>diinput oleh {getSlotIndicatorName(order.created_by)}</span>
                                     </span>
                                   )}
                                 </div>
@@ -2066,7 +2079,7 @@ Format Chat : ${data.notes || '-'}`;
                                             : 'bg-violet-50 text-violet-700 border-violet-200'
                                         }`}>
                                           {item.created_by !== currentAdminUser && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
-                                          <span>diinput oleh {getSlotRouteName(item.created_by)}</span>
+                                          <span>diinput oleh {getSlotIndicatorName(item.created_by)}</span>
                                         </span>
                                       )}
                                     </div>
