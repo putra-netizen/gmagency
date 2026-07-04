@@ -60,6 +60,13 @@ export default function App() {
 
   const [currentView, setCurrentView] = useState<'home' | 'admin' | 'worker' | 'adminshp'>(() => {
     const path = window.location.pathname;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    if (isStandalone && (path === '/' || path === '' || path === '/home')) {
+      try {
+        window.history.replaceState(null, '', '/admin');
+      } catch (e) {}
+      return 'admin';
+    }
     if (path === '/admin' || path.startsWith('/admin/')) return 'admin';
     if (path === '/worker' || path.startsWith('/worker/')) return 'worker';
     if (isAdminShpPath(path)) return 'adminshp';
@@ -187,7 +194,12 @@ export default function App() {
         window.history.replaceState(null, '', path);
       }
 
-      if (path === '/' || path === '') {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+      if (isStandalone && (path === '/' || path === '' || path === '/home')) {
+        window.history.replaceState(null, '', '/admin');
+        setCurrentView('admin');
+      } else if (path === '/' || path === '') {
         window.history.replaceState(null, '', '/home');
         setCurrentView('home');
       } else if (path === '/admin' || path.startsWith('/admin/')) {

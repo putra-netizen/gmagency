@@ -2,7 +2,7 @@
   "name": "GM AGENCY",
   "short_name": "GM AGENCY",
   "description": "GM Agency Admin & Order Management",
-  "start_url": "/",
+  "start_url": "/admin",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",

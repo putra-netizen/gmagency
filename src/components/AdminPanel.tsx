@@ -1295,60 +1295,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
               Sign In
             </button>
           </form>
-
-          {/* Divider */}
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-slate-100"></div>
-            </div>
-            <div className="relative flex justify-center text-[10px] font-bold uppercase">
-              <span className="bg-white px-2.5 text-slate-400">ATAU MASUK CEPAT (BYPASS)</span>
-            </div>
-          </div>
-
-          {/* Quick Login Buttons Grid */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => {
-                setIsAuthenticated(true);
-                try {
-                  sessionStorage.setItem('gm_admin_auth', 'true');
-                  localStorage.setItem('gm_admin_auth', 'true');
-                } catch (e) {}
-                toast.success('Berhasil masuk sebagai Super Admin! (Bypass Password)');
-                window.dispatchEvent(new CustomEvent('admin-auth-change'));
-              }}
-              className="flex items-center gap-1.5 justify-center p-2.5 rounded-xl border border-blue-100 bg-blue-50/50 hover:bg-blue-50 text-blue-700 text-xs font-bold transition-all active:scale-95 text-center cursor-pointer"
-            >
-              <Database className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-              <span>Super Admin</span>
-            </button>
-
-            {['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].map((slot) => {
-              const name = slot === 'adminshp1' ? 'Era' : slot === 'adminshp2' ? 'Cika' : slot === 'adminshp3' ? 'Vira' : 'Ali';
-              const routeName = adminshpCreds[slot]?.username || (slot === 'adminshp1' ? 'adminera' : slot === 'adminshp2' ? 'admincika' : slot === 'adminshp3' ? 'adminvira' : 'adminali');
-              return (
-                <button
-                  key={slot}
-                  onClick={() => {
-                    try {
-                      sessionStorage.setItem('gm_adminshp_auth', 'true');
-                      sessionStorage.setItem('gm_adminshp_user', slot);
-                      localStorage.setItem(`gm_adminshp_auth_${slot}`, 'true');
-                      localStorage.setItem('gm_adminshp_user', slot);
-                    } catch (e) {}
-                    toast.success(`Berhasil masuk sebagai Admin ${name}! (Bypass Password)`);
-                    window.history.pushState(null, '', `/${routeName}`);
-                    window.dispatchEvent(new PopStateEvent('popstate'));
-                  }}
-                  className="flex items-center gap-1.5 justify-center p-2.5 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-all active:scale-95 text-center cursor-pointer"
-                >
-                  <Users className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-                  <span>Admin {name}</span>
-                </button>
-              );
-            })}
-          </div>
         </div>
       </div>
     );
