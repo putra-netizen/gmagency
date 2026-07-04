@@ -1485,6 +1485,73 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       {/* Conditionally hide the stats dashboard and tabs if activeTab is 'settings' */}
       {activeTab !== 'settings' && (
         <>
+          {/* Quick Access Admin-SHP Bypass Portal */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div className="space-y-1">
+                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 animate-pulse" />
+                  Bypass Akses Cepat Portal Admin-SHP
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Masuk ke portal masing-masing admin cabang secara instan tanpa perlu login manual.
+                </p>
+              </div>
+              <div className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 font-black px-2.5 py-1 rounded-full uppercase tracking-wider self-start sm:self-center">
+                Akses Super Admin
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].map((slot) => {
+                const name = slot === 'adminshp1' ? 'Era' : slot === 'adminshp2' ? 'Cika' : slot === 'adminshp3' ? 'Vira' : 'Ali';
+                const customUsername = adminshpCreds[slot]?.username;
+                const routeName = customUsername?.trim() || (slot === 'adminshp1' ? 'adminera' : slot === 'adminshp2' ? 'admincika' : slot === 'adminshp3' ? 'adminvira' : 'adminali');
+                return (
+                  <button
+                    key={slot}
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem('gm_adminshp_auth', 'true');
+                        sessionStorage.setItem('gm_adminshp_user', slot);
+                        localStorage.setItem(`gm_adminshp_auth_${slot}`, 'true');
+                        localStorage.setItem('gm_adminshp_user', slot);
+                      } catch (e) {}
+                      toast.success(`Berhasil bypass login & beralih ke portal Admin ${name}!`);
+                      window.history.pushState(null, '', `/${routeName}`);
+                      window.dispatchEvent(new PopStateEvent('popstate'));
+                    }}
+                    className="group relative flex flex-col justify-between items-start p-5 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 hover:border-indigo-200 dark:hover:border-indigo-900 transition-all active:scale-[0.98] cursor-pointer text-left overflow-hidden shadow-xs"
+                  >
+                    <div className="absolute right-3 top-3 opacity-10 group-hover:opacity-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-all">
+                      <ExternalLink className="h-4 w-4" />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/50 transition-colors w-9 h-9 flex items-center justify-center">
+                        <Users className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
+                      </div>
+                      
+                      <div>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-wider block">
+                          Slot {slot.charAt(slot.length - 1)}
+                        </span>
+                        <h4 className="text-sm font-black text-slate-800 dark:text-slate-200 font-sans tracking-tight">
+                          Admin {name}
+                        </h4>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 w-full flex items-center justify-between text-[10px] font-bold text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      <span className="truncate font-mono">@{routeName}</span>
+                      <span className="font-extrabold uppercase shrink-0">Bypass →</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* 1. STATS OVERVIEW ROW (Financial Dashboard Card) - Highly Polished & Organized */}
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
             <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-6 flex items-center gap-2">
