@@ -145,11 +145,13 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
 
   // Search & Sort states for tables
   const [searchShopee, setSearchShopee] = useState('');
-  const [sortShopee, setSortShopee] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
+  const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
+  const [shopeeTypeFilter, setShopeeTypeFilter] = useState<'all' | 'report' | 'spam_wa'>('all');
   const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
 
   const [searchMaps, setSearchMaps] = useState('');
-  const [sortMaps, setSortMaps] = useState<'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
+  const [sortMaps, setSortMaps] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
+  const [reviewTypeFilter, setReviewTypeFilter] = useState<'all' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('all');
   const [timeFilterMaps, setTimeFilterMaps] = useState<'all' | 'week' | 'month'>('all');
 
   const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'week' | 'month') => {
@@ -1099,62 +1101,7 @@ Format Chat : ${data.notes || '-'}`;
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-slate-800"></div>
-            </div>
-            <div className="relative flex justify-center text-[10px] font-bold uppercase">
-              <span className="bg-slate-900 px-2.5 text-slate-500">ATAU MASUK CEPAT (BYPASS)</span>
-            </div>
-          </div>
 
-          {/* Quick Login Buttons Grid */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => {
-                try {
-                  sessionStorage.setItem('gm_admin_auth', 'true');
-                  localStorage.setItem('gm_admin_auth', 'true');
-                } catch (e) {}
-                toast.success('Berhasil masuk ke Super Admin Panel! (Bypass Password)');
-                window.history.pushState(null, '', '/admin');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-              }}
-              className="flex items-center gap-1.5 justify-center p-2.5 rounded-xl border border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-bold transition-all active:scale-95 text-center cursor-pointer"
-            >
-              <Database className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-              <span>Super Admin</span>
-            </button>
-
-            {['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].map((slot) => {
-              const name = slot === 'adminshp1' ? 'Era' : slot === 'adminshp2' ? 'Cika' : slot === 'adminshp3' ? 'Vira' : 'Ali';
-              const routeName = getSlotRouteName(slot);
-              return (
-                <button
-                  key={slot}
-                  onClick={() => {
-                    try {
-                      sessionStorage.setItem('gm_adminshp_auth', 'true');
-                      sessionStorage.setItem('gm_adminshp_user', slot);
-                      localStorage.setItem(`gm_adminshp_auth_${slot}`, 'true');
-                      localStorage.setItem('gm_adminshp_user', slot);
-                    } catch (e) {}
-                    setIsAuthenticated(true);
-                    setCurrentAdminUser(slot);
-                    setAdminUsername(routeName);
-                    toast.success(`Berhasil masuk sebagai Admin ${name}! (Bypass Password)`);
-                    window.history.pushState(null, '', `/${routeName}`);
-                    window.dispatchEvent(new PopStateEvent('popstate'));
-                  }}
-                  className="flex items-center gap-1.5 justify-center p-2.5 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-all active:scale-95 text-center cursor-pointer"
-                >
-                  <Users className="h-3.5 w-3.5 text-slate-500 shrink-0" />
-                  <span>Admin {name}</span>
-                </button>
-              );
-            })}
-          </div>
         </div>
       </div>
     );
@@ -1163,6 +1110,20 @@ Format Chat : ${data.notes || '-'}`;
   // Filtered and sorted Shopee Orders
   const filteredShopeeOrders = shopeeOrders
     .filter(order => isWithinTimeframe(order.created_at, timeFilterShopee))
+    .filter(order => {
+      const stat = order.status || 'PENDING';
+      if (sortShopee === 'pending') return stat === 'PENDING';
+      if (sortShopee === 'progress') return stat === 'PROGRESS';
+      if (sortShopee === 'ready') return stat === 'READY';
+      if (sortShopee === 'sudah_direkap') return stat === 'SUDAH DIREKAP';
+      if (sortShopee === 'done') return stat === 'DONE';
+      return true; // if 'all'
+    })
+    .filter(order => {
+      if (shopeeTypeFilter === 'report') return order.order_type === 'REPORT_ALL_SOSMED';
+      if (shopeeTypeFilter === 'spam_wa') return order.order_type === 'SPAM_WA';
+      return true; // if 'all'
+    })
     .filter(order => {
       if (!searchShopee) return true;
       const q = searchShopee.toLowerCase();
@@ -1175,56 +1136,32 @@ Format Chat : ${data.notes || '-'}`;
         (order.notes || '').toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => {
-      const getStatusScore = (o: any) => {
-        const stat = o.status || 'PENDING';
-        if (sortShopee === 'pending') {
-          if (stat === 'PENDING') return 0;
-          if (stat === 'PROGRESS') return 1;
-          if (stat === 'READY') return 2;
-          if (stat === 'SUDAH DIREKAP') return 3;
-          return 4;
-        }
-        if (sortShopee === 'progress') {
-          if (stat === 'PROGRESS') return 0;
-          if (stat === 'PENDING') return 1;
-          if (stat === 'READY') return 2;
-          if (stat === 'SUDAH DIREKAP') return 3;
-          return 4;
-        }
-        if (sortShopee === 'ready') {
-          if (stat === 'READY') return 0;
-          if (stat === 'PROGRESS') return 1;
-          if (stat === 'SUDAH DIREKAP') return 2;
-          if (stat === 'PENDING') return 3;
-          return 4;
-        }
-        if (sortShopee === 'sudah_direkap') {
-          if (stat === 'SUDAH DIREKAP') return 0;
-          if (stat === 'READY') return 1;
-          if (stat === 'PROGRESS') return 2;
-          if (stat === 'PENDING') return 3;
-          return 4;
-        }
-        if (sortShopee === 'done') {
-          if (stat === 'DONE') return 0;
-          if (stat === 'PROGRESS') return 1;
-          return 2;
-        }
-        return 0;
-      };
-
-      const scoreA = getStatusScore(a);
-      const scoreB = getStatusScore(b);
-      if (scoreA !== scoreB) {
-        return scoreA - scoreB;
-      }
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   // Filtered and sorted Maps Reviews
   const filteredMapsReviews = mapsReviews
     .filter(review => isWithinTimeframe(review.created_at, timeFilterMaps))
+    .filter(review => {
+      const stat = review.status || 'PENDING';
+      if (sortMaps === 'pending') return stat === 'PENDING';
+      if (sortMaps === 'progress') return stat === 'PROGRESS';
+      if (sortMaps === 'ready') return stat === 'READY';
+      if (sortMaps === 'sudah_direkap') return stat === 'SUDAH DIREKAP';
+      if (sortMaps === 'done') return stat === 'DONE';
+      return true; // if 'all'
+    })
+    .filter(review => {
+      if (reviewTypeFilter === 'TRIPAD') {
+        return review.review_type === 'TRIPAD';
+      }
+      if (reviewTypeFilter === 'GMAPS') {
+        return review.review_type === 'G_MAPS' || !review.review_type;
+      }
+      if (reviewTypeFilter === 'REVIEW APPS') {
+        return review.review_type === 'REVIEW_APPS';
+      }
+      return true; // if 'all'
+    })
     .filter(review => {
       if (!searchMaps) return true;
       const q = searchMaps.toLowerCase();
@@ -1236,52 +1173,7 @@ Format Chat : ${data.notes || '-'}`;
         (review.review_type || '').toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => {
-      const getStatusScore = (o: any) => {
-        const stat = o.status || 'PENDING';
-        if (sortMaps === 'pending') {
-          if (stat === 'PENDING') return 0;
-          if (stat === 'PROGRESS') return 1;
-          if (stat === 'READY') return 2;
-          if (stat === 'SUDAH DIREKAP') return 3;
-          return 4;
-        }
-        if (sortMaps === 'progress') {
-          if (stat === 'PROGRESS') return 0;
-          if (stat === 'PENDING') return 1;
-          if (stat === 'READY') return 2;
-          if (stat === 'SUDAH DIREKAP') return 3;
-          return 4;
-        }
-        if (sortMaps === 'ready') {
-          if (stat === 'READY') return 0;
-          if (stat === 'PROGRESS') return 1;
-          if (stat === 'SUDAH DIREKAP') return 2;
-          if (stat === 'PENDING') return 3;
-          return 4;
-        }
-        if (sortMaps === 'sudah_direkap') {
-          if (stat === 'SUDAH DIREKAP') return 0;
-          if (stat === 'READY') return 1;
-          if (stat === 'PROGRESS') return 2;
-          if (stat === 'PENDING') return 3;
-          return 4;
-        }
-        if (sortMaps === 'done') {
-          if (stat === 'DONE') return 0;
-          if (stat === 'PROGRESS') return 1;
-          return 2;
-        }
-        return 0;
-      };
-
-      const scoreA = getStatusScore(a);
-      const scoreB = getStatusScore(b);
-      if (scoreA !== scoreB) {
-        return scoreA - scoreB;
-      }
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 font-sans" id="shopee-portal-container">
@@ -1690,6 +1582,20 @@ Format Chat : ${data.notes || '-'}`;
 
                   {/* Minimalist sorting / filtering controls */}
                   <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                    {/* Tipe Jasa / Jenis Filter */}
+                    <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-100 text-[10px] w-full sm:w-auto">
+                      <span className="text-slate-450 font-bold uppercase tracking-wider text-[10px]">Tipe Jasa:</span>
+                      <select
+                        value={shopeeTypeFilter}
+                        onChange={(e) => setShopeeTypeFilter(e.target.value as any)}
+                        className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase"
+                      >
+                        <option value="all">SEMUA</option>
+                        <option value="report">REPORT SOSMED</option>
+                        <option value="spam_wa">SPAM WA</option>
+                      </select>
+                    </div>
+
                     {/* Status / Progres Filter (Beautiful Dropdown) */}
                     <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-100 text-[10px] w-full sm:w-auto">
                       <span className="text-slate-450 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
@@ -1698,6 +1604,7 @@ Format Chat : ${data.notes || '-'}`;
                         onChange={(e) => setSortShopee(e.target.value as any)}
                         className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase"
                       >
+                        <option value="all">SEMUA</option>
                         <option value="pending">PENDING</option>
                         <option value="progress">PROGRES</option>
                         <option value="ready">READY</option>
@@ -2159,6 +2066,21 @@ Format Chat : ${data.notes || '-'}`;
  
                        {/* Minimalist sorting / filtering controls */}
                        <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                         {/* Tipe Review Filter */}
+                         <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
+                           <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Tipe Review:</span>
+                           <select
+                             value={reviewTypeFilter}
+                             onChange={(e) => setReviewTypeFilter(e.target.value as any)}
+                             className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase ml-1.5"
+                           >
+                             <option value="all">SEMUA</option>
+                             <option value="GMAPS">GMAPS</option>
+                             <option value="TRIPAD">TRIPAD</option>
+                             <option value="REVIEW APPS">REVIEW APPS</option>
+                           </select>
+                         </div>
+
                          {/* Status / Progres Filter (Minimalist badge/pills style) */}
                          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
                            <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Progres:</span>
@@ -2167,6 +2089,7 @@ Format Chat : ${data.notes || '-'}`;
                              onChange={(e) => setSortMaps(e.target.value as any)}
                              className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase ml-1.5"
                            >
+                             <option value="all">SEMUA</option>
                              <option value="pending">PENDING</option>
                              <option value="progress">PROGRES</option>
                              <option value="ready">READY</option>

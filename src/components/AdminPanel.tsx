@@ -25,7 +25,7 @@ import {
   Briefcase, Save, AlertCircle, FileText, Check, Database, X, Globe,
   ExternalLink, Image as ImageIcon, Settings, ShoppingCart, Copy, ArrowLeft,
   Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
-  FileSpreadsheet, Download
+  FileSpreadsheet, Download, Menu, ChevronRight
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -63,6 +63,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   
   // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'
   const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'>('orders');
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+
   // Settings view nested tab states
   const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'export_transactions' | 'google_sheets' | 'account_access' | 'qris_config' | 'app_install'>('products');
 
@@ -1435,7 +1437,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="admin-panel-container">
       
-      {/* Header with action buttons */}
+      {/* Content Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-5 mb-8">
         <div>
           {activeTab === 'settings' ? (
@@ -1449,264 +1451,246 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                 className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-all cursor-pointer border border-slate-200/50"
                 id="admin-settings-back-btn"
               >
-                <ArrowLeft className="h-4 w-4" />
-                <span>{currentLang === 'id' ? 'Kembali' : 'Back'}</span>
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>{currentLang === 'id' ? 'Kembali' : 'Back'}</span>
+                </button>
+                <div className="h-6 w-px bg-slate-200" />
+                <Settings className="h-6 w-6 text-blue-600 animate-spin-slow" />
+                <h1 className="text-2xl font-black text-slate-950 font-sans tracking-tight uppercase">
+                  Settings Admin
+                </h1>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {activeTab === 'orders' ? (
+                  <ShoppingBag className="h-6 w-6 text-blue-600" />
+                ) : activeTab === 'shopee_orders' ? (
+                  <ShoppingCart className="h-6 w-6 text-blue-600" />
+                ) : (
+                  <Star className="h-6 w-6 text-blue-600" />
+                )}
+                <h1 className="text-2xl font-black text-slate-950 font-sans tracking-tight uppercase">
+                  {activeTab === 'orders' ? (currentLang === 'id' ? 'Pesanan Web' : 'Web Orders')
+                    : activeTab === 'shopee_orders' ? (currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders')
+                    : 'Review Orders'}
+                </h1>
+              </div>
+            )}
+            <p className="text-sm text-slate-500 font-medium mt-2">
+              {activeTab === 'settings' 
+                ? 'Kelola katalog layanan, harga produk, dan sinkronisasi Google Spreadsheet.'
+                : activeTab === 'orders' ? 'Kelola pesanan dari website utama GM AGENCY.'
+                : activeTab === 'shopee_orders' ? 'Kelola pesanan dari toko Shopee.'
+                : 'Pantau pesanan review rating Google Maps, Tripadvisor, dan Review Apps.'
+              }
+            </p>
+          </div>
+        </div>
+
+        {errorMsg && (
+          <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 p-4 text-sm font-semibold text-red-700">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {/* Conditionally hide the stats dashboard if activeTab is 'settings' */}
+        {activeTab !== 'settings' && (
+          <>
+            {/* Quick Access Admin-SHP Bypass Portal */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse shrink-0" />
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Akses Cepat Portal Admin:
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].map((slot) => {
+                  const name = slot === 'adminshp1' ? 'Era' : slot === 'adminshp2' ? 'Cika' : slot === 'adminshp3' ? 'Vira' : 'Ali';
+                  const customUsername = adminshpCreds[slot]?.username;
+                  const routeName = customUsername?.trim() || (slot === 'adminshp1' ? 'adminera' : slot === 'adminshp2' ? 'admincika' : slot === 'adminshp3' ? 'adminvira' : 'adminali');
+                  return (
+                    <button
+                      key={slot}
+                      onClick={() => {
+                        try {
+                          sessionStorage.setItem('gm_adminshp_auth', 'true');
+                          sessionStorage.setItem('gm_adminshp_user', slot);
+                          localStorage.setItem(`gm_adminshp_auth_${slot}`, 'true');
+                          localStorage.setItem('gm_adminshp_user', slot);
+                        } catch (e) {}
+                        toast.success(`Berhasil masuk ke portal Admin ${name}!`);
+                        window.history.pushState(null, '', `/${routeName}`);
+                        window.dispatchEvent(new PopStateEvent('popstate'));
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:border-indigo-200 dark:hover:border-indigo-900 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                    >
+                      <Users className="h-3 w-3 text-slate-400 dark:text-slate-500" />
+                      <span>Admin {name}</span>
+                      <span className="text-[10px] text-slate-400 font-mono font-medium opacity-75">@{routeName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 1. STATS OVERVIEW ROW (Financial Dashboard Card) - Highly Polished & Organized */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
+              <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-6 flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+                Ikhtisar Keuangan & Kinerja Operasional
+              </h2>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                {/* Featured Financial Card */}
+                <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 dark:from-slate-950 dark:to-slate-900 text-white rounded-2xl p-6 shadow-md flex flex-col justify-between relative overflow-hidden">
+                  <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+                  
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Pendapatan</span>
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+                        <DollarSign className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <div className="text-3xl sm:text-4xl font-black font-sans tracking-tight text-emerald-400 select-all">
+                      {formatRupiah(stats?.totalRevenue ?? 0)}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6 pt-4 border-t border-slate-800/80 relative z-10 flex items-center justify-between text-xs text-slate-400">
+                    <span className="font-medium">Total Akumulasi Transaksi</span>
+                    <span className="bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-md font-bold text-[10px]">Lunas</span>
+                  </div>
+                </div>
+
+                {/* Sub Metrics Grid */}
+                <div className="lg:col-span-7 grid grid-cols-2 gap-4">
+                  {/* Web Orders */}
+                  <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
+                        <ShoppingBag className="h-4 w-4" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Web Orders</span>
+                    </div>
+                    <div>
+                      <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                        {orders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Shopee Orders */}
+                  <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400">
+                        <ShoppingCart className="h-4 w-4" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Shopee Orders</span>
+                    </div>
+                    <div>
+                      <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                        {shopeeOrders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Pending Orders */}
+                  <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
+                        <Clock className="h-4 w-4 animate-pulse" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t.pendingOrders}</span>
+                    </div>
+                    <div>
+                      <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                        {stats?.pendingOrders ?? 0} <span className="text-xs font-medium text-slate-400">menunggu</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Completed Orders */}
+                  <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
+                        <CheckCircle2 className="h-4 w-4" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t.completedOrders}</span>
+                    </div>
+                    <div>
+                      <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                        {stats?.completedOrders ?? 0}
+                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">({getCompletedPercentage()}%)</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tab Navigations */}
+            <div className="flex items-center border-b border-slate-200 mb-6">
+              <button
+                onClick={() => {
+                  isTabClicking.current = true;
+                  setActiveTab('orders');
+                  window.history.pushState(null, '', '/admin');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                  setTimeout(() => { isTabClicking.current = false; }, 50);
+                }}
+                className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'orders'
+                    ? 'border-blue-600 text-blue-600 font-black'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+                id="tab-orders"
+              >
+                <ShoppingBag className="h-4 w-4" />
+                <span>{currentLang === 'id' ? 'Pesanan Web' : 'Web Orders'}</span>
               </button>
-              <div className="h-6 w-px bg-slate-200" />
-              <Settings className="h-6 w-6 text-blue-600 animate-spin-slow" />
-              <h1 className="text-2xl font-black text-slate-950 font-sans tracking-tight uppercase">
-                Settings Admin
-              </h1>
+              <button
+                onClick={() => {
+                  isTabClicking.current = true;
+                  setActiveTab('shopee_orders');
+                  window.history.pushState(null, '', '/admin');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                  setTimeout(() => { isTabClicking.current = false; }, 50);
+                }}
+                className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'shopee_orders'
+                    ? 'border-blue-600 text-blue-600 font-black'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+                id="tab-shopee-orders"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                <span>{currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders'}</span>
+              </button>
+              <button
+                onClick={() => {
+                  isTabClicking.current = true;
+                  setActiveTab('maps_reviews');
+                  window.history.pushState(null, '', '/admin');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                  setTimeout(() => { isTabClicking.current = false; }, 50);
+                }}
+                className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                  activeTab === 'maps_reviews'
+                    ? 'border-blue-600 text-blue-600 font-black'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+                id="tab-maps-reviews"
+              >
+                <Star className="h-4 w-4" />
+                <span>Review Orders</span>
+              </button>
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Database className="h-6 w-6 text-blue-600" />
-              <h1 className="text-2xl font-black text-slate-950 font-sans tracking-tight uppercase">
-                {t.adminTitle}
-              </h1>
-            </div>
-          )}
-          <p className="text-sm text-slate-500 font-medium mt-2">
-            {activeTab === 'settings' 
-              ? 'Kelola katalog layanan, harga produk, dan sinkronisasi Google Spreadsheet.'
-              : t.adminStats
-            }
-          </p>
-        </div>
-      </div>
-
-      {errorMsg && (
-        <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 p-4 text-sm font-semibold text-red-700 mb-6">
-          <AlertCircle className="h-5 w-5 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
-
-      {/* Conditionally hide the stats dashboard and tabs if activeTab is 'settings' */}
-      {activeTab !== 'settings' && (
-        <>
-          {/* Quick Access Admin-SHP Bypass Portal */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <div className="space-y-1">
-                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 animate-pulse" />
-                  Bypass Akses Cepat Portal Admin-SHP
-                </h2>
-                <p className="text-xs text-slate-500 font-medium">
-                  Masuk ke portal masing-masing admin cabang secara instan tanpa perlu login manual.
-                </p>
-              </div>
-              <div className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 font-black px-2.5 py-1 rounded-full uppercase tracking-wider self-start sm:self-center">
-                Akses Super Admin
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].map((slot) => {
-                const name = slot === 'adminshp1' ? 'Era' : slot === 'adminshp2' ? 'Cika' : slot === 'adminshp3' ? 'Vira' : 'Ali';
-                const customUsername = adminshpCreds[slot]?.username;
-                const routeName = customUsername?.trim() || (slot === 'adminshp1' ? 'adminera' : slot === 'adminshp2' ? 'admincika' : slot === 'adminshp3' ? 'adminvira' : 'adminali');
-                return (
-                  <button
-                    key={slot}
-                    onClick={() => {
-                      try {
-                        sessionStorage.setItem('gm_adminshp_auth', 'true');
-                        sessionStorage.setItem('gm_adminshp_user', slot);
-                        localStorage.setItem(`gm_adminshp_auth_${slot}`, 'true');
-                        localStorage.setItem('gm_adminshp_user', slot);
-                      } catch (e) {}
-                      toast.success(`Berhasil bypass login & beralih ke portal Admin ${name}!`);
-                      window.history.pushState(null, '', `/${routeName}`);
-                      window.dispatchEvent(new PopStateEvent('popstate'));
-                    }}
-                    className="group relative flex flex-col justify-between items-start p-5 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 hover:border-indigo-200 dark:hover:border-indigo-900 transition-all active:scale-[0.98] cursor-pointer text-left overflow-hidden shadow-xs"
-                  >
-                    <div className="absolute right-3 top-3 opacity-10 group-hover:opacity-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-all">
-                      <ExternalLink className="h-4 w-4" />
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-900 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/50 transition-colors w-9 h-9 flex items-center justify-center">
-                        <Users className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
-                      </div>
-                      
-                      <div>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-wider block">
-                          Slot {slot.charAt(slot.length - 1)}
-                        </span>
-                        <h4 className="text-sm font-black text-slate-800 dark:text-slate-200 font-sans tracking-tight">
-                          Admin {name}
-                        </h4>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 w-full flex items-center justify-between text-[10px] font-bold text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                      <span className="truncate font-mono">@{routeName}</span>
-                      <span className="font-extrabold uppercase shrink-0">Bypass →</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 1. STATS OVERVIEW ROW (Financial Dashboard Card) - Highly Polished & Organized */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
-            <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-6 flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
-              Ikhtisar Keuangan & Kinerja Operasional
-            </h2>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-              {/* Featured Financial Card */}
-              <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 dark:from-slate-950 dark:to-slate-900 text-white rounded-2xl p-6 shadow-md flex flex-col justify-between relative overflow-hidden">
-                <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
-                
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Pendapatan</span>
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
-                      <DollarSign className="h-5 w-5" />
-                    </div>
-                  </div>
-                  <div className="text-3xl sm:text-4xl font-black font-sans tracking-tight text-emerald-400 select-all">
-                    {formatRupiah(stats?.totalRevenue ?? 0)}
-                  </div>
-                </div>
-                
-                <div className="mt-6 pt-4 border-t border-slate-800/80 relative z-10 flex items-center justify-between text-xs text-slate-400">
-                  <span className="font-medium">Total Akumulasi Transaksi</span>
-                  <span className="bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-md font-bold text-[10px]">Lunas</span>
-                </div>
-              </div>
-
-              {/* Sub Metrics Grid */}
-              <div className="lg:col-span-7 grid grid-cols-2 gap-4">
-                {/* Web Orders */}
-                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
-                      <ShoppingBag className="h-4 w-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Web Orders</span>
-                  </div>
-                  <div>
-                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                      {orders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Shopee Orders */}
-                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400">
-                      <ShoppingCart className="h-4 w-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Shopee Orders</span>
-                  </div>
-                  <div>
-                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                      {shopeeOrders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Pending Orders */}
-                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
-                      <Clock className="h-4 w-4 animate-pulse" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t.pendingOrders}</span>
-                  </div>
-                  <div>
-                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                      {stats?.pendingOrders ?? 0} <span className="text-xs font-medium text-slate-400">menunggu</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Completed Orders */}
-                <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
-                      <CheckCircle2 className="h-4 w-4" />
-                    </div>
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t.completedOrders}</span>
-                  </div>
-                  <div>
-                    <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                      {stats?.completedOrders ?? 0}
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">({getCompletedPercentage()}%)</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Tab Navigations */}
-          <div className="flex items-center border-b border-slate-200 mb-6">
-            <button
-              onClick={() => {
-                isTabClicking.current = true;
-                setActiveTab('orders');
-                window.history.pushState(null, '', '/admin');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-                setTimeout(() => { isTabClicking.current = false; }, 50);
-              }}
-              className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'orders'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-              id="tab-orders"
-            >
-              <ShoppingBag className="h-4 w-4" />
-              <span>{currentLang === 'id' ? 'Pesanan Web' : 'Web Orders'}</span>
-            </button>
-            <button
-              onClick={() => {
-                isTabClicking.current = true;
-                setActiveTab('shopee_orders');
-                window.history.pushState(null, '', '/admin');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-                setTimeout(() => { isTabClicking.current = false; }, 50);
-              }}
-              className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'shopee_orders'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-              id="tab-shopee-orders"
-            >
-              <ShoppingCart className="h-4 w-4" />
-              <span>{currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders'}</span>
-            </button>
-            <button
-              onClick={() => {
-                isTabClicking.current = true;
-                setActiveTab('maps_reviews');
-                window.history.pushState(null, '', '/admin');
-                window.dispatchEvent(new PopStateEvent('popstate'));
-                setTimeout(() => { isTabClicking.current = false; }, 50);
-              }}
-              className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'maps_reviews'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-              id="tab-maps-reviews"
-            >
-              <Star className="h-4 w-4 animate-pulse" />
-              <span>Review Orders</span>
-            </button>
-          </div>
-        </>
-      )}
+          </>
+        )}
 
       {/* Loading state indicator */}
       {isLoading ? (
@@ -3164,72 +3148,219 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
           {/* 4. SETTINGS VIEW WITH PRODUCT MGMT AND SPREADSHEET SYNC */}
           {activeTab === 'settings' && (
-            <div className="space-y-6" id="admin-settings-dashboard">
-              {/* Inner settings tabs */}
-              <div className="flex gap-2 border-b border-slate-100 pb-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsTab('products')}
-                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeSettingsTab === 'products'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Briefcase className="h-3.5 w-3.5" />
-                  <span>Manajemen Layanan & Produk</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsTab('export_transactions')}
-                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeSettingsTab === 'export_transactions'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  <span>Export Data Transaksi</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsTab('google_sheets')}
-                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeSettingsTab === 'google_sheets'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Database className="h-3.5 w-3.5" />
-                  <span>Real-time Google Sheets Sync</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsTab('account_access')}
-                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeSettingsTab === 'account_access'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  <span>Hak Akses Akun</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSettingsTab('app_install')}
-                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeSettingsTab === 'app_install'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Pasang Aplikasi</span>
-                </button>
+            <div className="flex flex-col lg:flex-row gap-8 items-start w-full" id="admin-settings-dashboard">
+              {/* Left Sidebar for Navigation - Desktop and Mobile Hamburger */}
+              <div className="w-full lg:w-64 bg-white rounded-2xl border border-slate-100 p-4 shadow-sm shrink-0">
+                {/* Desktop Header */}
+                <div className="px-3 mb-4 hidden lg:block">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pengaturan Admin</h3>
+                  <p className="text-[11px] text-slate-500 font-medium mt-1">Kelola produk, integrasi & akses</p>
+                </div>
+                
+                {/* Mobile Trigger Bar */}
+                <div className="lg:hidden flex items-center justify-between w-full">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Pengaturan</span>
+                    <span className="text-xs font-bold text-blue-600 mt-0.5">
+                      {activeSettingsTab === 'products' ? 'Layanan & Produk'
+                        : activeSettingsTab === 'export_transactions' ? 'Export Transaksi'
+                        : activeSettingsTab === 'google_sheets' ? 'Google Sheets Sync'
+                        : activeSettingsTab === 'account_access' ? 'Hak Akses Akun'
+                        : 'Pasang Aplikasi'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsMenuOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-all cursor-pointer active:scale-95"
+                  >
+                    <Menu className="h-4 w-4" />
+                    <span>Pilih Menu</span>
+                  </button>
+                </div>
+
+                {/* Desktop Sidebar Buttons */}
+                <div className="hidden lg:flex flex-col gap-1.5 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsTab('products')}
+                    className={`px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer lg:w-full text-left ${
+                      activeSettingsTab === 'products'
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/10'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Briefcase className="h-4 w-4 shrink-0" />
+                    <span>Layanan & Produk</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsTab('export_transactions')}
+                    className={`px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer lg:w-full text-left ${
+                      activeSettingsTab === 'export_transactions'
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/10'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span>Export Transaksi</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsTab('google_sheets')}
+                    className={`px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer lg:w-full text-left ${
+                      activeSettingsTab === 'google_sheets'
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/10'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Database className="h-4 w-4 shrink-0" />
+                    <span>Google Sheets Sync</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsTab('account_access')}
+                    className={`px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer lg:w-full text-left ${
+                      activeSettingsTab === 'account_access'
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/10'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Users className="h-4 w-4 shrink-0" />
+                    <span>Hak Akses Akun</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsTab('app_install')}
+                    className={`px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer lg:w-full text-left ${
+                      activeSettingsTab === 'app_install'
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/10'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Download className="h-4 w-4 shrink-0" />
+                    <span>Pasang Aplikasi</span>
+                  </button>
+                </div>
               </div>
 
-              {activeSettingsTab === 'products' && (
+              {/* Mobile Settings Sidebar Drawer / Modal */}
+              {isSettingsMenuOpen && (
+                <div className="fixed inset-0 z-50 lg:hidden flex">
+                  {/* Backdrop */}
+                  <div
+                    onClick={() => setIsSettingsMenuOpen(false)}
+                    className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-200"
+                  />
+                  {/* Content Drawer */}
+                  <div className="relative flex flex-col w-72 max-w-[80vw] h-full bg-white p-6 shadow-2xl animate-in slide-in-from-left duration-200 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-sans">Menu Settings</h3>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">Pilih navigasi konfigurasi admin</p>
+                      </div>
+                      <button
+                        onClick={() => setIsSettingsMenuOpen(false)}
+                        className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-all cursor-pointer"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    
+                    <div className="h-px bg-slate-100 mb-6" />
+
+                    <div className="space-y-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSettingsTab('products');
+                          setIsSettingsMenuOpen(false);
+                        }}
+                        className={`w-full px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-left ${
+                          activeSettingsTab === 'products'
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Briefcase className="h-4 w-4 shrink-0" />
+                        <span>Layanan & Produk</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSettingsTab('export_transactions');
+                          setIsSettingsMenuOpen(false);
+                        }}
+                        className={`w-full px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-left ${
+                          activeSettingsTab === 'export_transactions'
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <FileText className="h-4 w-4 shrink-0" />
+                        <span>Export Transaksi</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSettingsTab('google_sheets');
+                          setIsSettingsMenuOpen(false);
+                        }}
+                        className={`w-full px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-left ${
+                          activeSettingsTab === 'google_sheets'
+                            ? 'bg-emerald-600 text-white shadow-md'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Database className="h-4 w-4 shrink-0" />
+                        <span>Google Sheets Sync</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSettingsTab('account_access');
+                          setIsSettingsMenuOpen(false);
+                        }}
+                        className={`w-full px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-left ${
+                          activeSettingsTab === 'account_access'
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Users className="h-4 w-4 shrink-0" />
+                        <span>Hak Akses Akun</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSettingsTab('app_install');
+                          setIsSettingsMenuOpen(false);
+                        }}
+                        className={`w-full px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-left ${
+                          activeSettingsTab === 'app_install'
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Download className="h-4 w-4 shrink-0" />
+                        <span>Pasang Aplikasi</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Main Content Pane */}
+              <div className="flex-1 w-full space-y-6">
+                {activeSettingsTab === 'products' && (
                 <div className="space-y-6">
                   {/* Toolbar */}
                   <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
@@ -4074,6 +4205,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                   </div>
                 </div>
               )}
+              </div>
             </div>
           )}
         </>
@@ -4772,7 +4904,6 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
           </div>
         </div>
       )}
-
       {/* Custom Delete Confirmation Dialog */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
