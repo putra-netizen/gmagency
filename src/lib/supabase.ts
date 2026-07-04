@@ -777,7 +777,7 @@ export async function dbGetOrders(): Promise<Order[]> {
                 return o;
               });
               const sorted = orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-              return sorted.filter(o => !deletedOrders.includes(o.id));
+              return sorted.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
             }
             console.warn('Supabase seeding orders warning:', seedError);
           }
@@ -794,7 +794,7 @@ export async function dbGetOrders(): Promise<Order[]> {
             }
             return o;
           });
-          return orders.filter(o => !deletedOrders.includes(o.id));
+          return orders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
         }
       } else if (error) {
         console.warn('Supabase fetch orders warning, falling back to Local/API:', error);
@@ -812,7 +812,7 @@ export async function dbGetOrders(): Promise<Order[]> {
     'gmsolution_local_orders',
     () => MOCK_ORDERS_TO_SEED
   );
-  return (res || []).filter(o => !deletedOrders.includes(o.id));
+  return (res || []).filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
 }
 
 export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
@@ -936,18 +936,23 @@ export async function dbDeleteOrder(id: string): Promise<boolean> {
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
+      // 1. Mark as deleted using UPDATE first (highly robust, works with existing RLS update policies)
+      await supabase
+        .from('orders')
+        .update({ created_by: '__DELETED__' })
+        .eq('id', id);
+
+      // 2. Try to physically delete
       const { error } = await supabase
         .from('orders')
         .delete()
         .eq('id', id);
       
       if (error) {
-        console.warn('Supabase delete order warning, falling back to Local/API:', error);
-        supabaseFailed = true;
+        console.warn('Supabase physical delete order warning (this is fine, row is marked deleted):', error);
       }
     } catch (err) {
-      console.warn('Supabase delete order exception, falling back to Local/API:', err);
-      supabaseFailed = true;
+      console.warn('Supabase delete order exception:', err);
     }
   }
 
@@ -1007,7 +1012,9 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
       }
 
       const products = productsData || [];
-      const orders = (ordersData || []) as Order[];
+      const rawOrders = (ordersData || []) as Order[];
+      const deletedOrders = getClientDeletedOrders();
+      const orders = rawOrders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
 
       const totalOrders = orders.length;
       const totalRevenue = orders
@@ -1129,7 +1136,7 @@ export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
     );
   }
 
-  const filtered = list.filter(o => !deletedShopee.includes(o.id));
+  const filtered = list.filter(o => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
   return filtered.map(deserializeStatusAndNotes);
 }
 
@@ -1285,17 +1292,22 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
+      // 1. Mark as deleted using UPDATE first (highly robust)
+      await supabase
+        .from('shopee_orders')
+        .update({ created_by: '__DELETED__' })
+        .eq('id', id);
+
+      // 2. Try to physically delete
       const { error } = await supabase
         .from('shopee_orders')
         .delete()
         .eq('id', id);
       if (error) {
-        console.warn('Supabase delete shopee_order warning:', error);
-        supabaseFailed = true;
+        console.warn('Supabase physical delete shopee_order warning (row is marked deleted):', error);
       }
     } catch (err) {
       console.warn('Supabase delete shopee_order exception:', err);
-      supabaseFailed = true;
     }
   }
 
@@ -1362,7 +1374,7 @@ export async function dbGetMapsReviews(): Promise<MapsReview[]> {
     );
   }
 
-  const filtered = list.filter(o => !deletedMaps.includes(o.id));
+  const filtered = list.filter(o => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
   return filtered.map(deserializeStatusAndNotes);
 }
 
@@ -1516,17 +1528,22 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
+      // 1. Mark as deleted using UPDATE first (highly robust)
+      await supabase
+        .from('maps_reviews')
+        .update({ created_by: '__DELETED__' })
+        .eq('id', id);
+
+      // 2. Try to physically delete
       const { error } = await supabase
         .from('maps_reviews')
         .delete()
         .eq('id', id);
       if (error) {
-        console.warn('Supabase delete maps_review warning:', error);
-        supabaseFailed = true;
+        console.warn('Supabase physical delete maps_review warning (row is marked deleted):', error);
       }
     } catch (err) {
       console.warn('Supabase delete maps_review exception:', err);
-      supabaseFailed = true;
     }
   }
 

@@ -359,7 +359,7 @@ app.get('/api/orders', async (req, res) => {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data) {
-        const filtered = data.filter((o: any) => !deletedOrders.includes(o.id));
+        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
         return res.json(filtered);
       }
       console.error('Supabase error fetching orders:', error);
@@ -369,7 +369,7 @@ app.get('/api/orders', async (req, res) => {
   }
 
   const sortedOrders = [...db.orders]
-    .filter((o: Order) => !deletedOrders.includes(o.id))
+    .filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id))
     .sort((a: Order, b: Order) => 
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
@@ -557,7 +557,7 @@ app.get('/api/shopee_orders', async (req, res) => {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data) {
-        const filtered = data.filter((o: any) => !deletedShopee.includes(o.id));
+        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
         return res.json(filtered);
       }
       console.error('Supabase error fetching shopee_orders:', error);
@@ -566,7 +566,7 @@ app.get('/api/shopee_orders', async (req, res) => {
     }
   }
 
-  const filteredLocal = (db.shopee_orders || []).filter((o: any) => !deletedShopee.includes(o.id));
+  const filteredLocal = (db.shopee_orders || []).filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
   res.json(filteredLocal);
 });
 
@@ -679,7 +679,7 @@ app.get('/api/maps_reviews', async (req, res) => {
         .select('*')
         .order('created_at', { ascending: false });
       if (!error && data) {
-        const filtered = data.filter((o: any) => !deletedMaps.includes(o.id));
+        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
         return res.json(filtered);
       }
       console.error('Supabase error fetching maps_reviews:', error);
@@ -688,7 +688,7 @@ app.get('/api/maps_reviews', async (req, res) => {
     }
   }
 
-  const filteredLocal = (db.maps_reviews || []).filter((o: any) => !deletedMaps.includes(o.id));
+  const filteredLocal = (db.maps_reviews || []).filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
   res.json(filteredLocal);
 });
 
@@ -804,7 +804,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
       if (!prodError && !ordError && ordersData && productsData) {
         const rawOrders = ordersData as Order[];
-        const orders = rawOrders.filter((o: Order) => !deletedOrders.includes(o.id));
+        const orders = rawOrders.filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
 
         const totalOrders = orders.length;
         const totalRevenue = orders
@@ -846,7 +846,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
   }
 
   const rawOrders = db.orders as Order[];
-  const orders = rawOrders.filter((o: Order) => !deletedOrders.includes(o.id));
+  const orders = rawOrders.filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
 
   const totalOrders = orders.length;
   const totalRevenue = orders
