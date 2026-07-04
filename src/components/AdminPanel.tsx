@@ -30,6 +30,7 @@ import {
 
 interface AdminPanelProps {
   currentLang: Language;
+  onInstallApp?: () => void;
 }
 
 const getSlotIndicatorName = (slot: string): string => {
@@ -41,7 +42,7 @@ const getSlotIndicatorName = (slot: string): string => {
   return slot;
 };
 
-export default function AdminPanel({ currentLang }: AdminPanelProps) {
+export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProps) {
   const t = TRANSLATIONS[currentLang];
 
   // Component States
@@ -63,7 +64,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'
   const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'>('orders');
   // Settings view nested tab states
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'export_transactions' | 'google_sheets' | 'account_access' | 'qris_config'>('products');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'export_transactions' | 'google_sheets' | 'account_access' | 'qris_config' | 'app_install'>('products');
 
   // Google Sheets sync config state
   const [sheetsSyncConfig, setSheetsSyncConfigState] = useState(() => getSheetsSyncConfig());
@@ -3147,6 +3148,18 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   <Users className="h-3.5 w-3.5" />
                   <span>Hak Akses Akun</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsTab('app_install')}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeSettingsTab === 'app_install'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Pasang Aplikasi</span>
+                </button>
               </div>
 
               {activeSettingsTab === 'products' && (
@@ -3916,6 +3929,80 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeSettingsTab === 'app_install' && (
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6" id="app-install-settings-panel">
+                  <div className="space-y-1">
+                    <h3 className="text-base font-black text-slate-900 font-sans uppercase tracking-tight flex items-center gap-2">
+                      <Download className="h-5 w-5 text-blue-600" />
+                      Pasang Aplikasi GM AGENCY (PWA)
+                    </h3>
+                    <p className="text-xs text-slate-400 font-medium font-sans">
+                      Akses portal admin secara instan dari perangkat Anda layaknya aplikasi native tanpa membuka browser manual.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center pt-2">
+                    <div className="space-y-4">
+                      <div className="relative h-24 w-24 rounded-2xl overflow-hidden border-2 border-blue-500/50 bg-white shadow-md shadow-blue-500/20 flex items-center justify-center p-0.5">
+                        <img
+                          src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
+                          alt="GM AGENCY App Logo"
+                          className="w-full h-full object-cover rounded-xl"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <h4 className="font-sans font-bold text-sm text-slate-800">Kenapa memasang Aplikasi GM AGENCY?</h4>
+                        <ul className="text-xs text-slate-500 space-y-1.5 list-disc pl-4 font-medium">
+                          <li><strong>Akses Satu Ketukan</strong>: Akses instan dari Home Screen atau Desktop langsung ke portal Admin.</li>
+                          <li><strong>Performa Optimal</strong>: Lebih cepat, ringan, dan responsif.</li>
+                          <li><strong>Tampilan Bersih</strong>: Tanpa baris URL browser yang memakan ruang layar.</li>
+                        </ul>
+                      </div>
+
+                      <div className="pt-2">
+                        {onInstallApp ? (
+                          <button
+                            onClick={onInstallApp}
+                            className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                          >
+                            <Download className="h-4 w-4" />
+                            <span>Pasang Sekarang</span>
+                          </button>
+                        ) : (
+                          <div className="text-xs text-amber-600 font-bold bg-amber-50 border border-amber-200 p-3 rounded-xl">
+                            Fitur instalasi siap dipicu dari browser Anda. Gunakan tombol instalasi di menu browser Anda.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4">
+                      <h4 className="font-sans font-bold text-xs text-slate-800 uppercase tracking-wider">Status Instalasi</h4>
+                      <div className="flex items-center gap-2.5">
+                        <div className={`h-2.5 w-2.5 rounded-full ${
+                          (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true)
+                            ? 'bg-emerald-500 animate-pulse'
+                            : 'bg-amber-500'
+                        }`} />
+                        <span className="text-xs font-bold text-slate-700">
+                          {(window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true)
+                            ? 'Berjalan sebagai Aplikasi Standalone (PWA)'
+                            : 'Berjalan di Browser Web standard'}
+                        </span>
+                      </div>
+
+                      <div className="border-t border-slate-200 pt-3 space-y-2 text-slate-500 text-xs leading-relaxed font-medium">
+                        <p className="font-bold text-slate-700">Panduan Manual:</p>
+                        <p><strong>iOS/Safari</strong>: Ketuk tombol <strong>Share (Bagikan) 📤</strong> di bagian bawah, lalu pilih <strong>Add to Home Screen ➕</strong>.</p>
+                        <p><strong>Chrome/Android/PC</strong>: Klik tombol menu tiga titik <strong>⁝</strong> di pojok kanan atas, lalu pilih <strong>Install app (Instal aplikasi)</strong>.</p>
+                      </div>
                     </div>
                   </div>
                 </div>

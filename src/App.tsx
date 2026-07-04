@@ -365,7 +365,7 @@ export default function App() {
         ) : (
           /* ADMIN DATABASE DASHBOARD SCREEN */
           <div className="fade-in">
-            <AdminPanel currentLang={currentLang} />
+            <AdminPanel currentLang={currentLang} onInstallApp={handleInstallApp} />
           </div>
         )}
       </main>
