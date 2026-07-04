@@ -35,7 +35,7 @@ export default function Navbar({
 
   const [isAdminAuth, setIsAdminAuth] = useState(() => {
     try {
-      return sessionStorage.getItem('gm_admin_auth') === 'true';
+      return sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true';
     } catch (e) {
       return false;
     }
@@ -72,8 +72,8 @@ export default function Navbar({
 
       if (!slot) return false;
 
-      const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true';
-      const authUser = sessionStorage.getItem('gm_adminshp_user');
+      const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem(`gm_adminshp_auth_${slot}`) === 'true';
+      const authUser = sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user');
       return isAuth && authUser === slot;
     } catch (e) {
       return false;
@@ -85,7 +85,7 @@ export default function Navbar({
       setCurrentPath(window.location.pathname);
     };
     const handleAuthChange = () => {
-      setIsAdminAuth(sessionStorage.getItem('gm_admin_auth') === 'true');
+      setIsAdminAuth(sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true');
     };
     window.addEventListener('popstate', handleRoute);
     window.addEventListener('admin-auth-change', handleAuthChange);

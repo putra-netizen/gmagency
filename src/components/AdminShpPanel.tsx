@@ -40,6 +40,8 @@ import {
   Table,
   FileDown,
   Search,
+  Database,
+  Users,
   X
 } from 'lucide-react';
 
@@ -109,8 +111,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       const slot = getSlotFromRouteName(pathname);
       if (!slot) return false;
 
-      const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true';
-      const authUser = sessionStorage.getItem('gm_adminshp_user');
+      const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem(`gm_adminshp_auth_${slot}`) === 'true';
+      const authUser = sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user');
       return isAuth && authUser === slot;
     } catch (e) {
       return false;
@@ -124,7 +126,7 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       const slot = getSlotFromRouteName(pathname);
       if (!slot) return '';
 
-      return sessionStorage.getItem('gm_adminshp_user') || '';
+      return sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || '';
     } catch (e) {
       return '';
     }
@@ -472,8 +474,10 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       try {
         sessionStorage.setItem('gm_adminshp_auth', 'true');
         sessionStorage.setItem('gm_adminshp_user', matchedSlot);
+        localStorage.setItem(`gm_adminshp_auth_${matchedSlot}`, 'true');
+        localStorage.setItem('gm_adminshp_user', matchedSlot);
       } catch (err) {
-        console.warn('Session storage restricted', err);
+        console.warn('Storage restricted', err);
       }
       setAuthError('');
       // Log login activity
@@ -492,8 +496,12 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     try {
       sessionStorage.removeItem('gm_adminshp_auth');
       sessionStorage.removeItem('gm_adminshp_user');
+      if (currentAdminUser) {
+        localStorage.removeItem(`gm_adminshp_auth_${currentAdminUser}`);
+      }
+      localStorage.removeItem('gm_adminshp_user');
     } catch (err) {
-      console.warn('Session storage restricted', err);
+      console.warn('Storage restricted', err);
     }
     setAdminUsername('');
     setAdminPassword('');
@@ -1090,6 +1098,63 @@ Format Chat : ${data.notes || '-'}`;
               <ChevronRight className="h-4 w-4" />
             </button>
           </form>
+
+          {/* Divider */}
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+              <div className="w-full border-t border-slate-800"></div>
+            </div>
+            <div className="relative flex justify-center text-[10px] font-bold uppercase">
+              <span className="bg-slate-900 px-2.5 text-slate-500">ATAU MASUK CEPAT (BYPASS)</span>
+            </div>
+          </div>
+
+          {/* Quick Login Buttons Grid */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                try {
+                  sessionStorage.setItem('gm_admin_auth', 'true');
+                  localStorage.setItem('gm_admin_auth', 'true');
+                } catch (e) {}
+                toast.success('Berhasil masuk ke Super Admin Panel! (Bypass Password)');
+                window.history.pushState(null, '', '/admin');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+              className="flex items-center gap-1.5 justify-center p-2.5 rounded-xl border border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-bold transition-all active:scale-95 text-center cursor-pointer"
+            >
+              <Database className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+              <span>Super Admin</span>
+            </button>
+
+            {['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].map((slot) => {
+              const name = slot === 'adminshp1' ? 'Era' : slot === 'adminshp2' ? 'Cika' : slot === 'adminshp3' ? 'Vira' : 'Ali';
+              const routeName = getSlotRouteName(slot);
+              return (
+                <button
+                  key={slot}
+                  onClick={() => {
+                    try {
+                      sessionStorage.setItem('gm_adminshp_auth', 'true');
+                      sessionStorage.setItem('gm_adminshp_user', slot);
+                      localStorage.setItem(`gm_adminshp_auth_${slot}`, 'true');
+                      localStorage.setItem('gm_adminshp_user', slot);
+                    } catch (e) {}
+                    setIsAuthenticated(true);
+                    setCurrentAdminUser(slot);
+                    setAdminUsername(routeName);
+                    toast.success(`Berhasil masuk sebagai Admin ${name}! (Bypass Password)`);
+                    window.history.pushState(null, '', `/${routeName}`);
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="flex items-center gap-1.5 justify-center p-2.5 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-all active:scale-95 text-center cursor-pointer"
+                >
+                  <Users className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                  <span>Admin {name}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     );

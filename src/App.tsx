@@ -16,7 +16,7 @@ import { Product, Language, Order } from './types';
 import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected } from './lib/supabase';
 import { TRANSLATIONS } from './lib/translations';
 import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   // Global States
@@ -65,6 +65,84 @@ export default function App() {
     if (isAdminShpPath(path)) return 'adminshp';
     return 'home';
   });
+
+  // PWA installation states
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallToast, setShowInstallToast] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+      const isInstalled = localStorage.getItem('gm_install_installed') === 'true';
+      const isDismissed = sessionStorage.getItem('gm_install_dismissed') === 'true';
+
+      // Only prompt when in the admin panel, not standalone, not installed, and not dismissed
+      if (currentView === 'admin' && !isStandalone && !isInstalled && !isDismissed) {
+        setShowInstallToast(true);
+      }
+    };
+
+    const handleAppInstalled = () => {
+      localStorage.setItem('gm_install_installed', 'true');
+      setShowInstallToast(false);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    // Show custom prompt after 4 seconds if in the admin view and conditions are met
+    const timer = setTimeout(() => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+      const isInstalled = localStorage.getItem('gm_install_installed') === 'true';
+      if (currentView === 'admin' && !isStandalone && !isInstalled) {
+        try {
+          const dismissed = sessionStorage.getItem('gm_install_dismissed') === 'true';
+          if (!dismissed) {
+            setShowInstallToast(true);
+          }
+        } catch (err) {}
+      }
+    }, 4000);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      clearTimeout(timer);
+    };
+  }, [currentView]);
+
+  const handleInstallApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User response to install prompt: ${outcome}`);
+      if (outcome === 'accepted') {
+        localStorage.setItem('gm_install_installed', 'true');
+      }
+      setDeferredPrompt(null);
+      setShowInstallToast(false);
+    } else {
+      alert(
+        currentLang === 'id'
+          ? 'Untuk memasang GM AGENCY di perangkat Anda:\n\n' +
+            '• Safari (iOS): Klik tombol "Share" (Bagikan) 📤 di baris bawah browser, lalu pilih "Add to Home Screen" (Tambahkan ke Layar Utama) ➕.\n\n' +
+            '• Chrome (Android/PC): Klik ikon menu titik tiga ⁝ di kanan atas browser, lalu pilih "Install app" (Instal aplikasi) atau "Tambahkan ke Layar Utama".'
+          : 'To install GM AGENCY on your device:\n\n' +
+            '• Safari (iOS): Tap the "Share" button 📤 at the bottom of the screen, then choose "Add to Home Screen" ➕.\n\n' +
+            '• Chrome (Android/PC): Tap the menu icon ⁝ at the top right, then select "Install app" or "Add to Home Screen".'
+      );
+    }
+  };
+
+  const handleDismissInstall = () => {
+    setShowInstallToast(false);
+    try {
+      sessionStorage.setItem('gm_install_dismissed', 'true');
+    } catch (e) {}
+  };
 
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -449,6 +527,64 @@ export default function App() {
           </motion.a>
         </div>
       )}
+
+      {/* PWA Install Banner/Toast */}
+      <AnimatePresence>
+        {showInstallToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            className="fixed bottom-24 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-50 bg-slate-900/95 backdrop-blur-xl border border-slate-800 p-5 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col gap-4 text-white animate-fade-in"
+            id="pwa-install-toast"
+          >
+            <div className="flex items-start gap-4">
+              {/* Enlarged Favicon Logo */}
+              <div className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-2xl overflow-hidden border-2 border-blue-500/50 bg-white shadow-md shadow-blue-500/20 shrink-0 flex items-center justify-center p-0.5">
+                <img
+                  src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
+                  alt="GM AGENCY App Logo"
+                  className="w-full h-full object-cover rounded-xl"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+
+              {/* Message Details */}
+              <div className="space-y-1">
+                <h4 className="font-sans font-black tracking-wider text-sm text-blue-400 uppercase">
+                  {currentLang === 'id' ? 'PASANG GM AGENCY' : 'INSTALL GM AGENCY'}
+                </h4>
+                <p className="font-sans text-xs font-semibold text-white">
+                  {currentLang === 'id' ? 'Tambahkan ke Desktop / Home Screen' : 'Add to Desktop / Home Screen'}
+                </p>
+                <p className="font-sans text-[11px] leading-relaxed text-slate-400">
+                  {currentLang === 'id'
+                    ? 'Akses portal admin & kelola pesanan langsung lewat pintasan desktop dengan cepat, lancar tanpa bolak-balik.'
+                    : 'Access admin portals & manage orders directly through your desktop or mobile shortcut with absolute ease.'
+                  }
+                </p>
+              </div>
+            </div>
+
+            {/* Actions Grid */}
+            <div className="flex items-center justify-end gap-2.5 border-t border-slate-800/80 pt-3.5">
+              <button
+                onClick={handleDismissInstall}
+                className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                {currentLang === 'id' ? 'Nanti Saja' : 'Later'}
+              </button>
+              <button
+                onClick={handleInstallApp}
+                className="px-4.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-[11px] font-extrabold uppercase tracking-widest shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>{currentLang === 'id' ? 'PASANG SEKARANG' : 'INSTALL NOW'}</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 6. Global custom toast container */}
       <ToastContainer />
