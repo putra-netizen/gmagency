@@ -158,12 +158,14 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
 
   // Search and Sort states for each table
   const [searchUnpaid, setSearchUnpaid] = useState('');
-  const [sortUnpaid, setSortUnpaid] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [sortUnpaid, setSortUnpaid] = useState<'all' | 'pending' | 'progress' | 'done'>('all');
   const [timeFilterUnpaid, setTimeFilterUnpaid] = useState<'all' | 'week' | 'month'>('all');
+  const [serviceFilterUnpaid, setServiceFilterUnpaid] = useState<string>('all');
 
   const [searchPaid, setSearchPaid] = useState('');
-  const [sortPaid, setSortPaid] = useState<'pending' | 'progress' | 'done'>('pending');
+  const [sortPaid, setSortPaid] = useState<'all' | 'pending' | 'progress' | 'done'>('all');
   const [timeFilterPaid, setTimeFilterPaid] = useState<'all' | 'week' | 'month'>('all');
+  const [serviceFilterPaid, setServiceFilterPaid] = useState<string>('all');
 
   const [searchShopee, setSearchShopee] = useState('');
   const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
@@ -1012,6 +1014,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     .filter(o => o.payment_status !== 'PAID')
     .filter(o => isWithinTimeframe(o.created_at, timeFilterUnpaid))
     .filter(o => {
+      if (serviceFilterUnpaid === 'all') return true;
+      const prodName = products.find(p => p.id === serviceFilterUnpaid)?.name || '';
+      return o.product_id === serviceFilterUnpaid || o.product_name === prodName;
+    })
+    .filter(o => {
       const isPending = !o.worker_status || o.worker_status === 'unassigned';
       const isProgress = o.worker_status === 'taken';
       const isDone = o.worker_status === 'done';
@@ -1036,6 +1043,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const filteredPaidOrders = orders
     .filter(o => o.payment_status === 'PAID')
     .filter(o => isWithinTimeframe(o.created_at, timeFilterPaid))
+    .filter(o => {
+      if (serviceFilterPaid === 'all') return true;
+      const prodName = products.find(p => p.id === serviceFilterPaid)?.name || '';
+      return o.product_id === serviceFilterPaid || o.product_name === prodName;
+    })
     .filter(o => {
       const isPending = !o.worker_status || o.worker_status === 'unassigned';
       const isProgress = o.worker_status === 'taken';
@@ -1361,44 +1373,50 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   />
                 </div>
                 
-                {/* Minimalist sorting / filtering controls */}
+                {/* Beautiful Dragdown sorting / filtering controls */}
                 <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Status / Progres Filter (Minimalist badge/pills style) */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
-                    {(['pending', 'progress', 'done'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setSortUnpaid(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          sortUnpaid === opt
-                            ? 'bg-slate-900 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
-                      </button>
-                    ))}
+                  {/* Tipe Jasa Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tipe Jasa:</span>
+                    <select
+                      value={serviceFilterUnpaid}
+                      onChange={(e) => setServiceFilterUnpaid(e.target.value)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">SEMUA</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Timeframe Filter (Minimalist badge/pills style) */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
-                    {(['all', 'week', 'month'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setTimeFilterUnpaid(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          timeFilterUnpaid === opt
-                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt === 'all' ? (currentLang === 'id' ? 'Semua' : 'All') : opt === 'week' ? (currentLang === 'id' ? 'Minggu' : 'Week') : (currentLang === 'id' ? 'Bulan' : 'Month')}
-                      </button>
-                    ))}
+                  {/* Status / Progres Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
+                    <select
+                      value={sortUnpaid}
+                      onChange={(e) => setSortUnpaid(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">SEMUA</option>
+                      <option value="pending">PENDING</option>
+                      <option value="progress">PROGRES</option>
+                      <option value="done">DONE</option>
+                    </select>
+                  </div>
+
+                  {/* Timeframe Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
+                    <select
+                      value={timeFilterUnpaid}
+                      onChange={(e) => setTimeFilterUnpaid(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
+                      <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
+                      <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -1595,44 +1613,50 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   />
                 </div>
 
-                {/* Minimalist sorting / filtering controls */}
+                {/* Beautiful Dragdown sorting / filtering controls */}
                 <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Status / Progres Filter (Minimalist badge/pills style) */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Progres:</span>
-                    {(['pending', 'progress', 'done'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setSortPaid(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          sortPaid === opt
-                            ? 'bg-slate-900 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt === 'pending' ? 'Pending' : opt === 'progress' ? 'Progres' : 'Done'}
-                      </button>
-                    ))}
+                  {/* Tipe Jasa Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tipe Jasa:</span>
+                    <select
+                      value={serviceFilterPaid}
+                      onChange={(e) => setServiceFilterPaid(e.target.value)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">SEMUA</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Timeframe Filter (Minimalist badge/pills style) */}
-                  <div className="flex items-center gap-1.5 bg-white/60 p-1 rounded-xl border border-slate-100 shadow-sm text-[10px]">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider px-1.5">Waktu:</span>
-                    {(['all', 'week', 'month'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setTimeFilterPaid(opt)}
-                        className={`px-2.5 py-1 rounded-lg transition-all font-sans font-bold cursor-pointer uppercase ${
-                          timeFilterPaid === opt
-                            ? 'bg-blue-600 text-white shadow-sm font-extrabold'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        {opt === 'all' ? (currentLang === 'id' ? 'Semua' : 'All') : opt === 'week' ? (currentLang === 'id' ? 'Minggu' : 'Week') : (currentLang === 'id' ? 'Bulan' : 'Month')}
-                      </button>
-                    ))}
+                  {/* Status / Progres Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
+                    <select
+                      value={sortPaid}
+                      onChange={(e) => setSortPaid(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">SEMUA</option>
+                      <option value="pending">PENDING</option>
+                      <option value="progress">PROGRES</option>
+                      <option value="done">DONE</option>
+                    </select>
+                  </div>
+
+                  {/* Timeframe Filter (Beautiful Dropdown) */}
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
+                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
+                    <select
+                      value={timeFilterPaid}
+                      onChange={(e) => setTimeFilterPaid(e.target.value as any)}
+                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
+                    >
+                      <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
+                      <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
+                      <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
+                    </select>
                   </div>
                 </div>
               </div>
