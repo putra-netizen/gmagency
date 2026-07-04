@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Product, Order, DashboardStats, ShopeeOrder, MapsReview } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
+import { triggerSheetsSync } from '../utils/sheetsSyncHelper';
 
 const MOCK_ORDERS_TO_SEED: Order[] = [
   {
@@ -841,7 +842,9 @@ export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
         .single();
       
       if (!error && data) {
-        return data as Order;
+        const result = data as Order;
+        triggerSheetsSync('order', 'insert', result);
+        return result;
       }
       if (error) {
         console.warn('Supabase create order warning, falling back to Local/API:', error);
@@ -864,7 +867,9 @@ export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageOrder(data);
-        return data as Order;
+        const result = data as Order;
+        triggerSheetsSync('order', 'insert', result);
+        return result;
       }
     }
   } catch (err) {
@@ -872,6 +877,7 @@ export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
   }
 
   updateLocalStorageOrder(completeOrder);
+  triggerSheetsSync('order', 'insert', completeOrder);
   return completeOrder;
 }
 
@@ -886,7 +892,9 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
         .single();
       
       if (!error && data) {
-        return data as Order;
+        const result = data as Order;
+        triggerSheetsSync('order', 'update', result);
+        return result;
       }
       if (error) {
         console.warn('Supabase update order warning, falling back to Local/API:', error);
@@ -909,7 +917,9 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageOrder(data);
-        return data as Order;
+        const result = data as Order;
+        triggerSheetsSync('order', 'update', result);
+        return result;
       }
     }
   } catch (err) {
@@ -925,6 +935,7 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
     } as Order;
     list[index] = updated;
     localStorage.setItem('gmsolution_local_orders', JSON.stringify(list));
+    triggerSheetsSync('order', 'update', updated);
     return updated;
   }
   throw new Error('Order not found in local storage fallback');
@@ -968,6 +979,7 @@ export async function dbDeleteOrder(id: string): Promise<boolean> {
     console.warn('Failed to delete order via API:', err);
   }
 
+  triggerSheetsSync('order', 'delete', { id });
   return true;
 }
 
@@ -1174,7 +1186,9 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
         .select()
         .single();
       if (!error && data) {
-        return deserializeStatusAndNotes(data as ShopeeOrder);
+        const result = deserializeStatusAndNotes(data as ShopeeOrder);
+        triggerSheetsSync('shopee_order', 'insert', result);
+        return result;
       }
       if (error) {
         console.warn('Supabase create shopee_order warning, falling back to Local/API:', error);
@@ -1197,7 +1211,9 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageShopeeOrder(data);
-        return deserializeStatusAndNotes(data as ShopeeOrder);
+        const result = deserializeStatusAndNotes(data as ShopeeOrder);
+        triggerSheetsSync('shopee_order', 'insert', result);
+        return result;
       }
     }
   } catch (err) {
@@ -1205,6 +1221,7 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
   }
 
   updateLocalStorageShopeeOrder(dbOrder);
+  triggerSheetsSync('shopee_order', 'insert', completeOrder);
   return completeOrder;
 }
 
@@ -1241,7 +1258,9 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
         .select()
         .single();
       if (!error && data) {
-        return deserializeStatusAndNotes(data as ShopeeOrder);
+        const result = deserializeStatusAndNotes(data as ShopeeOrder);
+        triggerSheetsSync('shopee_order', 'update', result);
+        return result;
       }
       if (error) {
         console.warn('Supabase update shopee_order warning, falling back to Local/API:', error);
@@ -1264,7 +1283,9 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageShopeeOrder(data);
-        return deserializeStatusAndNotes(data as ShopeeOrder);
+        const result = deserializeStatusAndNotes(data as ShopeeOrder);
+        triggerSheetsSync('shopee_order', 'update', result);
+        return result;
       }
     }
   } catch (err) {
@@ -1281,7 +1302,9 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
       list[idx] = updated;
       localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(list));
     }
-    return deserializeStatusAndNotes(updated);
+    const result = deserializeStatusAndNotes(updated);
+    triggerSheetsSync('shopee_order', 'update', result);
+    return result;
   }
   throw new Error('Shopee order not found in local storage fallback');
 }
@@ -1323,6 +1346,7 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
     console.warn('Failed to delete Shopee order via API:', err);
   }
 
+  triggerSheetsSync('shopee_order', 'delete', { id });
   return true;
 }
 
@@ -1410,7 +1434,9 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
         .select()
         .single();
       if (!error && data) {
-        return deserializeStatusAndNotes(data as MapsReview);
+        const result = deserializeStatusAndNotes(data as MapsReview);
+        triggerSheetsSync('maps_review', 'insert', result);
+        return result;
       }
       if (error) {
         console.warn('Supabase create maps_review warning, falling back to Local/API:', error);
@@ -1433,7 +1459,9 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageMapsReview(data);
-        return deserializeStatusAndNotes(data as MapsReview);
+        const result = deserializeStatusAndNotes(data as MapsReview);
+        triggerSheetsSync('maps_review', 'insert', result);
+        return result;
       }
     }
   } catch (err) {
@@ -1441,6 +1469,7 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
   }
 
   updateLocalStorageMapsReview(dbReview);
+  triggerSheetsSync('maps_review', 'insert', completeReview);
   return completeReview;
 }
 
@@ -1477,7 +1506,9 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
         .select()
         .single();
       if (!error && data) {
-        return deserializeStatusAndNotes(data as MapsReview);
+        const result = deserializeStatusAndNotes(data as MapsReview);
+        triggerSheetsSync('maps_review', 'update', result);
+        return result;
       }
       if (error) {
         console.warn('Supabase update maps_review warning, falling back to Local/API:', error);
@@ -1500,7 +1531,9 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         updateLocalStorageMapsReview(data);
-        return deserializeStatusAndNotes(data as MapsReview);
+        const result = deserializeStatusAndNotes(data as MapsReview);
+        triggerSheetsSync('maps_review', 'update', result);
+        return result;
       }
     }
   } catch (err) {
@@ -1517,7 +1550,9 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
       list[idx] = updated;
       localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(list));
     }
-    return deserializeStatusAndNotes(updated);
+    const result = deserializeStatusAndNotes(updated);
+    triggerSheetsSync('maps_review', 'update', result);
+    return result;
   }
   throw new Error('Maps review not found in local storage fallback');
 }
@@ -1559,6 +1594,7 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
     console.warn('Failed to delete Maps review via API:', err);
   }
 
+  triggerSheetsSync('maps_review', 'delete', { id });
   return true;
 }
 

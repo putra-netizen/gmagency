@@ -9,21 +9,23 @@ import { Product, Order, Language, PaymentStatus, DashboardStats, ShopeeOrder, M
 import { TRANSLATIONS } from '../lib/translations';
 import { 
   dbGetProducts, dbCreateProduct, dbUpdateProduct, dbDeleteProduct,
-  dbGetOrders, dbUpdateOrder, dbDeleteOrder, dbGetDashboardStats,
-  dbGetShopeeOrders, dbUpdateShopeeOrder, dbDeleteShopeeOrder,
-  dbGetMapsReviews, dbUpdateMapsReview, dbDeleteMapsReview,
+  dbGetOrders, dbCreateOrder, dbUpdateOrder, dbDeleteOrder, dbGetDashboardStats,
+  dbGetShopeeOrders, dbCreateShopeeOrder, dbUpdateShopeeOrder, dbDeleteShopeeOrder,
+  dbGetMapsReviews, dbCreateMapsReview, dbGetMapsReviews as dbGetMapsReviewsOriginal, dbUpdateMapsReview, dbDeleteMapsReview,
   dbUploadProductImage
 } from '../lib/supabase';
 import { getAdminShpLogs, clearAdminShpLogs, AdminShpLog, logAdminShpAction } from '../utils/adminshpLogs';
 import { formatRupiah } from './ProductCard';
 import { getQrisConfig, saveQrisConfig, resetQrisConfig } from '../utils/qrisHelper';
 import { toast } from '../utils/toast';
+import { getSheetsSyncConfig, saveSheetsSyncConfig, getGoogleAppsScriptTemplate } from '../utils/sheetsSyncHelper';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
-  Briefcase, Save, AlertCircle, FileText, Check, Database, X,
+  Briefcase, Save, AlertCircle, FileText, Check, Database, X, Globe,
   ExternalLink, Image as ImageIcon, Settings, ShoppingCart, Copy, ArrowLeft,
-  Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown
+  Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
+  FileSpreadsheet, Download
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -61,7 +63,11 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'
   const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'>('orders');
   // Settings view nested tab states
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'spreadsheet' | 'account_access' | 'qris_config'>('products');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'export_transactions' | 'google_sheets' | 'account_access' | 'qris_config'>('products');
+
+  // Google Sheets sync config state
+  const [sheetsSyncConfig, setSheetsSyncConfigState] = useState(() => getSheetsSyncConfig());
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
 
   // Custom credentials state for adminshp1..4
   const [adminshpCreds, setAdminshpCreds] = useState<Record<string, { username: string; password: string }>>(() => {
@@ -200,31 +206,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
-  // Spreadsheet integration states
-  const [spreadsheetUrl, setSpreadsheetUrl] = useState(() => {
-    try {
-      return localStorage.getItem('gm_spreadsheet_url') || 'https://docs.google.com/spreadsheets/d/1y6vjAeo9qW_3V3X27I106R6kC_u_gX50rLzRE9fVp6A/edit';
-    } catch (e) {
-      return 'https://docs.google.com/spreadsheets/d/1y6vjAeo9qW_3V3X27I106R6kC_u_gX50rLzRE9fVp6A/edit';
-    }
-  });
-  const [sheetName, setSheetName] = useState(() => {
-    try {
-      return localStorage.getItem('gm_sheet_name') || 'Pesanan';
-    } catch (e) {
-      return 'Pesanan';
-    }
-  });
-  const [isSpreadsheetConnected, setIsSpreadsheetConnected] = useState(() => {
-    try {
-      return localStorage.getItem('gm_spreadsheet_connected') === 'true';
-    } catch (e) {
-      return false;
-    }
-  });
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
-
   // Authentication handlers
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -270,47 +251,6 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
     };
   }, []);
 
-  // Spreadsheet settings handlers
-  const handleSaveSpreadsheetSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      localStorage.setItem('gm_spreadsheet_url', spreadsheetUrl);
-      localStorage.setItem('gm_sheet_name', sheetName);
-      localStorage.setItem('gm_spreadsheet_connected', 'true');
-    } catch (err) {
-      console.warn('Local storage restricted', err);
-    }
-    setIsSpreadsheetConnected(true);
-    toast.success(currentLang === 'id' ? 'Pengaturan koneksi spreadsheet berhasil disimpan!' : 'Spreadsheet connection settings saved successfully!');
-  };
-
-  const handleDisconnectSpreadsheet = () => {
-    try {
-      localStorage.removeItem('gm_spreadsheet_connected');
-    } catch (err) {
-      console.warn('Local storage restricted', err);
-    }
-    setIsSpreadsheetConnected(false);
-    setSyncResult(null);
-    toast.info(currentLang === 'id' ? 'Koneksi spreadsheet diputuskan.' : 'Spreadsheet connection disconnected.');
-  };
-
-  const handleSyncSpreadsheet = () => {
-    if (!isSpreadsheetConnected) {
-      toast.error(currentLang === 'id' ? 'Silakan simpan pengaturan koneksi spreadsheet terlebih dahulu!' : 'Please save spreadsheet connection settings first!');
-      return;
-    }
-    setIsSyncing(true);
-    setSyncResult(null);
-    setTimeout(() => {
-      setIsSyncing(false);
-      setSyncResult(currentLang === 'id' 
-        ? `Sync Sukses! Berhasil menyinkronkan ${orders.length} data pesanan ke Google Sheets pada lembar "${sheetName}".` 
-        : `Sync Success! Successfully synchronized ${orders.length} orders data to Google Sheets on sheet "${sheetName}".`
-      );
-    }, 1800);
-  };
-
   // Product CRUD Modal/Form states
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -326,6 +266,355 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+
+  // Order edit modal state
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [orderBuyerName, setOrderBuyerName] = useState('');
+  const [orderPhoneNumber, setOrderPhoneNumber] = useState('');
+  const [orderQuantity, setOrderQuantity] = useState(1);
+  const [orderNotes, setOrderNotes] = useState('');
+  const [orderTargetLink, setOrderTargetLink] = useState('');
+  const [orderTargetSpamPhone, setOrderTargetSpamPhone] = useState('');
+  const [orderProductId, setOrderProductId] = useState('');
+  const [orderTotalPrice, setOrderTotalPrice] = useState(0);
+
+  const handleOpenEditOrder = (order: Order) => {
+    setEditingOrder(order);
+    setOrderBuyerName(order.buyer_name || '');
+    setOrderPhoneNumber(order.phone_number || '');
+    setOrderQuantity(order.quantity || 1);
+    setOrderNotes(order.notes || '');
+    setOrderTargetLink(order.target_link || '');
+    setOrderTargetSpamPhone(order.target_spam_phone || '');
+    setOrderProductId(order.product_id || '');
+    setOrderTotalPrice(order.total_price || 0);
+    setIsOrderModalOpen(true);
+  };
+
+  // Recalculate total price when product or quantity changes
+  useEffect(() => {
+    if (editingOrder && orderProductId) {
+      const selectedProduct = products.find(p => p.id === orderProductId);
+      if (selectedProduct) {
+        setOrderTotalPrice(selectedProduct.price * orderQuantity);
+      }
+    }
+  }, [orderProductId, orderQuantity, products, editingOrder]);
+
+  const handleSaveOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+    try {
+      const selectedProduct = products.find(p => p.id === orderProductId);
+      const updatedData: Partial<Order> = {
+        buyer_name: orderBuyerName,
+        phone_number: orderPhoneNumber,
+        quantity: orderQuantity,
+        notes: orderNotes,
+        target_link: orderTargetLink,
+        target_spam_phone: orderTargetSpamPhone,
+        product_id: orderProductId,
+        product_name: selectedProduct ? selectedProduct.name : editingOrder.product_name,
+        total_price: orderTotalPrice,
+      };
+
+      await dbUpdateOrder(editingOrder.id, updatedData);
+      toast.success(currentLang === 'id' ? 'Pesanan berhasil diperbarui' : 'Order updated successfully');
+      setIsOrderModalOpen(false);
+      setEditingOrder(null);
+      
+      // Reload order states
+      const ordsData = await dbGetOrders();
+      setOrders(ordsData);
+    } catch (err) {
+      console.error(err);
+      toast.error(currentLang === 'id' ? 'Gagal memperbarui pesanan' : 'Failed to update order');
+    }
+  };
+
+  // Shopee order edit state
+  const [editingShopeeOrder, setEditingShopeeOrder] = useState<ShopeeOrder | null>(null);
+  const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
+  const [editShpStoreName, setEditShpStoreName] = useState('');
+  const [editShpBuyerName, setEditShpBuyerName] = useState('');
+  const [editShpServiceType, setEditShpServiceType] = useState('');
+  const [editShpQuantity, setEditShpQuantity] = useState(1);
+  const [editShpTargetLink, setEditShpTargetLink] = useState('');
+  const [editShpNotes, setEditShpNotes] = useState('');
+
+  // Maps review edit state
+  const [editingMapsReview, setEditingMapsReview] = useState<MapsReview | null>(null);
+  const [isMapsModalOpen, setIsMapsModalOpen] = useState(false);
+  const [editMapsClientName, setEditMapsClientName] = useState('');
+  const [editMapsStoreName, setEditMapsStoreName] = useState('');
+  const [editMapsLink, setEditMapsLink] = useState('');
+  const [editMapsTargetCount, setEditMapsTargetCount] = useState(5);
+  const [editMapsNotes, setEditMapsNotes] = useState('');
+  const [editMapsReviewType, setEditMapsReviewType] = useState<'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS'>('G_MAPS');
+  const [editMapsAccounts, setEditMapsAccounts] = useState<string[]>([]);
+
+  const handleOpenEditShopee = (order: ShopeeOrder) => {
+    setEditingShopeeOrder(order);
+    setEditShpStoreName(order.store_name || '');
+    setEditShpBuyerName(order.buyer_name || '');
+    setEditShpServiceType(order.service_type || '');
+    setEditShpQuantity(order.quantity || 1);
+    setEditShpTargetLink(order.target_link || '');
+    setEditShpNotes(order.notes || '');
+    setIsShopeeModalOpen(true);
+  };
+
+  const handleSaveShopeeOrderEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingShopeeOrder) return;
+    try {
+      const updated: Partial<ShopeeOrder> = {
+        store_name: editShpStoreName,
+        buyer_name: editShpBuyerName,
+        service_type: editShpServiceType,
+        quantity: editShpQuantity,
+        target_link: editShpTargetLink,
+        notes: editShpNotes
+      };
+      await dbUpdateShopeeOrder(editingShopeeOrder.id, updated);
+      toast.success(currentLang === 'id' ? 'Pesanan Shopee berhasil diperbarui' : 'Shopee order updated successfully');
+      setIsShopeeModalOpen(false);
+      setEditingShopeeOrder(null);
+      // Reload lists
+      const data = await dbGetShopeeOrders();
+      setShopeeOrders(data);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memperbarui pesanan Shopee');
+    }
+  };
+
+  const handleOpenEditMaps = (review: MapsReview) => {
+    setEditingMapsReview(review);
+    setEditMapsClientName(review.client_name || '');
+    setEditMapsStoreName(review.store_name || '');
+    setEditMapsLink(review.maps_link || '');
+    setEditMapsTargetCount(review.target_count || 5);
+    setEditMapsNotes(review.notes || '');
+    setEditMapsReviewType(review.review_type as any || 'G_MAPS');
+    setEditMapsAccounts(review.reviewer_accounts || []);
+    setIsMapsModalOpen(true);
+  };
+
+  const handleSaveMapsReviewEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMapsReview) return;
+    try {
+      const updated: Partial<MapsReview> = {
+        client_name: editMapsClientName,
+        store_name: editMapsStoreName,
+        maps_link: editMapsLink,
+        target_count: editMapsTargetCount,
+        notes: editMapsNotes,
+        review_type: editMapsReviewType,
+        reviewer_accounts: editMapsAccounts
+      };
+      await dbUpdateMapsReview(editingMapsReview.id, updated);
+      toast.success(currentLang === 'id' ? 'Review Maps berhasil diperbarui' : 'Maps review updated successfully');
+      setIsMapsModalOpen(false);
+      setEditingMapsReview(null);
+      // Reload lists
+      const data = await dbGetMapsReviews();
+      setMapsReviews(data);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memperbarui review Maps');
+    }
+  };
+
+  // Online Export Settings State
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
+  const [exportOrderType, setExportOrderType] = useState<'orders' | 'shopee_orders' | 'maps_reviews'>('orders');
+  const [exportColumns, setExportColumns] = useState<Record<string, boolean>>({
+    id: true,
+    created_at: true,
+    buyer_name: true,
+    whatsapp_number: true,
+    product_name: true,
+    target_link: true,
+    status: true,
+    payment_method: true,
+    price: true,
+    notes: true,
+    created_by: true,
+    store_name: true,
+    service_type: true,
+    quantity: true,
+    job_status: true,
+    worker_assigned: true,
+    client_name: true,
+    review_type: true,
+    maps_link: true,
+    target_count: true,
+    reviewer_accounts: true,
+    worker: true,
+    proof_link: true,
+  });
+
+  // Filtered exports based on Date Range
+  const filteredOrdersExport = orders.filter(order => {
+    if (!order.created_at) return true;
+    const orderDate = order.created_at.substring(0, 10);
+    if (exportStartDate && orderDate < exportStartDate) return false;
+    if (exportEndDate && orderDate > exportEndDate) return false;
+    return true;
+  });
+
+  const filteredShopeeExport = shopeeOrders.filter(order => {
+    if (!order.created_at) return true;
+    const orderDate = order.created_at.substring(0, 10);
+    if (exportStartDate && orderDate < exportStartDate) return false;
+    if (exportEndDate && orderDate > exportEndDate) return false;
+    return true;
+  });
+
+  const filteredMapsExport = mapsReviews.filter(review => {
+    if (!review.created_at) return true;
+    const reviewDate = review.created_at.substring(0, 10);
+    if (exportStartDate && reviewDate < exportStartDate) return false;
+    if (exportEndDate && reviewDate > exportEndDate) return false;
+    return true;
+  });
+
+  // Client-side automatic CSV download handler
+  const handleDownloadCSV = () => {
+    let headers: string[] = [];
+    let rows: string[][] = [];
+    let fileName = '';
+
+    if (exportOrderType === 'orders') {
+      fileName = `pesanan_layanan_umum_${new Date().toISOString().substring(0, 10)}.csv`;
+      const colDefs = [
+        { key: 'id', label: 'ID Pesanan' },
+        { key: 'created_at', label: 'Tanggal Input' },
+        { key: 'buyer_name', label: 'Nama Pembeli' },
+        { key: 'whatsapp_number', label: 'No WhatsApp' },
+        { key: 'product_name', label: 'Nama Layanan' },
+        { key: 'target_link', label: 'Link Target' },
+        { key: 'price', label: 'Harga' },
+        { key: 'payment_method', label: 'Metode Bayar' },
+        { key: 'status', label: 'Status' },
+        { key: 'notes', label: 'Catatan' },
+        { key: 'created_by', label: 'Admin Input' },
+      ];
+      const activeCols = colDefs.filter(col => exportColumns[col.key]);
+      headers = activeCols.map(c => c.label);
+
+      rows = filteredOrdersExport.map(item => {
+        return activeCols.map(col => {
+          if (col.key === 'id') return item.id || '';
+          if (col.key === 'created_at') return item.created_at ? item.created_at.substring(0, 16).replace('T', ' ') : '-';
+          if (col.key === 'buyer_name') return item.buyer_name || '';
+          if (col.key === 'whatsapp_number') return item.whatsapp_number || '';
+          if (col.key === 'product_name') return item.product_name || '';
+          if (col.key === 'target_link') return item.target_link || '';
+          if (col.key === 'price') return String(item.price || 0);
+          if (col.key === 'payment_method') return item.payment_method || '';
+          if (col.key === 'status') return item.status || '';
+          if (col.key === 'notes') return item.notes || '';
+          if (col.key === 'created_by') return getSlotIndicatorName(item.created_by || '');
+          return '';
+        });
+      });
+    } else if (exportOrderType === 'shopee_orders') {
+      fileName = `pesanan_shopee_${new Date().toISOString().substring(0, 10)}.csv`;
+      const colDefs = [
+        { key: 'id', label: 'ID Pesanan' },
+        { key: 'created_at', label: 'Tanggal Input' },
+        { key: 'store_name', label: 'Nama Toko' },
+        { key: 'buyer_name', label: 'Nama Pembeli' },
+        { key: 'service_type', label: 'Tipe Jasa' },
+        { key: 'quantity', label: 'Jumlah (Qty)' },
+        { key: 'target_link', label: 'Target WA/Link' },
+        { key: 'job_status', label: 'Status Kerja' },
+        { key: 'worker_assigned', label: 'Pekerja' },
+        { key: 'notes', label: 'Catatan' },
+        { key: 'created_by', label: 'Admin Input' },
+      ];
+      const activeCols = colDefs.filter(col => exportColumns[col.key]);
+      headers = activeCols.map(c => c.label);
+
+      rows = filteredShopeeExport.map(item => {
+        return activeCols.map(col => {
+          if (col.key === 'id') return item.id || '';
+          if (col.key === 'created_at') return item.created_at ? item.created_at.substring(0, 16).replace('T', ' ') : '-';
+          if (col.key === 'store_name') return item.store_name || '';
+          if (col.key === 'buyer_name') return item.buyer_name || '';
+          if (col.key === 'service_type') return item.service_type || '';
+          if (col.key === 'quantity') return String(item.quantity || 1);
+          if (col.key === 'target_link') return item.target_link || '';
+          if (col.key === 'job_status') return item.job_status || '';
+          if (col.key === 'worker_assigned') return item.worker_assigned ? getSlotIndicatorName(item.worker_assigned) : '-';
+          if (col.key === 'notes') return item.notes || '';
+          if (col.key === 'created_by') return getSlotIndicatorName(item.created_by || '');
+          return '';
+        });
+      });
+    } else if (exportOrderType === 'maps_reviews') {
+      fileName = `target_maps_reviews_${new Date().toISOString().substring(0, 10)}.csv`;
+      const colDefs = [
+        { key: 'worker', label: 'Worker' },
+        { key: 'client_name', label: 'NAMA KLIEN' },
+        { key: 'store_name', label: 'Nama Toko' },
+        { key: 'target_count', label: 'Target' },
+        { key: 'maps_link', label: 'Link MAPS' },
+        { key: 'created_by', label: 'ADMIN BY' },
+        { key: 'proof_link', label: 'Link Bukti' },
+      ];
+      const activeCols = colDefs.filter(col => exportColumns[col.key]);
+      headers = activeCols.map(c => c.label);
+
+      rows = filteredMapsExport.map(item => {
+        return activeCols.map(col => {
+          if (col.key === 'worker') return 'prima';
+          if (col.key === 'client_name') return item.client_name || '';
+          if (col.key === 'store_name') return item.store_name || '';
+          if (col.key === 'target_count') return String(item.target_count || 0);
+          if (col.key === 'maps_link') return item.maps_link || '';
+          if (col.key === 'created_by') return getSlotIndicatorName(item.created_by || '');
+          if (col.key === 'proof_link') return item.proof_link || '';
+          return '';
+        });
+      });
+    }
+
+    if (headers.length === 0) {
+      toast.error('Harap pilih minimal satu kolom untuk diekspor!');
+      return;
+    }
+
+    const escapeCSV = (val: string) => {
+      let clean = val.replace(/"/g, '""');
+      if (clean.includes(',') || clean.includes('\n') || clean.includes('\r') || clean.includes('"')) {
+        clean = `"${clean}"`;
+      }
+      return clean;
+    };
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.success(`Berhasil mengunduh file CSV: ${fileName}`);
+  };
 
   // Load Admin Dashboard Data
   const [isStatsLoading, setIsStatsLoading] = useState(false);
@@ -1434,7 +1723,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                     {filteredUnpaidOrders.length}
                   </span>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse table-fixed">
                     <colgroup>
                       <col className="w-[12%]" />
@@ -1591,6 +1880,15 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditOrder(order)}
+                                    className="block mx-auto text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                                    title="Edit Order"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -1598,6 +1896,138 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile view for Unpaid/Pending Orders */}
+                <div className="block md:hidden divide-y divide-slate-100 bg-white">
+                  {filteredUnpaidOrders.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                      {currentLang === 'id' ? 'Tidak ada pesanan belum lunas.' : 'No unpaid or pending orders.'}
+                    </div>
+                  ) : (
+                    filteredUnpaidOrders.map((order) => (
+                      <div key={order.id} className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-bold text-slate-900">{order.id}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {new Date(order.created_at).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                        {order.created_by && (
+                          <div className="text-[9px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
+                            diinput oleh {getSlotIndicatorName(order.created_by)}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold">Pembeli</span>
+                            <span className="font-bold text-slate-900 block truncate">{order.buyer_name}</span>
+                            <span className="text-[10px] text-slate-500 font-mono block truncate">{order.phone_number}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold">Layanan</span>
+                            <span className="font-semibold text-slate-900 block truncate">
+                              {order.product_name || products.find(p => p.id === order.product_id)?.name || 'Layanan'}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.2 rounded-full font-mono">{order.quantity} pcs</span>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] uppercase font-bold">Target Details</span>
+                          {order.target_link && (
+                            <a 
+                              href={order.target_link} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium truncate"
+                            >
+                              <Link2 className="h-3 w-3 shrink-0 text-blue-500" />
+                              <span className="truncate">{order.target_link}</span>
+                            </a>
+                          )}
+                          {order.target_spam_phone && (
+                            <div className="text-[11px] text-amber-700 font-bold flex items-center gap-1 mt-0.5">
+                              <Phone className="h-3 w-3 text-amber-500 shrink-0" />
+                              <span className="truncate font-mono">Target WA: {order.target_spam_phone}</span>
+                            </div>
+                          )}
+                          {order.notes && (
+                            <p className="text-[10px] text-slate-500 italic mt-0.5">
+                              "{order.notes}"
+                            </p>
+                          )}
+                          {!order.target_link && !order.target_spam_phone && !order.notes && (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold">Total Harga</span>
+                            <span className="font-mono font-bold text-slate-900">{formatRupiah(order.total_price)}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={order.payment_status}
+                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value as PaymentStatus)}
+                              className={`rounded-lg border px-2 py-1 text-[10px] font-bold outline-none cursor-pointer ${
+                                order.payment_status === 'PAID'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : order.payment_status === 'PENDING'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-red-50 text-red-700 border-red-200'
+                              }`}
+                            >
+                              <option value="PENDING">PENDING</option>
+                              <option value="PAID">LUNAS</option>
+                              <option value="FAILED">BATAL</option>
+                            </select>
+                            
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const target = order.target_link || order.target_spam_phone || '-';
+                                const copypasta = `Layanan: ${order.product_name}\nNama Cust: ${order.buyer_name}\nNo WA: ${order.phone_number}\nTarget: ${target}\nJumlah: ${order.quantity}\nTotal Harga: ${formatRupiah(order.total_price)}\nCatatan: ${order.notes || '-'}`;
+                                navigator.clipboard.writeText(copypasta);
+                                setCopiedOrderId(order.id);
+                                setTimeout(() => setCopiedOrderId(null), 2000);
+                              }}
+                              className={`px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                copiedOrderId === order.id
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                              }`}
+                            >
+                              {copiedOrderId === order.id ? <Check className="h-2.5 w-2.5 text-emerald-600" /> : <Copy className="h-2.5 w-2.5 text-blue-600" />}
+                              <span>{copiedOrderId === order.id ? 'Disalin' : 'Copy'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOrder(order.id)}
+                              className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                              title="Delete Order"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditOrder(order)}
+                              className="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                              title="Edit Order"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -1674,7 +2104,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                     {filteredPaidOrders.length} Lunas
                   </span>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse table-fixed">
                     <colgroup>
                       <col className="w-[20%]" />
@@ -1838,6 +2268,15 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditOrder(order)}
+                                    className="block mx-auto mt-1.5 text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                                    title="Edit Order"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </button>
                                 </td>
 
 
@@ -1847,6 +2286,147 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile view for Paid Orders & Worker Tasks (FIFO) */}
+                <div className="block md:hidden divide-y divide-slate-100 bg-white">
+                  {filteredPaidOrders.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                      {currentLang === 'id' ? 'Belum ada pesanan lunas.' : 'No paid orders yet.'}
+                    </div>
+                  ) : (
+                    filteredPaidOrders.map((order) => {
+                      const isUnassigned = !order.worker_status || order.worker_status === 'unassigned';
+                      const isTaken = order.worker_status === 'taken';
+                      const isDone = order.worker_status === 'done';
+
+                      return (
+                        <div key={order.id} className="p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-slate-900">{order.id}</span>
+                              <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded font-sans font-bold">LUNAS</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {new Date(order.created_at).toLocaleDateString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          {order.created_by && (
+                            <div className="text-[9px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
+                              diinput oleh {getSlotIndicatorName(order.created_by)}
+                            </div>
+                          )}
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Pembeli</span>
+                              <span className="font-bold text-slate-900 block truncate">{order.buyer_name}</span>
+                              <span className="text-[10px] text-slate-500 font-mono block truncate">{order.phone_number}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Layanan</span>
+                              <span className="font-semibold text-slate-900 block truncate" title={order.product_name || products.find(p => p.id === order.product_id)?.name || 'Layanan'}>
+                                {order.product_name || products.find(p => p.id === order.product_id)?.name || 'Layanan'}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.2 rounded-full font-mono">{order.quantity} pcs</span>
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold">Target Details</span>
+                            {order.target_link && (
+                              <a 
+                                href={order.target_link} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium truncate"
+                              >
+                                <Link2 className="h-3 w-3 shrink-0 text-blue-500" />
+                                <span className="truncate">{order.target_link}</span>
+                              </a>
+                            )}
+                            {order.target_spam_phone && (
+                              <div className="text-[11px] text-amber-700 font-bold flex items-center gap-1 mt-0.5">
+                                <Phone className="h-3 w-3 text-amber-500 shrink-0" />
+                                <span className="truncate font-mono">Target WA: {order.target_spam_phone}</span>
+                              </div>
+                            )}
+                            {order.notes && (
+                              <p className="text-[10px] text-slate-500 italic mt-0.5">
+                                "{order.notes}"
+                              </p>
+                            )}
+                            {!order.target_link && !order.target_spam_phone && !order.notes && (
+                              <span className="text-slate-400">-</span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Total Harga</span>
+                              <span className="font-mono font-bold text-slate-900">{formatRupiah(order.total_price)}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={order.worker_status || 'unassigned'}
+                                onChange={(e) => handleUpdateWorkerStatus(order.id, e.target.value as any)}
+                                className={`rounded-lg border px-2 py-1 text-[10px] font-bold outline-none cursor-pointer ${
+                                  isDone 
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                    : isTaken 
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                                    : 'bg-slate-50 text-slate-500 border-slate-200'
+                                }`}
+                              >
+                                <option value="unassigned">Antrean</option>
+                                <option value="taken">Diproses</option>
+                                <option value="done">Selesai</option>
+                              </select>
+                              
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const target = order.target_link || order.target_spam_phone || '-';
+                                  const copypasta = `Layanan: ${order.product_name}\nNama Cust: ${order.buyer_name}\nNo WA: ${order.phone_number}\nTarget: ${target}\nJumlah: ${order.quantity}\nTotal Harga: ${formatRupiah(order.total_price)}\nCatatan: ${order.notes || '-'}`;
+                                  navigator.clipboard.writeText(copypasta);
+                                  setCopiedOrderId(order.id);
+                                  setTimeout(() => setCopiedOrderId(null), 2000);
+                                }}
+                                className={`px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                  copiedOrderId === order.id
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                }`}
+                              >
+                                {copiedOrderId === order.id ? <Check className="h-2.5 w-2.5 text-emerald-600" /> : <Copy className="h-2.5 w-2.5 text-blue-600" />}
+                                <span>{copiedOrderId === order.id ? 'Disalin' : 'Copy'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteOrder(order.id)}
+                                className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                                title="Delete Order"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditOrder(order)}
+                                className="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                                title="Edit Order"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -1931,7 +2511,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   </span>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse table-fixed">
+                  <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                     <colgroup>
                       <col className="w-[12%]" />
                       <col className="w-[15%]" />
@@ -2064,12 +2644,12 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                     order.status === 'DONE'
                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                       : order.status === 'PROGRESS'
-                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
                                       : order.status === 'READY'
-                                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                      ? 'bg-white text-slate-700 border-slate-300'
                                       : order.status === 'SUDAH DIREKAP'
-                                      ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                      : 'bg-sky-50 text-sky-700 border-sky-200'
                                   }`}
                                 >
                                   <option value="PENDING">PENDING</option>
@@ -2113,6 +2693,15 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                 >
                                   <Trash2 className="h-3 w-3" />
                                   <span>Hapus</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditShopee(order)}
+                                  className="inline-flex items-center justify-center text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded-lg transition-colors cursor-pointer border border-dashed border-blue-200 font-sans mt-1"
+                                  title="Edit Order"
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
                                 </button>
                               </div>
                             </td>
@@ -2207,7 +2796,7 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                   </span>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse table-fixed">
+                  <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                     <colgroup>
                       <col className="w-[10%]" />
                       <col className="w-[13%]" />
@@ -2430,12 +3019,12 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                                   review.status === 'DONE'
                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                     : review.status === 'PROGRESS'
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    ? 'bg-orange-50 text-orange-700 border-orange-200'
                                     : review.status === 'READY'
-                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                    ? 'bg-white text-slate-700 border-slate-300'
                                     : review.status === 'SUDAH DIREKAP'
-                                    ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : 'bg-sky-50 text-sky-700 border-sky-200'
                                 }`}
                               >
                                 <option value="PENDING">PENDING</option>
@@ -2481,6 +3070,15 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditMaps(review)}
+                                className="block mx-auto mt-1 text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                                title="Edit Laporan"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
                             </td>
 
 
@@ -2513,15 +3111,27 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveSettingsTab('spreadsheet')}
+                  onClick={() => setActiveSettingsTab('export_transactions')}
                   className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
-                    activeSettingsTab === 'spreadsheet'
+                    activeSettingsTab === 'export_transactions'
                       ? 'bg-blue-600 text-white shadow-sm'
                       : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   <FileText className="h-3.5 w-3.5" />
-                  <span>Google Spreadsheet Sync</span>
+                  <span>Export Data Transaksi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsTab('google_sheets')}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                    activeSettingsTab === 'google_sheets'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Database className="h-3.5 w-3.5" />
+                  <span>Real-time Google Sheets Sync</span>
                 </button>
                 <button
                   type="button"
@@ -2622,172 +3232,592 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
                 </div>
               )}
 
-              {activeSettingsTab === 'spreadsheet' && (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="spreadsheet-sync-panel">
-                  {/* Left Form (7 columns) */}
-                  <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6">
-                    <div className="space-y-1">
-                      <h3 className="text-base font-black text-slate-900 font-sans uppercase tracking-tight flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-blue-600" />
-                        Koneksi Google Spreadsheet
-                      </h3>
-                      <p className="text-xs text-slate-400 font-medium font-sans">
-                        Konfigurasikan lembar kerja target Anda untuk melakukan sinkronisasi pesanan.
-                      </p>
-                    </div>
+              {activeSettingsTab === 'export_transactions' && (
+                <div className="space-y-6" id="export-transactions-panel">
+                  {/* Top Filters Block */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Controls Panel */}
+                    <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6 flex flex-col justify-between">
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <h3 className="text-base font-black text-slate-900 font-sans uppercase tracking-tight flex items-center gap-2">
+                            <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+                            Export Data Transaksi Otomatis
+                          </h3>
+                          <p className="text-xs text-slate-400 font-medium font-sans">
+                            Sistem otomatis mengambil data pesanan dari database. Silakan pilih tipe transaksi, filter tanggal, dan kolom yang ingin Anda ekspor.
+                          </p>
+                        </div>
 
-                    <form onSubmit={handleSaveSpreadsheetSettings} className="space-y-4 pt-2">
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-slate-700 uppercase">Google Spreadsheet URL / ID</label>
-                        <input
-                          type="url"
-                          required
-                          value={spreadsheetUrl}
-                          onChange={(e) => setSpreadsheetUrl(e.target.value)}
-                          placeholder="https://docs.google.com/spreadsheets/d/your-id-here/edit"
-                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-mono text-xs"
-                        />
-                      </div>
+                        {/* Select Tipe Transaksi */}
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-bold text-slate-700 uppercase">Pilih Tipe Transaksi</label>
+                          <select
+                            value={exportOrderType}
+                            onChange={(e) => setExportOrderType(e.target.value as any)}
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-semibold text-slate-700 bg-white"
+                          >
+                            <option value="orders">Layanan Umum (General)</option>
+                            <option value="shopee_orders">Pesanan Shopee</option>
+                            <option value="maps_reviews">Target Maps Reviews</option>
+                          </select>
+                        </div>
 
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-slate-700 uppercase">Nama Lembar Kerja (Sheet Name)</label>
-                        <input
-                          type="text"
-                          required
-                          value={sheetName}
-                          onChange={(e) => setSheetName(e.target.value)}
-                          placeholder="Pesanan"
-                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans"
-                        />
-                      </div>
+                        {/* Rentang Tanggal */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-bold text-slate-700 uppercase">Mulai Tanggal</label>
+                            <input
+                              type="date"
+                              value={exportStartDate}
+                              onChange={(e) => setExportStartDate(e.target.value)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-bold text-slate-700 uppercase">Sampai Tanggal</label>
+                            <input
+                              type="date"
+                              value={exportEndDate}
+                              onChange={(e) => setExportEndDate(e.target.value)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans text-xs"
+                            />
+                          </div>
+                        </div>
 
-                      <div className="flex gap-3 pt-2">
-                        <button
-                          type="submit"
-                          className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition-colors cursor-pointer font-sans"
-                        >
-                          <Save className="h-4 w-4" />
-                          <span>Simpan Pengaturan</span>
-                        </button>
-
-                        {isSpreadsheetConnected && (
+                        {/* Clear date filter button */}
+                        {(exportStartDate || exportEndDate) && (
                           <button
                             type="button"
-                            onClick={handleDisconnectSpreadsheet}
-                            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer font-sans"
+                            onClick={() => {
+                              setExportStartDate('');
+                              setExportEndDate('');
+                            }}
+                            className="text-xs text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1 cursor-pointer"
                           >
-                            Putuskan Koneksi
+                            <span>Hapus Filter Rentang Tanggal</span>
                           </button>
                         )}
                       </div>
-                    </form>
 
-                    <div className="border-t border-slate-100 pt-6 space-y-4">
-                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                        Status Sinkronisasi
-                      </h4>
+                      {/* Download Button */}
+                      <button
+                        onClick={handleDownloadCSV}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-sm font-black text-white shadow-lg transition-colors cursor-pointer mt-4"
+                      >
+                        <Download className="h-5 w-5" />
+                        <span>DOWNLOAD FILE CSV</span>
+                      </button>
+                    </div>
 
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`inline-block h-2 w-2 rounded-full ${isSpreadsheetConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                            <span className="text-xs font-bold text-slate-700">
-                              {isSpreadsheetConnected ? 'Spreadsheet Terkoneksi' : 'Koneksi Tidak Aktif'}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 font-medium">
-                            {isSpreadsheetConnected ? `Menyinkronkan ke lembar "${sheetName}"` : 'Harap simpan URL spreadsheet untuk memulai'}
-                          </p>
-                        </div>
+                    {/* Column Selection Panel (7 columns) */}
+                    <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          Pilih Kolom Yang Ingin Diekspor
+                        </h4>
+                        <p className="text-[11px] text-slate-400 font-light">
+                          Hanya kolom yang dicentang di bawah ini yang akan dimasukkan ke file CSV dan tampil di preview.
+                        </p>
+                      </div>
 
+                      {/* Select/Deselect All buttons */}
+                      <div className="flex gap-2">
                         <button
                           type="button"
-                          disabled={isSyncing || !isSpreadsheetConnected}
-                          onClick={handleSyncSpreadsheet}
-                          className={`flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-bold shadow-sm transition-colors cursor-pointer font-sans ${
-                            isSpreadsheetConnected
-                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          }`}
+                          onClick={() => {
+                            const updated = { ...exportColumns };
+                            Object.keys(updated).forEach(k => { updated[k] = true; });
+                            setExportColumns(updated);
+                          }}
+                          className="px-2.5 py-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                         >
-                          <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                          <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronisasi Sekarang'}</span>
+                          Pilih Semua
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = { ...exportColumns };
+                            Object.keys(updated).forEach(k => { updated[k] = false; });
+                            setExportColumns(updated);
+                          }}
+                          className="px-2.5 py-1 text-[10px] font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors"
+                        >
+                          Kosongkan Semua
                         </button>
                       </div>
 
-                      {syncResult && (
-                        <div className="flex items-start gap-2 bg-emerald-50 text-emerald-800 border border-emerald-100 p-4 rounded-xl text-xs font-medium leading-relaxed">
-                          <Check className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
-                          <span>{syncResult}</span>
-                        </div>
-                      )}
+                      {/* Checkbox columns container */}
+                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        {exportOrderType === 'orders' && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {[
+                              { k: 'id', l: 'ID Pesanan' },
+                              { k: 'created_at', l: 'Tanggal Input' },
+                              { k: 'buyer_name', l: 'Nama Pembeli' },
+                              { k: 'whatsapp_number', l: 'No WhatsApp' },
+                              { k: 'product_name', l: 'Nama Layanan' },
+                              { k: 'target_link', l: 'Link Target' },
+                              { k: 'price', l: 'Harga' },
+                              { k: 'payment_method', l: 'Metode Bayar' },
+                              { k: 'status', l: 'Status' },
+                              { k: 'notes', l: 'Catatan' },
+                              { k: 'created_by', l: 'Admin Input' },
+                            ].map(col => (
+                              <label key={col.k} className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={!!exportColumns[col.k]}
+                                  onChange={(e) => setExportColumns(prev => ({ ...prev, [col.k]: e.target.checked }))}
+                                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span>{col.l}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+
+                        {exportOrderType === 'shopee_orders' && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {[
+                              { k: 'id', l: 'ID Pesanan' },
+                              { k: 'created_at', l: 'Tanggal Input' },
+                              { k: 'store_name', l: 'Nama Toko' },
+                              { k: 'buyer_name', l: 'Nama Pembeli' },
+                              { k: 'service_type', l: 'Tipe Jasa' },
+                              { k: 'quantity', l: 'Jumlah (Qty)' },
+                              { k: 'target_link', l: 'Target WA/Link' },
+                              { k: 'job_status', l: 'Status Kerja' },
+                              { k: 'worker_assigned', l: 'Pekerja' },
+                              { k: 'notes', l: 'Catatan' },
+                              { k: 'created_by', l: 'Admin Input' },
+                            ].map(col => (
+                              <label key={col.k} className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={!!exportColumns[col.k]}
+                                  onChange={(e) => setExportColumns(prev => ({ ...prev, [col.k]: e.target.checked }))}
+                                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span>{col.l}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+
+                        {exportOrderType === 'maps_reviews' && (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {[
+                              { k: 'worker', l: 'Worker' },
+                              { k: 'client_name', l: 'NAMA KLIEN' },
+                              { k: 'store_name', l: 'Nama Toko' },
+                              { k: 'target_count', l: 'Target' },
+                              { k: 'maps_link', l: 'Link MAPS' },
+                              { k: 'created_by', l: 'ADMIN BY' },
+                              { k: 'proof_link', l: 'Link Bukti' },
+                            ].map(col => (
+                              <label key={col.k} className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={!!exportColumns[col.k]}
+                                  onChange={(e) => setExportColumns(prev => ({ ...prev, [col.k]: e.target.checked }))}
+                                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span>{col.l}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right Guide (5 columns) */}
-                  <div className="lg:col-span-5 bg-slate-50 rounded-2xl border border-slate-100 p-6 space-y-4">
-                    <h4 className="text-xs font-black text-slate-900 font-sans uppercase tracking-wider">
-                      Panduan Integrasi Google Sheets
-                    </h4>
-                    <p className="text-xs text-slate-500 leading-relaxed font-light font-sans">
-                      Ikuti langkah-langkah berikut untuk menghubungkan database GM AGENCY dengan Google Spreadsheet Anda secara mandiri:
-                    </p>
-
-                    <div className="space-y-4 pt-2">
-                      <div className="flex gap-3">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-extrabold text-[10px]">
-                          1
-                        </div>
-                        <div className="space-y-1">
-                          <span className="text-xs font-bold text-slate-800 block">Buat Google Spreadsheet Baru</span>
-                          <p className="text-[11px] text-slate-500 leading-relaxed font-light">
-                            Buat spreadsheet baru atau gunakan spreadsheet yang sudah ada di akun Google Drive Anda.
-                          </p>
-                        </div>
+                  {/* Real-time live table preview section */}
+                  <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-50">
+                      <div className="space-y-0.5">
+                        <h4 className="text-sm font-black text-slate-900 uppercase">
+                          Pratinjau Data (Real-time Live Preview)
+                        </h4>
+                        <p className="text-[11px] text-slate-400 font-medium">
+                          Menampilkan data yang disaring berdasarkan rentang tanggal dan kolom yang dipilih.
+                        </p>
                       </div>
+                      <div className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full font-sans">
+                        {exportOrderType === 'orders' && `${filteredOrdersExport.length} Pesanan Ditemukan`}
+                        {exportOrderType === 'shopee_orders' && `${filteredShopeeExport.length} Pesanan Shopee Ditemukan`}
+                        {exportOrderType === 'maps_reviews' && `${filteredMapsExport.length} Target Maps Ditemukan`}
+                      </div>
+                    </div>
 
-                      <div className="flex gap-3">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-extrabold text-[10px]">
-                          2
-                        </div>
-                        <div className="space-y-1">
-                          <span className="text-xs font-bold text-slate-800 block">Bagikan Hak Akses Editor</span>
-                          <p className="text-[11px] text-slate-500 leading-relaxed font-light">
-                            Bagikan lembar kerja Anda ke email Service Account GM AGENCY berikut dengan izin akses sebagai Editor:
-                          </p>
-                          <div className="bg-white px-2.5 py-1.5 rounded border border-slate-200 text-[10px] font-mono text-slate-600 select-all break-all w-full block">
-                            gm-sheets-sync@gm-agency-3000.iam.gserviceaccount.com
+                    <div className="overflow-x-auto rounded-xl border border-slate-100">
+                      <table className="w-full border-collapse text-left">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100">
+                            {exportOrderType === 'orders' && (
+                              <>
+                                {exportColumns.id && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">ID</th>}
+                                {exportColumns.created_at && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Tanggal</th>}
+                                {exportColumns.buyer_name && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Pembeli</th>}
+                                {exportColumns.whatsapp_number && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">WA</th>}
+                                {exportColumns.product_name && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Layanan</th>}
+                                {exportColumns.target_link && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Link Target</th>}
+                                {exportColumns.price && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase text-right">Harga</th>}
+                                {exportColumns.payment_method && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Metode</th>}
+                                {exportColumns.status && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Status</th>}
+                                {exportColumns.notes && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Catatan</th>}
+                                {exportColumns.created_by && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase text-center">Admin</th>}
+                              </>
+                            )}
+                            {exportOrderType === 'shopee_orders' && (
+                              <>
+                                {exportColumns.id && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">ID</th>}
+                                {exportColumns.created_at && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Tanggal</th>}
+                                {exportColumns.store_name && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase font-extrabold text-orange-600">Toko</th>}
+                                {exportColumns.buyer_name && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Pembeli</th>}
+                                {exportColumns.service_type && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Jasa</th>}
+                                {exportColumns.quantity && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase text-center">Qty</th>}
+                                {exportColumns.target_link && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Target WA/Link</th>}
+                                {exportColumns.job_status && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Status Kerja</th>}
+                                {exportColumns.worker_assigned && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase text-center">Pekerja</th>}
+                                {exportColumns.notes && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Catatan</th>}
+                                {exportColumns.created_by && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase text-center">Admin</th>}
+                              </>
+                            )}
+                            {exportOrderType === 'maps_reviews' && (
+                              <>
+                                {exportColumns.worker && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Worker</th>}
+                                {exportColumns.client_name && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">NAMA KLIEN</th>}
+                                {exportColumns.store_name && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Nama Toko</th>}
+                                {exportColumns.target_count && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase text-center">Target</th>}
+                                {exportColumns.maps_link && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Link MAPS</th>}
+                                {exportColumns.created_by && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase text-center">ADMIN BY</th>}
+                                {exportColumns.proof_link && <th className="px-4 py-3 text-[10px] font-black text-slate-600 uppercase">Link Bukti</th>}
+                              </>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {exportOrderType === 'orders' && (
+                            filteredOrdersExport.length === 0 ? (
+                              <tr>
+                                <td colSpan={11} className="text-center py-6 text-xs text-slate-400 font-medium font-sans">
+                                  Tidak ada data pesanan umum untuk rentang tanggal ini.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredOrdersExport.map(item => (
+                                <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                  {exportColumns.id && <td className="px-4 py-2.5 text-[10px] font-mono font-bold text-slate-400 uppercase select-all">{item.id.slice(0, 8)}</td>}
+                                  {exportColumns.created_at && <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">{item.created_at ? item.created_at.substring(0, 16).replace('T', ' ') : '-'}</td>}
+                                  {exportColumns.buyer_name && <td className="px-4 py-2.5 text-xs font-bold text-slate-800">{item.buyer_name}</td>}
+                                  {exportColumns.whatsapp_number && <td className="px-4 py-2.5 text-xs text-slate-600 font-mono">{item.whatsapp_number || '-'}</td>}
+                                  {exportColumns.product_name && <td className="px-4 py-2.5 text-xs font-semibold text-blue-600">{item.product_name}</td>}
+                                  {exportColumns.target_link && (
+                                    <td className="px-4 py-2.5 text-xs text-slate-500 font-mono truncate max-w-[120px]">
+                                      <a href={item.target_link} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">{item.target_link || '-'}</a>
+                                    </td>
+                                  )}
+                                  {exportColumns.price && <td className="px-4 py-2.5 text-xs font-mono font-bold text-slate-800 text-right">{formatRupiah(item.price)}</td>}
+                                  {exportColumns.payment_method && <td className="px-4 py-2.5 text-[10px] font-bold text-slate-500 uppercase">{item.payment_method || '-'}</td>}
+                                  {exportColumns.status && (
+                                    <td className="px-4 py-2.5 text-xs">
+                                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                        item.status === 'DONE'
+                                          ? 'bg-emerald-50 text-emerald-700'
+                                          : item.status === 'PROGRESS'
+                                          ? 'bg-orange-50 text-orange-700'
+                                          : item.status === 'READY'
+                                          ? 'bg-white text-slate-700 border border-slate-200'
+                                          : item.status === 'SUDAH DIREKAP'
+                                          ? 'bg-purple-50 text-purple-700'
+                                          : 'bg-sky-50 text-sky-700'
+                                      }`}>
+                                        {item.status}
+                                      </span>
+                                    </td>
+                                  )}
+                                  {exportColumns.notes && <td className="px-4 py-2.5 text-xs text-slate-500 truncate max-w-[120px]">{item.notes || '-'}</td>}
+                                  {exportColumns.created_by && <td className="px-4 py-2.5 text-xs text-center font-bold text-slate-500">{getSlotIndicatorName(item.created_by)}</td>}
+                                </tr>
+                              ))
+                            )
+                          )}
+
+                          {exportOrderType === 'shopee_orders' && (
+                            filteredShopeeExport.length === 0 ? (
+                              <tr>
+                                <td colSpan={11} className="text-center py-6 text-xs text-slate-400 font-medium font-sans">
+                                  Tidak ada data pesanan shopee untuk rentang tanggal ini.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredShopeeExport.map(item => (
+                                <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                  {exportColumns.id && <td className="px-4 py-2.5 text-[10px] font-mono font-bold text-slate-400 uppercase select-all">{item.id.slice(0, 8)}</td>}
+                                  {exportColumns.created_at && <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">{item.created_at ? item.created_at.substring(0, 16).replace('T', ' ') : '-'}</td>}
+                                  {exportColumns.store_name && <td className="px-4 py-2.5 text-xs font-extrabold text-orange-600">{item.store_name}</td>}
+                                  {exportColumns.buyer_name && <td className="px-4 py-2.5 text-xs font-bold text-slate-800">{item.buyer_name}</td>}
+                                  {exportColumns.service_type && <td className="px-4 py-2.5 text-xs font-semibold text-blue-600">{item.service_type}</td>}
+                                  {exportColumns.quantity && <td className="px-4 py-2.5 text-xs text-slate-800 font-mono text-center font-bold">{item.quantity}</td>}
+                                  {exportColumns.target_link && (
+                                    <td className="px-4 py-2.5 text-xs text-slate-500 font-mono truncate max-w-[120px]">
+                                      <a href={item.target_link} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">{item.target_link || '-'}</a>
+                                    </td>
+                                  )}
+                                  {exportColumns.job_status && (
+                                    <td className="px-4 py-2.5 text-xs">
+                                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                        item.job_status === 'SUDAH DIKERJAKAN' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                                      }`}>
+                                        {item.job_status}
+                                      </span>
+                                    </td>
+                                  )}
+                                  {exportColumns.worker_assigned && <td className="px-4 py-2.5 text-xs text-center text-slate-600 font-bold">{item.worker_assigned ? getSlotIndicatorName(item.worker_assigned) : '-'}</td>}
+                                  {exportColumns.notes && <td className="px-4 py-2.5 text-xs text-slate-500 truncate max-w-[120px]">{item.notes || '-'}</td>}
+                                  {exportColumns.created_by && <td className="px-4 py-2.5 text-xs text-center font-bold text-slate-500">{getSlotIndicatorName(item.created_by)}</td>}
+                                </tr>
+                              ))
+                            )
+                          )}
+
+                          {exportOrderType === 'maps_reviews' && (
+                            filteredMapsExport.length === 0 ? (
+                              <tr>
+                                <td colSpan={7} className="text-center py-6 text-xs text-slate-400 font-medium font-sans">
+                                  Tidak ada data target maps untuk rentang tanggal ini.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredMapsExport.map(item => (
+                                <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                  {exportColumns.worker && <td className="px-4 py-2.5 text-xs text-slate-600 font-semibold bg-emerald-50 text-emerald-700 text-center rounded">prima</td>}
+                                  {exportColumns.client_name && <td className="px-4 py-2.5 text-xs font-bold text-slate-800">{item.client_name}</td>}
+                                  {exportColumns.store_name && <td className="px-4 py-2.5 text-xs font-extrabold text-blue-700">{item.store_name}</td>}
+                                  {exportColumns.target_count && <td className="px-4 py-2.5 text-xs text-center font-mono font-bold text-slate-800">{item.target_count}</td>}
+                                  {exportColumns.maps_link && (
+                                    <td className="px-4 py-2.5 text-xs text-slate-500 font-mono truncate max-w-[120px]">
+                                      <a href={item.maps_link} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">{item.maps_link || '-'}</a>
+                                    </td>
+                                  )}
+                                  {exportColumns.created_by && <td className="px-4 py-2.5 text-xs text-center font-bold text-slate-500">{getSlotIndicatorName(item.created_by)}</td>}
+                                  {exportColumns.proof_link && (
+                                    <td className="px-4 py-2.5 text-xs text-slate-500 font-mono truncate max-w-[120px]">
+                                      {item.proof_link ? (
+                                        <a href={item.proof_link} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">{item.proof_link}</a>
+                                      ) : '-'}
+                                    </td>
+                                  )}
+                                </tr>
+                              ))
+                            )
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeSettingsTab === 'google_sheets' && (
+                <div className="space-y-6">
+                  {/* Header / Info Panel */}
+                  <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-50">
+                      <div className="space-y-1">
+                        <h3 className="text-base font-black text-slate-900 uppercase font-sans tracking-tight flex items-center gap-2">
+                          <Database className="h-5 w-5 text-emerald-600" />
+                          <span>Sinkronisasi Spreadsheet Real-Time</span>
+                        </h3>
+                        <p className="text-xs text-slate-400 font-medium">
+                          Hubungkan GM Solution secara real-time dengan Google Sheets. Setiap order baru, pembaruan status, atau pembatalan akan disinkronkan secara otomatis.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-500">Status:</span>
+                        {sheetsSyncConfig.enabled ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-black text-emerald-700 bg-emerald-50 rounded-full border border-emerald-100 uppercase animate-pulse">
+                            <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                            Aktif
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-black text-slate-500 bg-slate-50 rounded-full border border-slate-200 uppercase">
+                            <span className="h-2 w-2 rounded-full bg-slate-400" />
+                            Nonaktif
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                      {/* Form Config */}
+                      <div className="space-y-4 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          Konfigurasi Integrasi
+                        </h4>
+
+                        <div className="space-y-4">
+                          {/* Toggle */}
+                          <label className="flex items-center justify-between bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm cursor-pointer hover:border-slate-200 transition-colors">
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-black text-slate-800 uppercase tracking-tight block">Aktifkan Sinkronisasi</span>
+                              <span className="text-[10px] text-slate-400 font-medium block">Kirim data transaksi secara otomatis</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={sheetsSyncConfig.enabled}
+                              onChange={(e) => setSheetsSyncConfigState(prev => ({ ...prev, enabled: e.target.checked }))}
+                              className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            />
+                          </label>
+
+                          {/* Webhook input */}
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
+                              Google Apps Script Web App URL
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="https://script.google.com/macros/s/.../exec"
+                              value={sheetsSyncConfig.webhookUrl}
+                              onChange={(e) => setSheetsSyncConfigState(prev => ({ ...prev, webhookUrl: e.target.value }))}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-mono outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 font-sans text-xs"
+                            />
+                            <p className="text-[10px] text-slate-400 font-medium">
+                              Tempelkan URL Web App yang Anda dapatkan setelah mendeploy Apps Script Anda.
+                            </p>
+                          </div>
+
+                          {/* Action buttons */}
+                          <div className="flex gap-2.5 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                saveSheetsSyncConfig(sheetsSyncConfig);
+                                toast.success('Konfigurasi Google Sheets berhasil disimpan!');
+                              }}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition-colors cursor-pointer"
+                            >
+                              <Save className="h-4 w-4" />
+                              <span>Simpan Konfigurasi</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!sheetsSyncConfig.webhookUrl) {
+                                  toast.error('Harap masukkan URL Web App terlebih dahulu!');
+                                  return;
+                                }
+                                toast.info('Mengirim data uji sinkronisasi...');
+                                try {
+                                  const testPayload = {
+                                    id: 'test-sync-' + Math.floor(Math.random() * 10000),
+                                    buyer_name: 'Tes Sinkronisasi GM Solution',
+                                    product_name: 'Layanan Tes Google Sheets Sync',
+                                    quantity: 1,
+                                    total_price: 150000,
+                                    payment_status: 'PAID',
+                                    created_at: new Date().toISOString(),
+                                    notes: 'Tes koneksi real-time spreadsheet'
+                                  };
+                                  
+                                  // Call API logic directly
+                                  await fetch(sheetsSyncConfig.webhookUrl, {
+                                    method: 'POST',
+                                    mode: 'no-cors',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      event_type: 'insert',
+                                      table_type: 'order',
+                                      data: testPayload
+                                    })
+                                  });
+                                  toast.success('Tes sinkronisasi berhasil dikirim! Silakan periksa spreadsheet Anda.');
+                                } catch (err) {
+                                  console.error('Test sync error:', err);
+                                  toast.error('Gagal mengirim tes sinkronisasi. Periksa koneksi Anda.');
+                                }
+                              }}
+                              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                              <span>Tes Koneksi</span>
+                            </button>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex gap-3">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-extrabold text-[10px]">
-                          3
-                        </div>
-                        <div className="space-y-1">
-                          <span className="text-xs font-bold text-slate-800 block">Masukkan URL Spreadsheet</span>
-                          <p className="text-[11px] text-slate-500 leading-relaxed font-light">
-                            Salin URL penuh spreadsheet Anda dari address bar peramban, masukkan ke formulir koneksi, lalu simpan.
-                          </p>
-                        </div>
-                      </div>
+                      {/* Instructions / Template Copy */}
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          Panduan Pemasangan Google Sheets
+                        </h4>
 
-                      <div className="flex gap-3">
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-extrabold text-[10px]">
-                          4
+                        <div className="space-y-3 text-xs text-slate-600 font-medium">
+                          <div className="flex gap-2.5 items-start">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 font-sans text-[10px] font-black text-emerald-700 border border-emerald-100">
+                              1
+                            </span>
+                            <p className="leading-relaxed">
+                              Buat sebuah <strong>Google Spreadsheet</strong> baru untuk menyimpan data pesanan Anda.
+                            </p>
+                          </div>
+                          <div className="flex gap-2.5 items-start">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 font-sans text-[10px] font-black text-emerald-700 border border-emerald-100">
+                              2
+                            </span>
+                            <p className="leading-relaxed">
+                              Buka menu <strong>Ekstensi &gt; Apps Script</strong> dari dalam Spreadsheet Anda.
+                            </p>
+                          </div>
+                          <div className="flex gap-2.5 items-start">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 font-sans text-[10px] font-black text-emerald-700 border border-emerald-100">
+                              3
+                            </span>
+                            <p className="leading-relaxed">
+                              Hapus semua kode bawaan lalu <strong>salin dan tempel</strong> kode template di bawah ini.
+                            </p>
+                          </div>
+                          <div className="flex gap-2.5 items-start">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 font-sans text-[10px] font-black text-emerald-700 border border-emerald-100">
+                              4
+                            </span>
+                            <p className="leading-relaxed">
+                              Klik tombol <strong>Terapkan &gt; Penerapan Baru</strong>, pilih jenis <strong>Aplikasi Web</strong>, atur akses "Siapa saja (Anyone)" memiliki izin, lalu salin URL yang diberikan ke kolom sebelah kiri.
+                            </p>
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <span className="text-xs font-bold text-slate-800 block">Lakukan Sinkronisasi</span>
-                          <p className="text-[11px] text-slate-500 leading-relaxed font-light">
-                            Tekan tombol "Sinkronisasi Sekarang" untuk mengunggah dan memperbarui seluruh data transaksi penjualan secara aman.
-                          </p>
+
+                        {/* Script box */}
+                        <div className="relative mt-2">
+                          <div className="absolute right-2 top-2 z-10">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(getGoogleAppsScriptTemplate());
+                                setCopiedTemplate(true);
+                                toast.success('Kode Apps Script berhasil disalin!');
+                                setTimeout(() => setCopiedTemplate(false), 2000);
+                              }}
+                              className="px-2.5 py-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                            >
+                              {copiedTemplate ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                              <span>{copiedTemplate ? 'Tersalin' : 'Salin Kode'}</span>
+                            </button>
+                          </div>
+                          <pre className="text-[10px] font-mono text-slate-300 bg-slate-900 p-4 rounded-xl max-h-[160px] overflow-y-auto border border-slate-800">
+                            {getGoogleAppsScriptTemplate()}
+                          </pre>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
+
+              {false && null}
 
               {activeSettingsTab === 'account_access' && (
                 <div className="space-y-8" id="account-access-settings-panel">
@@ -2891,6 +3921,411 @@ export default function AdminPanel({ currentLang }: AdminPanelProps) {
             </div>
           )}
         </>
+      )}
+
+      {/* ORDER EDIT MODAL FORM */}
+      {isOrderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl transition-all border border-slate-100 flex flex-col my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-black text-slate-950 text-base font-sans uppercase">
+                {currentLang === 'id' ? 'EDIT INPUTAN PESANAN' : 'EDIT ORDER INPUT'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsOrderModalOpen(false);
+                  setEditingOrder(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOrder} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              {/* Buyer Name & Phone Number */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Pembeli' : 'Buyer Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={orderBuyerName}
+                    onChange={(e) => setOrderBuyerName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'No WA' : 'WhatsApp Number'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={orderPhoneNumber}
+                    onChange={(e) => setOrderPhoneNumber(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              {/* Service/Product Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Layanan Jasa' : 'Service Type'}
+                </label>
+                <select
+                  value={orderProductId}
+                  onChange={(e) => setOrderProductId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 bg-white"
+                >
+                  <option value="">-- {currentLang === 'id' ? 'Pilih Layanan' : 'Select Service'} --</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quantity & Total Price */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Jumlah (Quantity)' : 'Quantity'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={orderQuantity}
+                    onChange={(e) => setOrderQuantity(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Total Harga (Rupiah)' : 'Total Price (IDR)'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={orderTotalPrice}
+                    onChange={(e) => setOrderTotalPrice(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              {/* Target Details (Link and/or Phone) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Target Link (Jika ada)' : 'Target Link (If any)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={orderTargetLink}
+                    onChange={(e) => setOrderTargetLink(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'No WA Target (Spam)' : 'Target Phone (Spam)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={orderTargetSpamPhone}
+                    onChange={(e) => setOrderTargetSpamPhone(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Catatan (Notes)' : 'Notes'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={orderNotes}
+                  onChange={(e) => setOrderNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOrderModalOpen(false);
+                    setEditingOrder(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Batal' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/10 transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Simpan' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SHOPEE EDIT MODAL */}
+      {isShopeeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl transition-all border border-slate-100 flex flex-col my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-black text-slate-950 text-base font-sans uppercase">
+                {currentLang === 'id' ? 'EDIT INPUTAN PESANAN SHOPEE' : 'EDIT SHOPEE ORDER INPUT'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsShopeeModalOpen(false);
+                  setEditingShopeeOrder(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveShopeeOrderEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Toko' : 'Store Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editShpStoreName}
+                    onChange={(e) => setEditShpStoreName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Pembeli' : 'Buyer Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editShpBuyerName}
+                    onChange={(e) => setEditShpBuyerName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Tipe Layanan' : 'Service Type'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editShpServiceType}
+                    onChange={(e) => setEditShpServiceType(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Jumlah (Quantity)' : 'Quantity'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editShpQuantity}
+                    onChange={(e) => setEditShpQuantity(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Target Link / No WA Target' : 'Target Link / Target Phone'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editShpTargetLink}
+                  onChange={(e) => setEditShpTargetLink(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Catatan (Notes)' : 'Notes'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editShpNotes}
+                  onChange={(e) => setEditShpNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none animate-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsShopeeModalOpen(false);
+                    setEditingShopeeOrder(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Batal' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/10 transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Simpan' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MAPS REVIEWS EDIT MODAL */}
+      {isMapsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl transition-all border border-slate-100 flex flex-col my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-black text-slate-950 text-base font-sans uppercase">
+                {currentLang === 'id' ? 'EDIT INPUTAN TARGET MAPS' : 'EDIT MAPS TARGET INPUT'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsMapsModalOpen(false);
+                  setEditingMapsReview(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMapsReviewEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Toko' : 'Store Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editMapsStoreName}
+                    onChange={(e) => setEditMapsStoreName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Client' : 'Client Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editMapsClientName}
+                    onChange={(e) => setEditMapsClientName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Tipe Review' : 'Review Type'}
+                  </label>
+                  <select
+                    value={editMapsReviewType}
+                    onChange={(e) => setEditMapsReviewType(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 bg-white animate-none"
+                  >
+                    <option value="G_MAPS">Google Maps</option>
+                    <option value="TRIPAD">Tripadvisor</option>
+                    <option value="REVIEW_APPS">Review Apps</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Target Count' : 'Target Count'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editMapsTargetCount}
+                    onChange={(e) => setEditMapsTargetCount(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Maps Link / Target Link' : 'Target Maps Link'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editMapsLink}
+                  onChange={(e) => setEditMapsLink(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 animate-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Catatan (Notes)' : 'Notes'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editMapsNotes}
+                  onChange={(e) => setEditMapsNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none animate-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMapsModalOpen(false);
+                    setEditingMapsReview(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Batal' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/10 transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Simpan' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* 5. PRODUCT ADD/EDIT MODAL FORM */}

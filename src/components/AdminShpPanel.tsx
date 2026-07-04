@@ -20,6 +20,7 @@ import {
   Plus, 
   Check, 
   Trash2, 
+  Edit,
   User, 
   ExternalLink, 
   FileText, 
@@ -38,7 +39,8 @@ import {
   CheckCircle2,
   Table,
   FileDown,
-  Search
+  Search,
+  X
 } from 'lucide-react';
 
 interface AdminShpPanelProps {
@@ -211,6 +213,101 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
 
   // Temporary state for typing "Nama Akun" per MapsReview row
   const [tempAccountInput, setTempAccountInput] = useState<Record<string, string>>({});
+
+  // Shopee order edit state
+  const [editingShopeeOrder, setEditingShopeeOrder] = useState<ShopeeOrder | null>(null);
+  const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
+  const [editShpStoreName, setEditShpStoreName] = useState('');
+  const [editShpBuyerName, setEditShpBuyerName] = useState('');
+  const [editShpServiceType, setEditShpServiceType] = useState('');
+  const [editShpQuantity, setEditShpQuantity] = useState(1);
+  const [editShpTargetLink, setEditShpTargetLink] = useState('');
+  const [editShpNotes, setEditShpNotes] = useState('');
+
+  // Maps review edit state
+  const [editingMapsReview, setEditingMapsReview] = useState<MapsReview | null>(null);
+  const [isMapsModalOpen, setIsMapsModalOpen] = useState(false);
+  const [editMapsClientName, setEditMapsClientName] = useState('');
+  const [editMapsStoreName, setEditMapsStoreName] = useState('');
+  const [editMapsLink, setEditMapsLink] = useState('');
+  const [editMapsTargetCount, setEditMapsTargetCount] = useState(5);
+  const [editMapsNotes, setEditMapsNotes] = useState('');
+  const [editMapsReviewType, setEditMapsReviewType] = useState<'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS'>('G_MAPS');
+  const [editMapsAccounts, setEditMapsAccounts] = useState<string[]>([]);
+
+  const handleOpenEditShopee = (order: ShopeeOrder) => {
+    setEditingShopeeOrder(order);
+    setEditShpStoreName(order.store_name || '');
+    setEditShpBuyerName(order.buyer_name || '');
+    setEditShpServiceType(order.service_type || '');
+    setEditShpQuantity(order.quantity || 1);
+    setEditShpTargetLink(order.target_link || '');
+    setEditShpNotes(order.notes || '');
+    setIsShopeeModalOpen(true);
+  };
+
+  const handleSaveShopeeOrderEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingShopeeOrder) return;
+    try {
+      const updated: Partial<ShopeeOrder> = {
+        store_name: editShpStoreName,
+        buyer_name: editShpBuyerName,
+        service_type: editShpServiceType,
+        quantity: editShpQuantity,
+        target_link: editShpTargetLink,
+        notes: editShpNotes
+      };
+      await dbUpdateShopeeOrder(editingShopeeOrder.id, updated);
+      toast.success(currentLang === 'id' ? 'Pesanan Shopee berhasil diperbarui' : 'Shopee order updated successfully');
+      setIsShopeeModalOpen(false);
+      setEditingShopeeOrder(null);
+      // Reload lists
+      const data = await dbGetShopeeOrders();
+      setShopeeOrders(data);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memperbarui pesanan Shopee');
+    }
+  };
+
+  const handleOpenEditMaps = (review: MapsReview) => {
+    setEditingMapsReview(review);
+    setEditMapsClientName(review.client_name || '');
+    setEditMapsStoreName(review.store_name || '');
+    setEditMapsLink(review.maps_link || '');
+    setEditMapsTargetCount(review.target_count || 5);
+    setEditMapsNotes(review.notes || '');
+    setEditMapsReviewType(review.review_type || 'G_MAPS');
+    setEditMapsAccounts(review.reviewer_accounts || []);
+    setIsMapsModalOpen(true);
+  };
+
+  const handleSaveMapsReviewEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMapsReview) return;
+    try {
+      const updated: Partial<MapsReview> = {
+        client_name: editMapsClientName,
+        store_name: editMapsStoreName,
+        maps_link: editMapsLink,
+        target_count: editMapsTargetCount,
+        notes: editMapsNotes,
+        review_type: editMapsReviewType,
+        reviewer_accounts: editMapsAccounts
+      };
+      await dbUpdateMapsReview(editingMapsReview.id, updated);
+      toast.success(currentLang === 'id' ? 'Review Maps berhasil diperbarui' : 'Maps review updated successfully');
+      setIsMapsModalOpen(false);
+      setEditingMapsReview(null);
+      // Reload lists
+      const data = await dbGetMapsReviews();
+      setMapsReviews(data);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memperbarui review Maps');
+    }
+  };
 
   // Listen to route changes and sync with username pre-fill & session security
   useEffect(() => {
@@ -643,7 +740,8 @@ Format Chat : ${data.notes || '-'}`;
         target_link: formSosmed.targetLink,
         notes: formSosmed.notes,
         formatted_text: formattedText,
-        created_by: currentAdminUser
+        created_by: currentAdminUser,
+        status: 'READY'
       });
 
       setShopeeOrders(prev => [newOrder, ...prev]);
@@ -695,7 +793,8 @@ Format Chat : ${data.notes || '-'}`;
         target_link: formSpam.targetLink,
         notes: formSpam.notes,
         formatted_text: formattedText,
-        created_by: currentAdminUser
+        created_by: currentAdminUser,
+        status: 'READY'
       });
 
       setShopeeOrders(prev => [newOrder, ...prev]);
@@ -789,7 +888,7 @@ Format Chat : ${data.notes || '-'}`;
         review_type: formMaps.reviewType,
         reviewer_accounts: [],
         proof_link: '',
-        status: 'PENDING',
+        status: 'READY',
         created_by: currentAdminUser
       });
 
@@ -1559,7 +1658,7 @@ Format Chat : ${data.notes || '-'}`;
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse table-fixed">
+                  <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                     <colgroup>
                       <col className="w-[9%]" />
                       <col className="w-[10%]" />
@@ -1619,12 +1718,12 @@ Format Chat : ${data.notes || '-'}`;
                                     order.status === 'DONE'
                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                       : order.status === 'PROGRESS'
-                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
                                       : order.status === 'READY'
-                                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                      ? 'bg-white text-slate-700 border-slate-300'
                                       : order.status === 'SUDAH DIREKAP'
-                                      ? 'bg-teal-50 text-teal-700 border-teal-200'
-                                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                      : 'bg-sky-50 text-sky-700 border-sky-200'
                                   }`}>
                                     {order.status || 'PENDING'}
                                   </span>
@@ -1743,13 +1842,22 @@ Format Chat : ${data.notes || '-'}`;
                                     )}
                                   </span>
                                   {(!order.created_by || order.created_by === currentAdminUser) && (
-                                    <button
-                                      onClick={() => handleDeleteShopeeOrder(order.id)}
-                                      className="p-1 text-red-400 hover:bg-red-50 hover:text-red-600 rounded transition-colors cursor-pointer"
-                                      title="Hapus Order"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
+                                    <div className="flex flex-col items-center gap-1">
+                                      <button
+                                        onClick={() => handleDeleteShopeeOrder(order.id)}
+                                        className="p-1 text-red-400 hover:bg-red-50 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                        title="Hapus Order"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleOpenEditShopee(order)}
+                                        className="p-1 text-blue-400 hover:bg-blue-50 hover:text-blue-600 rounded transition-colors cursor-pointer"
+                                        title="Edit Order"
+                                      >
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
                               </td>
@@ -2019,7 +2127,7 @@ Format Chat : ${data.notes || '-'}`;
                      </div>
  
                      <div className="overflow-x-auto">
-                       <table className="w-full text-left border-collapse table-fixed">
+                       <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                          <colgroup>
                            <col className="w-[14%]" />
                            <col className="w-[18%]" />
@@ -2218,23 +2326,23 @@ Format Chat : ${data.notes || '-'}`;
                                       isFinished
                                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                         : item.status === 'PROGRESS'
-                                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                        ? 'bg-orange-100 text-orange-800 border border-orange-200'
                                         : item.status === 'READY'
-                                        ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                        ? 'bg-white text-slate-700 border border-slate-300'
                                         : item.status === 'SUDAH DIREKAP'
-                                        ? 'bg-teal-100 text-teal-800 border border-teal-200'
-                                        : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                        : 'bg-sky-100 text-sky-800 border border-sky-200'
                                     }`}>
                                       <span className={`h-1.5 w-1.5 rounded-full ${
                                         isFinished 
                                           ? 'bg-emerald-500' 
                                           : item.status === 'PROGRESS'
-                                          ? 'bg-blue-500 animate-pulse'
+                                          ? 'bg-orange-500 animate-pulse'
                                           : item.status === 'READY'
-                                          ? 'bg-indigo-500'
+                                          ? 'bg-slate-400'
                                           : item.status === 'SUDAH DIREKAP'
-                                          ? 'bg-teal-500'
-                                          : 'bg-amber-500 animate-pulse'
+                                          ? 'bg-purple-500'
+                                          : 'bg-sky-500 animate-pulse'
                                       }`} />
                                       <span>{item.status || 'PENDING'}</span>
                                     </span>
@@ -2267,13 +2375,23 @@ Format Chat : ${data.notes || '-'}`;
                                     </button>
 
                                     {(!item.created_by || item.created_by === currentAdminUser) && (
-                                      <button
-                                        onClick={() => handleDeleteMapsReview(item.id)}
-                                        className="block mx-auto text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                                        title="Hapus Target"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
+                                      <>
+                                        <button
+                                          onClick={() => handleDeleteMapsReview(item.id)}
+                                          className="block mx-auto text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                                          title="Hapus Target"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditMaps(item)}
+                                          className="block mx-auto text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer mt-1"
+                                          title="Edit Target"
+                                        >
+                                          <Edit className="h-3.5 w-3.5" />
+                                        </button>
+                                      </>
                                     )}
                                   </td>
                                 </tr>
@@ -2410,6 +2528,254 @@ Format Chat : ${data.notes || '-'}`;
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* SHOPEE EDIT MODAL */}
+      {isShopeeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl transition-all border border-slate-100 flex flex-col my-8 animate-in fade-in zoom-in-95 duration-250">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-black text-slate-950 text-base font-sans uppercase">
+                {currentLang === 'id' ? 'EDIT INPUTAN PESANAN SHOPEE' : 'EDIT SHOPEE ORDER INPUT'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsShopeeModalOpen(false);
+                  setEditingShopeeOrder(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveShopeeOrderEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Toko' : 'Store Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editShpStoreName}
+                    onChange={(e) => setEditShpStoreName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Pembeli' : 'Buyer Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editShpBuyerName}
+                    onChange={(e) => setEditShpBuyerName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Tipe Layanan' : 'Service Type'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editShpServiceType}
+                    onChange={(e) => setEditShpServiceType(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Jumlah (Quantity)' : 'Quantity'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editShpQuantity}
+                    onChange={(e) => setEditShpQuantity(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Target Link / No WA Target' : 'Target Link / Target Phone'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editShpTargetLink}
+                  onChange={(e) => setEditShpTargetLink(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Catatan (Notes)' : 'Notes'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editShpNotes}
+                  onChange={(e) => setEditShpNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsShopeeModalOpen(false);
+                    setEditingShopeeOrder(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Batal' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/10 transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Simpan' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MAPS REVIEWS EDIT MODAL */}
+      {isMapsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl transition-all border border-slate-100 flex flex-col my-8 animate-in fade-in zoom-in-95 duration-250">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-black text-slate-950 text-base font-sans uppercase">
+                {currentLang === 'id' ? 'EDIT INPUTAN TARGET MAPS' : 'EDIT MAPS TARGET INPUT'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsMapsModalOpen(false);
+                  setEditingMapsReview(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMapsReviewEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Toko' : 'Store Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editMapsStoreName}
+                    onChange={(e) => setEditMapsStoreName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Client' : 'Client Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editMapsClientName}
+                    onChange={(e) => setEditMapsClientName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Tipe Review' : 'Review Type'}
+                  </label>
+                  <select
+                    value={editMapsReviewType}
+                    onChange={(e) => setEditMapsReviewType(e.target.value as 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS')}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 bg-white"
+                  >
+                    <option value="G_MAPS">Google Maps</option>
+                    <option value="TRIPAD">Tripadvisor</option>
+                    <option value="REVIEW_APPS">Review Apps</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Target Count' : 'Target Count'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editMapsTargetCount}
+                    onChange={(e) => setEditMapsTargetCount(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Maps Link / Target Link' : 'Target Maps Link'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editMapsLink}
+                  onChange={(e) => setEditMapsLink(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Catatan (Notes)' : 'Notes'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editMapsNotes}
+                  onChange={(e) => setEditMapsNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMapsModalOpen(false);
+                    setEditingMapsReview(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Batal' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/10 transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Simpan' : 'Save'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
