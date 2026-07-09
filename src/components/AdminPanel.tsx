@@ -50,25 +50,47 @@ interface DebouncedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEl
 
 const DebouncedInput: React.FC<DebouncedInputProps> = ({ value, onSave, debounceMs = 500, ...props }) => {
   const [localVal, setLocalVal] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+  const lastSavedValRef = useRef(value);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
 
+  // Sync with external value changes
   useEffect(() => {
-    setLocalVal(value);
-  }, [value]);
+    if (value !== lastSavedValRef.current) {
+      lastSavedValRef.current = value;
+      if (!isFocused) {
+        setLocalVal(value);
+      }
+    }
+  }, [value, isFocused]);
 
+  // Debounce saving
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (localVal !== value) {
+      if (localVal !== lastSavedValRef.current) {
+        lastSavedValRef.current = localVal;
         onSaveRef.current(localVal);
       }
     }, debounceMs);
     return () => clearTimeout(timer);
-  }, [localVal, value, debounceMs]);
+  }, [localVal, debounceMs]);
 
-  const handleBlur = () => {
-    if (localVal !== value) {
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    setIsFocused(false);
+    if (localVal !== lastSavedValRef.current) {
+      lastSavedValRef.current = localVal;
       onSaveRef.current(localVal);
+    }
+    if (props.onBlur) {
+      props.onBlur(e);
+    }
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    setIsFocused(true);
+    if (props.onFocus) {
+      props.onFocus(e);
     }
   };
 
@@ -77,6 +99,7 @@ const DebouncedInput: React.FC<DebouncedInputProps> = ({ value, onSave, debounce
       {...props}
       value={localVal}
       onChange={(e) => setLocalVal(e.target.value)}
+      onFocus={handleFocus}
       onBlur={handleBlur}
     />
   );
@@ -90,25 +113,47 @@ interface DebouncedTextareaProps extends Omit<React.TextareaHTMLAttributes<HTMLT
 
 const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, debounceMs = 500, ...props }) => {
   const [localVal, setLocalVal] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+  const lastSavedValRef = useRef(value);
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
 
+  // Sync with external value changes
   useEffect(() => {
-    setLocalVal(value);
-  }, [value]);
+    if (value !== lastSavedValRef.current) {
+      lastSavedValRef.current = value;
+      if (!isFocused) {
+        setLocalVal(value);
+      }
+    }
+  }, [value, isFocused]);
 
+  // Debounce saving
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (localVal !== value) {
+      if (localVal !== lastSavedValRef.current) {
+        lastSavedValRef.current = localVal;
         onSaveRef.current(localVal);
       }
     }, debounceMs);
     return () => clearTimeout(timer);
-  }, [localVal, value, debounceMs]);
+  }, [localVal, debounceMs]);
 
-  const handleBlur = () => {
-    if (localVal !== value) {
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    setIsFocused(false);
+    if (localVal !== lastSavedValRef.current) {
+      lastSavedValRef.current = localVal;
       onSaveRef.current(localVal);
+    }
+    if (props.onBlur) {
+      props.onBlur(e);
+    }
+  };
+
+  const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    setIsFocused(true);
+    if (props.onFocus) {
+      props.onFocus(e);
     }
   };
 
@@ -117,6 +162,7 @@ const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, de
       {...props}
       value={localVal}
       onChange={(e) => setLocalVal(e.target.value)}
+      onFocus={handleFocus}
       onBlur={handleBlur}
     />
   );
