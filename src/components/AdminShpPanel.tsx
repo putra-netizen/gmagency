@@ -101,6 +101,86 @@ const getSlotIndicatorName = (slot: string): string => {
   return slot;
 };
 
+interface DebouncedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> {
+  value: string;
+  onSave: (val: string) => void;
+  debounceMs?: number;
+}
+
+const DebouncedInput: React.FC<DebouncedInputProps> = ({ value, onSave, debounceMs = 500, ...props }) => {
+  const [localVal, setLocalVal] = useState(value);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onSaveRef.current(localVal);
+      }
+    }, debounceMs);
+    return () => clearTimeout(timer);
+  }, [localVal, value, debounceMs]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onSaveRef.current(localVal);
+    }
+  };
+
+  return (
+    <input
+      {...props}
+      value={localVal}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={handleBlur}
+    />
+  );
+};
+
+interface DebouncedTextareaProps extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value'> {
+  value: string;
+  onSave: (val: string) => void;
+  debounceMs?: number;
+}
+
+const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, debounceMs = 500, ...props }) => {
+  const [localVal, setLocalVal] = useState(value);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onSaveRef.current(localVal);
+      }
+    }, debounceMs);
+    return () => clearTimeout(timer);
+  }, [localVal, value, debounceMs]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onSaveRef.current(localVal);
+    }
+  };
+
+  return (
+    <textarea
+      {...props}
+      value={localVal}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={handleBlur}
+    />
+  );
+};
+
 export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -1773,11 +1853,11 @@ Format Chat : ${data.notes || '-'}`;
 
                               {/* Work Order text field */}
                               <td className="px-4 py-3">
-                                <textarea
+                                <DebouncedTextarea
                                   rows={2}
                                   placeholder="Input work order..."
                                   value={order.work_order || ''}
-                                  onChange={e => handleUpdateWorkOrder(order.id, e.target.value)}
+                                  onSave={val => handleUpdateWorkOrder(order.id, val)}
                                   disabled={order.created_by !== undefined && order.created_by !== currentAdminUser}
                                   className={`w-full rounded-xl border border-slate-200 p-2 text-[10px] font-medium text-slate-800 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 font-sans resize-y min-h-[50px] ${
                                     order.created_by && order.created_by !== currentAdminUser 
@@ -2267,11 +2347,11 @@ Format Chat : ${data.notes || '-'}`;
 
                                   {/* Clue/Notes Column */}
                                   <td className="px-3 py-3">
-                                    <textarea
+                                    <DebouncedTextarea
                                       rows={2}
                                       placeholder="Input clue/notes..."
                                       value={item.notes || ''}
-                                      onChange={e => handleUpdateNotes(item.id, e.target.value)}
+                                      onSave={val => handleUpdateNotes(item.id, val)}
                                       disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
                                       className={`w-full rounded-lg border border-slate-200 p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[60px] ${
                                         item.created_by && item.created_by !== currentAdminUser 
@@ -2283,11 +2363,11 @@ Format Chat : ${data.notes || '-'}`;
 
                                   {/* Link Bukti Pengerjaan */}
                                   <td className="px-3 py-3">
-                                    <input
+                                    <DebouncedInput
                                       type="text"
                                       placeholder="Link bukti pengerjaan..."
                                       value={item.proof_link || ''}
-                                      onChange={e => handleUpdateProofLink(item.id, e.target.value)}
+                                      onSave={val => handleUpdateProofLink(item.id, val)}
                                       disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
                                       className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-emerald-500 text-slate-700 font-mono ${
                                         item.created_by && item.created_by !== currentAdminUser 

@@ -42,6 +42,86 @@ const getSlotIndicatorName = (slot: string): string => {
   return slot;
 };
 
+interface DebouncedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> {
+  value: string;
+  onSave: (val: string) => void;
+  debounceMs?: number;
+}
+
+const DebouncedInput: React.FC<DebouncedInputProps> = ({ value, onSave, debounceMs = 500, ...props }) => {
+  const [localVal, setLocalVal] = useState(value);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onSaveRef.current(localVal);
+      }
+    }, debounceMs);
+    return () => clearTimeout(timer);
+  }, [localVal, value, debounceMs]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onSaveRef.current(localVal);
+    }
+  };
+
+  return (
+    <input
+      {...props}
+      value={localVal}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={handleBlur}
+    />
+  );
+};
+
+interface DebouncedTextareaProps extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value'> {
+  value: string;
+  onSave: (val: string) => void;
+  debounceMs?: number;
+}
+
+const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, debounceMs = 500, ...props }) => {
+  const [localVal, setLocalVal] = useState(value);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localVal !== value) {
+        onSaveRef.current(localVal);
+      }
+    }, debounceMs);
+    return () => clearTimeout(timer);
+  }, [localVal, value, debounceMs]);
+
+  const handleBlur = () => {
+    if (localVal !== value) {
+      onSaveRef.current(localVal);
+    }
+  };
+
+  return (
+    <textarea
+      {...props}
+      value={localVal}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={handleBlur}
+    />
+  );
+};
+
 export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProps) {
   const t = TRANSLATIONS[currentLang];
 
@@ -2667,9 +2747,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
                             {/* Work Order text input column */}
                             <td className="px-4 py-3">
-                              <textarea
+                              <DebouncedTextarea
                                 value={order.work_order || ''}
-                                onChange={(e) => handleUpdateShopeeWorkOrder(order.id, e.target.value)}
+                                onSave={(val) => handleUpdateShopeeWorkOrder(order.id, val)}
                                 placeholder="Tulis instruksi kerja..."
                                 className="w-full h-12 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-sans outline-none focus:border-blue-500 resize-none bg-slate-50 hover:bg-white focus:bg-white transition-all text-slate-700 font-sans"
                               />
@@ -3033,22 +3113,22 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
                             {/* Notes / Clue */}
                             <td className="px-4 py-3">
-                              <textarea
+                              <DebouncedTextarea
                                 rows={3}
                                 placeholder="Input clue/catatan..."
                                 value={review.notes || ''}
-                                onChange={e => handleUpdateNotes(review.id, e.target.value)}
+                                onSave={(val) => handleUpdateNotes(review.id, val)}
                                 className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[60px]"
                               />
                             </td>
 
                             {/* Link Bukti Pengerjaan */}
                             <td className="px-4 py-3">
-                              <input
+                              <DebouncedInput
                                 type="text"
                                 placeholder="Link bukti pengerjaan..."
                                 value={review.proof_link || ''}
-                                onChange={(e) => handleUpdateProofLink(review.id, e.target.value)}
+                                onSave={(val) => handleUpdateProofLink(review.id, val)}
                                 className="w-full rounded-lg border border-slate-200 px-2 py-1 text-[10px] outline-none focus:border-emerald-500 text-slate-700 font-mono bg-white"
                               />
                               {review.proof_link && (
