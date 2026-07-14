@@ -25,7 +25,7 @@ import {
   Briefcase, Save, AlertCircle, FileText, Check, Database, X, Globe,
   ExternalLink, Image as ImageIcon, Settings, ShoppingCart, Copy, ArrowLeft,
   Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
-  FileSpreadsheet, Download, Menu, ChevronRight
+  FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -168,6 +168,89 @@ const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, de
   );
 };
 
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  activeBgColor?: string;
+}
+
+const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPageChange, activeBgColor = 'bg-blue-600' }) => {
+  if (totalPages <= 1) return null;
+
+  const pages: (number | string)[] = [];
+  const maxPagesToShow = 5;
+
+  if (totalPages <= maxPagesToShow + 2) {
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(i);
+    }
+  } else {
+    pages.push(1);
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+
+    if (start > 2) {
+      pages.push('...');
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    if (end < totalPages - 1) {
+      pages.push('...');
+    }
+
+    pages.push(totalPages);
+  }
+
+  return (
+    <div className="flex items-center justify-center gap-1 py-4 border-t border-slate-100 bg-white">
+      <button
+        disabled={currentPage === 1}
+        onClick={() => onPageChange(currentPage - 1)}
+        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent transition-all cursor-pointer disabled:cursor-not-allowed"
+      >
+        <ChevronLeft size={16} />
+      </button>
+
+      {pages.map((p, idx) => {
+        if (p === '...') {
+          return (
+            <span key={`ell-${idx}`} className="px-2 py-1 text-slate-400 text-xs font-bold select-none">
+              ...
+            </span>
+          );
+        }
+        const pageNum = p as number;
+        const isActive = pageNum === currentPage;
+        return (
+          <button
+            key={`page-${pageNum}`}
+            onClick={() => onPageChange(pageNum)}
+            className={`min-w-[28px] h-7 px-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              isActive
+                ? `${activeBgColor} text-white shadow-sm`
+                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            {pageNum}
+          </button>
+        );
+      })}
+
+      <button
+        disabled={currentPage === totalPages}
+        onClick={() => onPageChange(currentPage + 1)}
+        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent transition-all cursor-pointer disabled:cursor-not-allowed"
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
+};
+
 export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProps) {
   const t = TRANSLATIONS[currentLang];
 
@@ -294,28 +377,49 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   // Search and Sort states for each table
   const [searchUnpaid, setSearchUnpaid] = useState('');
   const [sortUnpaid, setSortUnpaid] = useState<'all' | 'pending' | 'progress' | 'done'>('all');
-  const [timeFilterUnpaid, setTimeFilterUnpaid] = useState<'all' | 'week' | 'month'>('all');
+  const [timeFilterUnpaid, setTimeFilterUnpaid] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [serviceFilterUnpaid, setServiceFilterUnpaid] = useState<string>('all');
 
   const [searchPaid, setSearchPaid] = useState('');
   const [sortPaid, setSortPaid] = useState<'all' | 'pending' | 'progress' | 'done'>('all');
-  const [timeFilterPaid, setTimeFilterPaid] = useState<'all' | 'week' | 'month'>('all');
+  const [timeFilterPaid, setTimeFilterPaid] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [serviceFilterPaid, setServiceFilterPaid] = useState<string>('all');
 
   const [searchShopee, setSearchShopee] = useState('');
   const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
-  const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
+  const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [shopeeTypeFilter, setShopeeTypeFilter] = useState<'all' | 'report' | 'spam_wa'>('all');
 
   const [searchReview, setSearchReview] = useState('');
   const [sortReview, setSortReview] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
-  const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'week' | 'month'>('all');
+  const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('SEMUA');
 
-  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'week' | 'month') => {
+  // Pagination states
+  const [pageUnpaid, setPageUnpaid] = useState(1);
+  const [pagePaid, setPagePaid] = useState(1);
+  const [pageShopee, setPageShopee] = useState(1);
+  const [pageReview, setPageReview] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  useEffect(() => { setPageUnpaid(1); }, [searchUnpaid, serviceFilterUnpaid, sortUnpaid, timeFilterUnpaid]);
+  useEffect(() => { setPagePaid(1); }, [searchPaid, serviceFilterPaid, sortPaid, timeFilterPaid]);
+  useEffect(() => { setPageShopee(1); }, [searchShopee, shopeeTypeFilter, sortShopee, timeFilterShopee]);
+  useEffect(() => { setPageReview(1); }, [searchReview, reviewTypeFilter, sortReview, timeFilterReview]);
+
+  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'today' | 'week' | 'month') => {
     if (timeframe === 'all' || !createdAtStr) return true;
     const dateObj = new Date(createdAtStr);
     const now = new Date();
+    
+    if (timeframe === 'today') {
+      return (
+        dateObj.getDate() === now.getDate() &&
+        dateObj.getMonth() === now.getMonth() &&
+        dateObj.getFullYear() === now.getFullYear()
+      );
+    }
+    
     const diffTime = Math.abs(now.getTime() - dateObj.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     if (timeframe === 'week') return diffDays <= 7;
@@ -1560,6 +1664,11 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     })
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+  const paginatedUnpaidOrders = filteredUnpaidOrders.slice((pageUnpaid - 1) * ITEMS_PER_PAGE, pageUnpaid * ITEMS_PER_PAGE);
+  const paginatedPaidOrders = filteredPaidOrders.slice((pagePaid - 1) * ITEMS_PER_PAGE, pagePaid * ITEMS_PER_PAGE);
+  const paginatedShopeeOrders = filteredShopeeOrders.slice((pageShopee - 1) * ITEMS_PER_PAGE, pageShopee * ITEMS_PER_PAGE);
+  const paginatedMapsReviews = filteredMapsReviews.slice((pageReview - 1) * ITEMS_PER_PAGE, pageReview * ITEMS_PER_PAGE);
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="admin-panel-container">
       
@@ -1883,6 +1992,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                       className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
                     >
                       <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
+                      <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
                       <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
                       <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
                     </select>
@@ -1931,7 +2041,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                           </td>
                         </tr>
                       ) : (
-                        filteredUnpaidOrders.map((order) => (
+                        paginatedUnpaidOrders.map((order) => (
                             <tr key={order.id} className="hover:bg-slate-50/30 transition-colors">
                               {/* ID and Date */}
                               <td className="px-4 py-3 font-mono">
@@ -2085,7 +2195,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                       {currentLang === 'id' ? 'Tidak ada pesanan belum lunas.' : 'No unpaid or pending orders.'}
                     </div>
                   ) : (
-                    filteredUnpaidOrders.map((order) => (
+                    paginatedUnpaidOrders.map((order) => (
                       <div key={order.id} className="p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="font-mono font-bold text-slate-900">{order.id}</span>
@@ -2209,6 +2319,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     ))
                   )}
                 </div>
+                <Pagination
+                  currentPage={pageUnpaid}
+                  totalPages={Math.ceil(filteredUnpaidOrders.length / ITEMS_PER_PAGE)}
+                  onPageChange={setPageUnpaid}
+                  activeBgColor="bg-blue-600"
+                />
               </div>
 
               {/* Search & Sort Bar for Paid Web Orders */}
@@ -2264,6 +2380,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                       className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
                     >
                       <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
+                      <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
                       <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
                       <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
                     </select>
@@ -2310,7 +2427,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                           </td>
                         </tr>
                       ) : (
-                        filteredPaidOrders.map((order) => {
+                        paginatedPaidOrders.map((order) => {
                             const isUnassigned = !order.worker_status || order.worker_status === 'unassigned';
                             const isTaken = order.worker_status === 'taken';
                             const isDone = order.worker_status === 'done';
@@ -2475,7 +2592,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                       {currentLang === 'id' ? 'Belum ada pesanan lunas.' : 'No paid orders yet.'}
                     </div>
                   ) : (
-                    filteredPaidOrders.map((order) => {
+                    paginatedPaidOrders.map((order) => {
                       const isUnassigned = !order.worker_status || order.worker_status === 'unassigned';
                       const isTaken = order.worker_status === 'taken';
                       const isDone = order.worker_status === 'done';
@@ -2608,6 +2725,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     })
                   )}
                 </div>
+                <Pagination
+                  currentPage={pagePaid}
+                  totalPages={Math.ceil(filteredPaidOrders.length / ITEMS_PER_PAGE)}
+                  onPageChange={setPagePaid}
+                  activeBgColor="bg-blue-600"
+                />
               </div>
 
             </div>
@@ -2671,6 +2794,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                       className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
                     >
                       <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
+                      <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
                       <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
                       <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
                     </select>
@@ -2720,7 +2844,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                           </td>
                         </tr>
                       ) : (
-                        filteredShopeeOrders.map((order) => (
+                        paginatedShopeeOrders.map((order) => (
                           <tr key={order.id} className="hover:bg-slate-50/30 transition-colors">
                             {/* ID and Date */}
                             <td className="px-4 py-3 font-mono">
@@ -2891,6 +3015,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </tbody>
                   </table>
                 </div>
+                <Pagination
+                  currentPage={pageShopee}
+                  totalPages={Math.ceil(filteredShopeeOrders.length / ITEMS_PER_PAGE)}
+                  onPageChange={setPageShopee}
+                  activeBgColor="bg-blue-600"
+                />
               </div>
             </div>
           )}
@@ -2956,6 +3086,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                       className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
                     >
                       <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
+                      <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
                       <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
                       <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
                     </select>
@@ -3007,7 +3138,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                           </td>
                         </tr>
                       ) : (
-                        filteredMapsReviews.map((review) => (
+                        paginatedMapsReviews.map((review) => (
                           <tr key={review.id} className="hover:bg-slate-50/30 transition-colors">
                             {/* ID and Date */}
                             <td className="px-4 py-3 font-mono">
@@ -3268,6 +3399,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </tbody>
                   </table>
                 </div>
+                <Pagination
+                  currentPage={pageReview}
+                  totalPages={Math.ceil(filteredMapsReviews.length / ITEMS_PER_PAGE)}
+                  onPageChange={setPageReview}
+                  activeBgColor="bg-blue-600"
+                />
               </div>
             </div>
           )}

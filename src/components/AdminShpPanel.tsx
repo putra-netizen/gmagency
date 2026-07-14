@@ -33,6 +33,7 @@ import {
   EyeOff,
   LogOut,
   Sparkles,
+  ChevronLeft,
   ChevronRight,
   Send,
   PhoneCall,
@@ -90,6 +91,100 @@ const getSlotFromRouteName = (routeName: string): string | null => {
   if (clean === 'adminvira' || clean === 'adminshp3') return 'adminshp3';
   if (clean === 'adminali' || clean === 'adminshp4') return 'adminshp4';
   return null;
+};
+
+const ITEMS_PER_PAGE = 25;
+
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  activeBgColor?: string;
+}
+
+const Pagination: React.FC<PaginationProps> = ({
+  currentPage,
+  totalPages,
+  onPageChange,
+  activeBgColor = 'bg-blue-600'
+}) => {
+  if (totalPages <= 1) return null;
+
+  const renderPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(
+        <button
+          key={i}
+          onClick={() => onPageChange(i)}
+          className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+            currentPage === i
+              ? `${activeBgColor} text-white`
+              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          {i}
+        </button>
+      );
+    }
+    return pages;
+  };
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-slate-100 sm:px-6 mt-4">
+      <div className="flex justify-between flex-1 sm:hidden">
+        <button
+          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+          disabled={currentPage === 1}
+          className="relative inline-flex items-center px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+        >
+          Previous
+        </button>
+        <button
+          onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+          disabled={currentPage === totalPages}
+          className="relative ml-3 inline-flex items-center px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+        >
+          Next
+        </button>
+      </div>
+      <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs text-slate-700">
+            Page <span className="font-bold">{currentPage}</span> of <span className="font-bold">{totalPages}</span>
+          </p>
+        </div>
+        <div>
+          <nav className="relative z-0 inline-flex rounded-md -space-x-px gap-1" aria-label="Pagination">
+            <button
+              onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {renderPageNumbers()}
+            <button
+              onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="relative inline-flex items-center px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const getSlotIndicatorName = (slot: string): string => {
@@ -273,17 +368,22 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [searchShopee, setSearchShopee] = useState('');
   const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
   const [shopeeTypeFilter, setShopeeTypeFilter] = useState<'all' | 'report' | 'spam_wa'>('all');
-  const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'week' | 'month'>('all');
+  const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [pageShopee, setPageShopee] = useState(1);
 
   const [searchMaps, setSearchMaps] = useState('');
   const [sortMaps, setSortMaps] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'all' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('all');
-  const [timeFilterMaps, setTimeFilterMaps] = useState<'all' | 'week' | 'month'>('all');
+  const [timeFilterMaps, setTimeFilterMaps] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [pageMaps, setPageMaps] = useState(1);
 
-  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'week' | 'month') => {
+  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'today' | 'week' | 'month') => {
     if (timeframe === 'all' || !createdAtStr) return true;
     const dateObj = new Date(createdAtStr);
     const now = new Date();
+    if (timeframe === 'today') {
+      return dateObj.toDateString() === now.toDateString();
+    }
     const diffTime = Math.abs(now.getTime() - dateObj.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     if (timeframe === 'week') return diffDays <= 7;
@@ -545,6 +645,15 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       window.removeEventListener('adminshp-refresh', handleRefreshEvent);
     };
   }, [isAuthenticated, currentAdminUser]);
+
+  // Reset pagination when search / filter changes
+  useEffect(() => {
+    setPageShopee(1);
+  }, [searchShopee, sortShopee, shopeeTypeFilter, timeFilterShopee]);
+
+  useEffect(() => {
+    setPageMaps(1);
+  }, [searchMaps, sortMaps, reviewTypeFilter, timeFilterMaps]);
 
   // Handle Login submission
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -1301,6 +1410,9 @@ Format Chat : ${data.notes || '-'}`;
     })
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+  const paginatedShopeeOrders = filteredShopeeOrders.slice((pageShopee - 1) * ITEMS_PER_PAGE, pageShopee * ITEMS_PER_PAGE);
+  const paginatedMapsReviews = filteredMapsReviews.slice((pageMaps - 1) * ITEMS_PER_PAGE, pageMaps * ITEMS_PER_PAGE);
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 font-sans" id="shopee-portal-container">
       {/* Header Portal */}
@@ -1748,6 +1860,7 @@ Format Chat : ${data.notes || '-'}`;
                         className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase"
                       >
                         <option value="all">SEMUA</option>
+                        <option value="today">HARI INI</option>
                         <option value="week">MINGGU</option>
                         <option value="month">BULAN</option>
                       </select>
@@ -1789,7 +1902,7 @@ Format Chat : ${data.notes || '-'}`;
                           </td>
                         </tr>
                       ) : (
-                        filteredShopeeOrders.map((order) => {
+                        paginatedShopeeOrders.map((order) => {
                           const isSosmed = order.order_type === 'REPORT_ALL_SOSMED';
                           return (
                             <tr key={order.id} className="hover:bg-slate-50/40 transition-colors">
@@ -1966,6 +2079,12 @@ Format Chat : ${data.notes || '-'}`;
                     </tbody>
                   </table>
                 </div>
+                <Pagination
+                  currentPage={pageShopee}
+                  totalPages={Math.ceil(filteredShopeeOrders.length / ITEMS_PER_PAGE)}
+                  onPageChange={setPageShopee}
+                  activeBgColor="bg-blue-600"
+                />
               </div>
             </div>
           )}
@@ -2233,6 +2352,7 @@ Format Chat : ${data.notes || '-'}`;
                              className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase ml-1.5"
                            >
                              <option value="all">SEMUA</option>
+                             <option value="today">HARI INI</option>
                              <option value="week">MINGGU</option>
                              <option value="month">BULAN</option>
                            </select>
@@ -2270,7 +2390,7 @@ Format Chat : ${data.notes || '-'}`;
                               </td>
                             </tr>
                           ) : (
-                            filteredMapsReviews.map((item) => {
+                            paginatedMapsReviews.map((item) => {
                               const doneCount = item.reviewer_accounts?.length || 0;
                               const pct = Math.min(100, Math.round((doneCount / item.target_count) * 100));
                               const isFinished = item.status === 'DONE';
@@ -2515,6 +2635,12 @@ Format Chat : ${data.notes || '-'}`;
                         </tbody>
                       </table>
                     </div>
+                    <Pagination
+                      currentPage={pageMaps}
+                      totalPages={Math.ceil(filteredMapsReviews.length / ITEMS_PER_PAGE)}
+                      onPageChange={setPageMaps}
+                      activeBgColor="bg-blue-600"
+                    />
                   </div>
                 </div>
               </div>
