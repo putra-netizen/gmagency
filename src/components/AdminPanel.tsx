@@ -386,12 +386,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   const [serviceFilterPaid, setServiceFilterPaid] = useState<string>('all');
 
   const [searchShopee, setSearchShopee] = useState('');
-  const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
+  const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
   const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [shopeeTypeFilter, setShopeeTypeFilter] = useState<'all' | 'report' | 'spam_wa'>('all');
 
   const [searchReview, setSearchReview] = useState('');
-  const [sortReview, setSortReview] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('pending');
+  const [sortReview, setSortReview] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
   const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('SEMUA');
 
