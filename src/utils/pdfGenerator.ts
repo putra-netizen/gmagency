@@ -125,11 +125,7 @@ export async function generateMapsReportPDF(item: MapsReview, adminName?: string
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139); // Slate 500
-    doc.text(`Tanggal Laporan: ${dateStr}`, 195, 17, { align: 'right' });
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(16, 185, 129); // Emerald 600
-    doc.text("● DOKUMEN RESMI TERVERIFIKASI", 195, 22.5, { align: 'right' });
+    doc.text(`Tanggal Laporan: ${dateStr}`, 195, 20, { align: 'right' });
 
     // Divider Line
     doc.setDrawColor(226, 232, 240); // Slate 200
@@ -140,7 +136,7 @@ export async function generateMapsReportPDF(item: MapsReview, adminName?: string
     // 3. METADATA CARD BLOCK (Information)
     // ==========================================
     const cardY = 32;
-    const cardHeight = 38;
+    const cardHeight = 28;
 
     // Card background & border
     doc.setFillColor(248, 250, 252); // Slate 50
@@ -153,53 +149,32 @@ export async function generateMapsReportPDF(item: MapsReview, adminName?: string
     doc.setFillColor(37, 99, 235); // Blue 600
     doc.roundedRect(15, cardY, 3, cardHeight, 1.5, 1.5, 'F');
 
-    // Row 1: Nama Client & Dikerjakan Oleh
+    // Row 1: Nama Client & Progres Ulasan
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184); // Slate 400
-    doc.text("NAMA CLIENT:", 22, cardY + 7);
-    doc.text("DIKERJAKAN OLEH:", 112, cardY + 7);
+    doc.text("NAMA CLIENT:", 22, cardY + 6.5);
+    doc.text("PROGRES ULASAN:", 112, cardY + 6.5);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
     doc.setTextColor(15, 23, 42); // Slate 900
-    doc.text(item.client_name ? item.client_name.toUpperCase() : '-', 22, cardY + 12.5);
+    doc.text(item.client_name ? item.client_name.toUpperCase() : '-', 22, cardY + 12);
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
-    doc.setTextColor(30, 58, 138); // Blue Navy
-    doc.text(adminDisplayName, 112, cardY + 12.5);
-
-    // Row 2: Progres Ulasan & Status Order
     const count = item.reviewer_accounts?.length || 0;
     const target = item.target_count || count || 1;
     const pct = Math.min(100, Math.round((count / target) * 100));
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(148, 163, 184);
-    doc.text("PROGRES ULASAN:", 22, cardY + 20);
-    doc.text("STATUS PENGERJAAN:", 112, cardY + 20);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(10.5);
     doc.setTextColor(15, 23, 42);
-    doc.text(`${count} dari ${target} Target Selesai (${pct}%)`, 22, cardY + 25.5);
+    doc.text(`${count} dari ${target} Target Selesai (${pct}%)`, 112, cardY + 12);
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    if (item.status === 'DONE' || pct === 100) {
-      doc.setTextColor(16, 185, 129); // Emerald 600
-    } else {
-      doc.setTextColor(37, 99, 235); // Blue 600
-    }
-    doc.text(item.status ? item.status.replace('_', ' ') : 'SELESAI', 112, cardY + 25.5);
-
-    // Row 3: Link Google Maps Target
+    // Row 2: Link Google Maps Target
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
-    doc.text("LINK TARGET GOOGLE MAPS:", 22, cardY + 31.5);
+    doc.text("LINK TARGET GOOGLE MAPS:", 22, cardY + 18.5);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
@@ -208,7 +183,7 @@ export async function generateMapsReportPDF(item: MapsReview, adminName?: string
     if (mapsLink.length > 95) {
       mapsLink = mapsLink.substring(0, 92) + '...';
     }
-    doc.text(mapsLink, 22, cardY + 35.5);
+    doc.text(mapsLink, 22, cardY + 23.5);
 
     // ==========================================
     // 4. ACCOUNTS GRID TITLE

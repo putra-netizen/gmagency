@@ -2522,18 +2522,10 @@ Format Chat : ${data.notes || '-'}`;
                   <span className="font-extrabold text-slate-900 text-sm">{screenshotModalItem.client_name}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 font-bold block mb-1">DIKERJAKAN OLEH:</span>
-                  <span className="font-extrabold text-blue-700 text-sm">{getSlotIndicatorName(currentAdminUser || screenshotModalItem.created_by)}</span>
-                </div>
-                <div>
                   <span className="text-slate-400 font-bold block mb-1">PROGRES ULASAN:</span>
                   <span className="font-extrabold text-slate-900 text-sm">
                     {screenshotModalItem.reviewer_accounts?.length || 0} dari {screenshotModalItem.target_count} Target
                   </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-bold block mb-1">STATUS:</span>
-                  <span className="font-extrabold text-emerald-600 text-sm">{screenshotModalItem.status || 'DONE'}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="text-slate-400 font-bold block mb-1">
