@@ -14,6 +14,7 @@ import {
 } from '../lib/supabase';
 import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
+import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview } from '../types';
 import { 
   Copy, 
@@ -754,177 +755,10 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   };
 
   // Helper to generate a highly polished single-page PDF of Google Maps Reviewers list
-  const generateMapsReportPDF = (item: MapsReview) => {
+  const handleExportPDF = async (item: MapsReview) => {
     try {
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const dateStr = new Date(item.created_at).toLocaleDateString('id-ID', {
-        year: 'numeric', month: 'long', day: 'numeric'
-      });
-
-      // 1. Title / Brand Header
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(22);
-      doc.setTextColor(37, 99, 235); // Tailwind Blue 600
-      doc.text("GM AGENCY", 15, 22);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(59, 130, 246); // Tailwind Blue 500
-      doc.text("GOOGLE MAPS REVIEWER LIST REPORT", 15, 28);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184); // Slate 400
-      doc.text(`Tanggal Laporan: ${dateStr}`, 195, 22, { align: 'right' });
-
-      // Divider Line
-      doc.setDrawColor(226, 232, 240); // Slate 200
-      doc.setLineWidth(0.5);
-      doc.line(15, 33, 195, 33);
-
-      // 2. Metadata Block/Card (Fills x=15 to x=195, height = 30mm)
-      doc.setFillColor(248, 250, 252); // Slate 50
-      doc.roundedRect(15, 38, 180, 30, 3, 3, 'F');
-      doc.setDrawColor(241, 245, 249); // Slate 100
-      doc.roundedRect(15, 38, 180, 30, 3, 3, 'S');
-
-      // Client name column
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text("NAMA CLIENT:", 20, 45);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(15, 23, 42); // Slate 900
-      doc.text(item.client_name.toUpperCase(), 20, 51);
-
-      // Progress column
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text("PROGRES ULASAN:", 115, 45);
-
-      const count = item.reviewer_accounts?.length || 0;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(15, 23, 42);
-      doc.text(`${count} dari ${item.target_count} Target Selesai`, 115, 51);
-
-      // Maps Link full width
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(148, 163, 184);
-      doc.text("LINK GOOGLE MAPS:", 20, 59);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(37, 99, 235);
-      // Truncate maps link if extremely long
-      let mapsLink = item.maps_link;
-      if (mapsLink.length > 95) {
-        mapsLink = mapsLink.substring(0, 92) + '...';
-      }
-      doc.text(mapsLink, 20, 64);
-
-      // 3. Accounts Grid Title
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(71, 85, 105); // Slate 600
-      doc.text("DAFTAR AKUN REVIEWER REAL SELESAI:", 15, 77);
-
-      // 4. Draw Accounts in Grid
-      const accounts = item.reviewer_accounts || [];
-      const totalAccounts = accounts.length;
-
-      if (totalAccounts === 0) {
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(9);
-        doc.setTextColor(148, 163, 184);
-        doc.text("Belum ada ulasan akun yang selesai diinput.", 20, 88);
-      } else {
-        // Calculate dynamic grid parameters to fit exactly in one page
-        let numCols = 3;
-        let rowHeight = 7;
-        let fontSize = 8;
-        let verticalSpacing = 2; // spacing between cards
-
-        if (totalAccounts <= 24) {
-          numCols = 2;
-          rowHeight = 8;
-          fontSize = 9;
-          verticalSpacing = 2.5;
-        } else if (totalAccounts <= 60) {
-          numCols = 3;
-          rowHeight = 7.2;
-          fontSize = 8;
-          verticalSpacing = 2;
-        } else {
-          // If a lot of accounts (e.g. 60 to 120), use 4 columns to fit in 1 page!
-          numCols = 4;
-          rowHeight = 6.2;
-          fontSize = 7;
-          verticalSpacing = 1.2;
-        }
-
-        const colWidth = (180 - (numCols - 1) * 3) / numCols;
-        const colGap = 3;
-        const startX = 15;
-        const startY = 82;
-
-        accounts.forEach((acc, index) => {
-          const colIndex = index % numCols;
-          const rowIndex = Math.floor(index / numCols);
-          const x = startX + colIndex * (colWidth + colGap);
-          const y = startY + rowIndex * (rowHeight + verticalSpacing);
-
-          // Draw a soft rounded rect for each account
-          doc.setFillColor(248, 250, 252); // Slate 50
-          doc.roundedRect(x, y, colWidth, rowHeight, 1.2, 1.2, 'F');
-          doc.setDrawColor(226, 232, 240); // Slate 200
-          doc.roundedRect(x, y, colWidth, rowHeight, 1.2, 1.2, 'S');
-
-          // Number badge background
-          doc.setFillColor(219, 234, 254); // Blue 100
-          doc.roundedRect(x + 1.2, y + 1.2, rowHeight - 2.4, rowHeight - 2.4, 0.8, 0.8, 'F');
-
-          // Number text
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(fontSize - 1.5);
-          doc.setTextColor(29, 78, 216); // Blue 700
-          doc.text((index + 1).toString(), x + 1.2 + (rowHeight - 2.4)/2, y + 1.2 + (rowHeight - 2.4)/2 + (fontSize - 1.5)/4 + 0.3, { align: 'center' });
-
-          // Account name text
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(fontSize);
-          doc.setTextColor(51, 65, 85); // Slate 700
-
-          const maxTextWidth = colWidth - (rowHeight + 1);
-          let truncatedAcc = acc;
-          if (doc.getTextWidth(acc) > maxTextWidth) {
-            while (doc.getTextWidth(truncatedAcc + '...') > maxTextWidth && truncatedAcc.length > 0) {
-              truncatedAcc = truncatedAcc.slice(0, -1);
-            }
-            truncatedAcc += '...';
-          }
-          doc.text(truncatedAcc, x + rowHeight + 0.5, y + rowHeight / 2 + fontSize / 4 - 0.2);
-        });
-      }
-
-      // 5. Footer (Single Page forced)
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7.5);
-      doc.setTextColor(148, 163, 184); // Slate 400
-      doc.text("* Laporan ini sah dan dibuat secara otomatis oleh sistem GM AGENCY.", 15, 285);
-      doc.text("Halaman 1 dari 1 (Dokumen 1 Lembar)", 195, 285, { align: 'right' });
-
-      // Save PDF
-      doc.save(`Laporan_GM_Agency_${item.client_name.replace(/\s+/g, '_')}.pdf`);
+      await generateMapsReportPDF(item, currentAdminUser || item.created_by);
+      toast.success("PDF Laporan berhasil diunduh!");
     } catch (err) {
       console.error("Gagal mengekspor PDF:", err);
       toast.error("Terjadi kesalahan saat memproses PDF.");
@@ -2688,10 +2522,18 @@ Format Chat : ${data.notes || '-'}`;
                   <span className="font-extrabold text-slate-900 text-sm">{screenshotModalItem.client_name}</span>
                 </div>
                 <div>
+                  <span className="text-slate-400 font-bold block mb-1">DIKERJAKAN OLEH:</span>
+                  <span className="font-extrabold text-blue-700 text-sm">{getSlotIndicatorName(currentAdminUser || screenshotModalItem.created_by)}</span>
+                </div>
+                <div>
                   <span className="text-slate-400 font-bold block mb-1">PROGRES ULASAN:</span>
                   <span className="font-extrabold text-slate-900 text-sm">
                     {screenshotModalItem.reviewer_accounts?.length || 0} dari {screenshotModalItem.target_count} Target
                   </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-bold block mb-1">STATUS:</span>
+                  <span className="font-extrabold text-emerald-600 text-sm">{screenshotModalItem.status || 'DONE'}</span>
                 </div>
                 <div className="col-span-2">
                   <span className="text-slate-400 font-bold block mb-1">
@@ -2741,7 +2583,7 @@ Format Chat : ${data.notes || '-'}`;
               <div className="flex gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => generateMapsReportPDF(screenshotModalItem)}
+                  onClick={() => handleExportPDF(screenshotModalItem)}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-md"
                 >
                   <FileDown className="h-4 w-4" />
