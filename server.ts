@@ -165,30 +165,67 @@ function writeDatabase(data: any) {
   }
 }
 
+/**
+ * Helper to fetch all rows from Supabase bypassing PostgREST's default 1000-row limit.
+ * Uses pagination with range(from, to) until all records are retrieved.
+ */
+async function fetchAllSupabaseRows<T = any>(
+  client: any,
+  table: string,
+  orderBy: string = 'created_at',
+  ascending: boolean = false
+): Promise<T[]> {
+  if (!client) return [];
+  let allRows: T[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = client.from(table).select('*');
+    if (orderBy) {
+      query = query.order(orderBy, { ascending });
+    }
+    const { data, error } = await query.range(from, to);
+
+    if (error) {
+      console.error(`Error fetching page ${page} from Supabase table ${table}:`, error);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allRows = allRows.concat(data as T[]);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allRows;
+}
+
 // --- API ROUTES ---
 
 // 1. PRODUCTS API
 app.get('/api/products', async (req, res) => {
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: true });
-      if (!error && data) {
+      const data = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true);
+      if (data) {
         if (data.length === 0) {
           console.log('Server auto-seeding products table in Supabase...');
           await supabase.from('products').insert(INITIAL_PRODUCTS);
-          const { data: seeded } = await supabase
-            .from('products')
-            .select('*')
-            .order('created_at', { ascending: true });
+          const seeded = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true);
           if (seeded) return res.json(seeded);
         } else {
           return res.json(data);
         }
-      } else {
-        console.error('Supabase error fetching products:', error);
       }
     } catch (err) {
       console.error('Supabase products fetch exception:', err);
@@ -354,15 +391,11 @@ app.get('/api/orders', async (req, res) => {
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
+      const data = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false);
+      if (data) {
         const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
         return res.json(filtered);
       }
-      console.error('Supabase error fetching orders:', error);
     } catch (err) {
       console.error('Supabase orders fetch exception:', err);
     }
@@ -552,15 +585,11 @@ app.get('/api/shopee_orders', async (req, res) => {
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from('shopee_orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
+      const data = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false);
+      if (data) {
         const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
         return res.json(filtered);
       }
-      console.error('Supabase error fetching shopee_orders:', error);
     } catch (err) {
       console.error('Supabase shopee_orders fetch exception:', err);
     }
@@ -674,15 +703,11 @@ app.get('/api/maps_reviews', async (req, res) => {
 
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from('maps_reviews')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
+      const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false);
+      if (data) {
         const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
         return res.json(filtered);
       }
-      console.error('Supabase error fetching maps_reviews:', error);
     } catch (err) {
       console.error('Supabase maps_reviews fetch exception:', err);
     }
@@ -799,10 +824,10 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
   if (supabase) {
     try {
-      const { data: productsData, error: prodError } = await supabase.from('products').select('*');
-      const { data: ordersData, error: ordError } = await supabase.from('orders').select('*');
+      const productsData = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true);
+      const ordersData = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false);
 
-      if (!prodError && !ordError && ordersData && productsData) {
+      if (ordersData && productsData) {
         const rawOrders = ordersData as Order[];
         const orders = rawOrders.filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
 

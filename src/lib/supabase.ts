@@ -108,6 +108,51 @@ export function dbIsSupabaseConnected(): boolean {
   return isSupabaseConfigured && !supabaseFailed;
 }
 
+/**
+ * Helper to fetch all rows from Supabase bypassing PostgREST's default 1000-row limit.
+ * Uses pagination with range(from, to) until all records are retrieved.
+ */
+export async function fetchAllSupabaseRows<T = any>(
+  client: any,
+  table: string,
+  orderBy: string = 'created_at',
+  ascending: boolean = false
+): Promise<T[]> {
+  if (!client) return [];
+  let allRows: T[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = client.from(table).select('*');
+    if (orderBy) {
+      query = query.order(orderBy, { ascending });
+    }
+    const { data, error } = await query.range(from, to);
+
+    if (error) {
+      console.error(`Error fetching page ${page} from Supabase table ${table}:`, error);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allRows = allRows.concat(data as T[]);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allRows;
+}
+
 export function getClientDeletedOrders(): string[] {
   try {
     const data = localStorage.getItem('gmsolution_blacklist_orders');
@@ -512,12 +557,9 @@ function deleteLocalStorageMapsReview(id: string) {
 export async function dbGetProducts(): Promise<Product[]> {
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: true });
+      const data = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true);
       
-      if (!error && data) {
+      if (data) {
         if (data.length === 0) {
           const hasSeeded = localStorage.getItem('gmsolution_seeded_products');
           if (!hasSeeded) {
@@ -535,11 +577,8 @@ export async function dbGetProducts(): Promise<Product[]> {
           return [];
         } else {
           localStorage.setItem('gmsolution_seeded_products', 'true');
-          return data as Product[];
+          return data;
         }
-      } else if (error) {
-        console.warn('Supabase fetch products warning, falling back to Local/API:', error);
-        supabaseFailed = true;
       }
     } catch (err) {
       console.warn('Supabase products exception, falling back to Local/API:', err);
@@ -751,12 +790,9 @@ export async function dbGetOrders(): Promise<Order[]> {
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const data = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false);
       
-      if (!error && data) {
+      if (data) {
         if (data.length === 0) {
           const hasSeeded = localStorage.getItem('gmsolution_seeded_orders');
           if (!hasSeeded) {
@@ -797,9 +833,6 @@ export async function dbGetOrders(): Promise<Order[]> {
           });
           return orders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
         }
-      } else if (error) {
-        console.warn('Supabase fetch orders warning, falling back to Local/API:', error);
-        supabaseFailed = true;
       }
     } catch (err) {
       console.warn('Supabase orders exception, falling back to Local/API:', err);
@@ -988,12 +1021,8 @@ export async function dbDeleteOrder(id: string): Promise<boolean> {
 export async function dbGetDashboardStats(): Promise<DashboardStats> {
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      let { data: productsData, error: prodError } = await supabase.from('products').select('*');
-      let { data: ordersData, error: ordError } = await supabase.from('orders').select('*');
-
-      if (prodError || ordError) {
-        throw new Error(prodError?.message || ordError?.message || 'Failed to select from products or orders');
-      }
+      let productsData = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true);
+      let ordersData = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false);
 
       if (!productsData || productsData.length === 0) {
         const hasSeeded = localStorage.getItem('gmsolution_seeded_products');
@@ -1123,15 +1152,9 @@ export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
   let list: ShopeeOrder[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const { data, error } = await supabase
-        .from('shopee_orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        list = data as ShopeeOrder[];
-      } else if (error) {
-        console.warn('Supabase fetch shopee_orders warning, falling back to Local/API:', error);
-        supabaseFailed = true;
+      const data = await fetchAllSupabaseRows<ShopeeOrder>(supabase, 'shopee_orders', 'created_at', false);
+      if (data) {
+        list = data;
       }
     } catch (err) {
       console.warn('Supabase shopee orders exception, falling back to Local/API:', err);
@@ -1357,11 +1380,8 @@ export async function dbGetMapsReviews(): Promise<MapsReview[]> {
   let list: MapsReview[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const { data, error } = await supabase
-        .from('maps_reviews')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
+      const data = await fetchAllSupabaseRows<MapsReview>(supabase, 'maps_reviews', 'created_at', false);
+      if (data) {
         const mapped = data.map((item: any) => {
           let accounts: string[] = [];
           if (Array.isArray(item.reviewer_accounts)) {
@@ -1379,9 +1399,6 @@ export async function dbGetMapsReviews(): Promise<MapsReview[]> {
           };
         });
         list = mapped as MapsReview[];
-      } else if (error) {
-        console.warn('Supabase fetch maps_reviews warning, falling back to Local/API:', error);
-        supabaseFailed = true;
       }
     } catch (err) {
       console.warn('Supabase maps reviews exception, falling back to Local/API:', err);
