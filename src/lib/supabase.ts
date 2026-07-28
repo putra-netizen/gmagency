@@ -10,61 +10,16 @@ import { Product, Order, DashboardStats, ShopeeOrder, MapsReview } from '../type
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { triggerSheetsSync } from '../utils/sheetsSyncHelper';
 
-const MOCK_ORDERS_TO_SEED: Order[] = [
-  {
-    id: 'ord-1001',
-    product_id: 'gmaps-review',
-    product_name: 'Review Management Google Maps',
-    buyer_name: 'Budi Santoso',
-    phone_number: '+6281234567890',
-    notes: 'Mohon optimasi untuk ulasan positif dari customer real',
-    target_link: 'https://maps.google.com/?cid=12345',
-    quantity: 10,
-    total_price: 150000,
-    payment_status: 'PAID',
-    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'ord-1002',
-    product_id: 'gmaps-creation',
-    product_name: 'Pembuatan Titik Google Maps',
-    buyer_name: 'Siti Rahma',
-    phone_number: '+628987654321',
-    notes: 'Toko Kelontong Berkah Jaya, samping masjid Al-Ikhlas',
-    target_link: '',
-    quantity: 1,
-    total_price: 150000,
-    payment_status: 'PAID',
-    created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'ord-1003',
-    product_id: 'socmed-report',
-    product_name: 'Jasa Report Konten Sosial Media',
-    buyer_name: 'Randi Wijaya',
-    phone_number: '+62855112233',
-    notes: 'Akun penipu yang mengatasnamakan brand kami',
-    target_link: 'https://instagram.com/p/mockup_fake_account',
-    target_spam_phone: '+62899999999',
-    quantity: 5,
-    total_price: 125000,
-    payment_status: 'PENDING',
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'ord-1004',
-    product_id: 'tripadvisor-review',
-    product_name: 'Review Management Tripadvisor',
-    buyer_name: 'Agus Salim',
-    phone_number: '+62877665544',
-    notes: 'Hotel Melati Indah, ajak ulasan ramah keluarga',
-    target_link: 'https://tripadvisor.com/Hotel_Review-mock',
-    quantity: 8,
-    total_price: 160000,
-    payment_status: 'PAID',
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
+export function isDummyOrder(o: any): boolean {
+  if (!o) return true;
+  const dummyIds = ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005'];
+  if (dummyIds.includes(o.id)) return true;
+  const dummyNames = ['Budi Santoso', 'Siti Rahma', 'Randi Wijaya', 'Agus Salim', 'Dewi Lestari'];
+  if (dummyNames.includes(o.buyer_name)) return true;
+  return false;
+}
+
+const MOCK_ORDERS_TO_SEED: Order[] = [];
 
 // Check if Supabase keys are configured in environment
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -445,12 +400,17 @@ function deleteLocalStorageProduct(id: string) {
 function getLocalOrders(): Order[] {
   try {
     const stored = localStorage.getItem('gmsolution_local_orders');
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((o: any) => !isDummyOrder(o));
+      }
+    }
   } catch (e) {
     console.error(e);
   }
-  localStorage.setItem('gmsolution_local_orders', JSON.stringify(MOCK_ORDERS_TO_SEED));
-  return MOCK_ORDERS_TO_SEED;
+  localStorage.setItem('gmsolution_local_orders', JSON.stringify([]));
+  return [];
 }
 
 function updateLocalStorageOrder(order: Order) {
@@ -790,49 +750,24 @@ export async function dbGetOrders(): Promise<Order[]> {
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
+      // Delete dummy seed orders from Supabase if they exist
+      await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
+
       const data = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false);
       
       if (data) {
-        if (data.length === 0) {
-          const hasSeeded = localStorage.getItem('gmsolution_seeded_orders');
-          if (!hasSeeded) {
-            console.log('Supabase orders table is empty. Auto-seeding MOCK_ORDERS_TO_SEED...');
-            const { data: seededData, error: seedError } = await supabase
-              .from('orders')
-              .insert(MOCK_ORDERS_TO_SEED)
-              .select();
-            if (!seedError && seededData) {
-              localStorage.setItem('gmsolution_seeded_orders', 'true');
-              const orders = (seededData as Order[]).map(o => {
-                if (!o.product_name) {
-                  const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
-                  return {
-                    ...o,
-                    product_name: matchedProduct ? matchedProduct.name : 'Layanan'
-                  };
-                }
-                return o;
-              });
-              const sorted = orders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-              return sorted.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
-            }
-            console.warn('Supabase seeding orders warning:', seedError);
+        localStorage.setItem('gmsolution_seeded_orders', 'true');
+        const orders = (data as Order[]).map(o => {
+          if (!o.product_name) {
+            const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
+            return {
+              ...o,
+              product_name: matchedProduct ? matchedProduct.name : 'Layanan'
+            };
           }
-          return [];
-        } else {
-          localStorage.setItem('gmsolution_seeded_orders', 'true');
-          const orders = (data as Order[]).map(o => {
-            if (!o.product_name) {
-              const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
-              return {
-                ...o,
-                product_name: matchedProduct ? matchedProduct.name : 'Layanan'
-              };
-            }
-            return o;
-          });
-          return orders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
-        }
+          return o;
+        });
+        return orders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
       }
     } catch (err) {
       console.warn('Supabase orders exception, falling back to Local/API:', err);
@@ -844,9 +779,9 @@ export async function dbGetOrders(): Promise<Order[]> {
     '/api/orders',
     undefined,
     'gmsolution_local_orders',
-    () => MOCK_ORDERS_TO_SEED
+    () => []
   );
-  return (res || []).filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
+  return (res || []).filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
 }
 
 export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
@@ -1038,24 +973,12 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
         localStorage.setItem('gmsolution_seeded_products', 'true');
       }
 
-      if (!ordersData || ordersData.length === 0) {
-        const hasSeeded = localStorage.getItem('gmsolution_seeded_orders');
-        if (!hasSeeded) {
-          console.log('Stats: orders empty. Seeding...');
-          const { data: seeded } = await supabase.from('orders').insert(MOCK_ORDERS_TO_SEED).select();
-          if (seeded) {
-            ordersData = seeded;
-            localStorage.setItem('gmsolution_seeded_orders', 'true');
-          }
-        }
-      } else {
-        localStorage.setItem('gmsolution_seeded_orders', 'true');
-      }
+      localStorage.setItem('gmsolution_seeded_orders', 'true');
 
       const products = productsData || [];
       const rawOrders = (ordersData || []) as Order[];
       const deletedOrders = getClientDeletedOrders();
-      const orders = rawOrders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
+      const orders = rawOrders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
 
       const totalOrders = orders.length;
       const totalRevenue = orders

@@ -53,6 +53,15 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 const DB_DIR = path.join(process.cwd(), 'src', 'data');
 const DB_PATH = path.join(DB_DIR, 'db.json');
 
+function isDummyOrder(o: any): boolean {
+  if (!o) return true;
+  const dummyIds = ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005'];
+  if (dummyIds.includes(o.id)) return true;
+  const dummyNames = ['Budi Santoso', 'Siti Rahma', 'Randi Wijaya', 'Agus Salim', 'Dewi Lestari'];
+  if (dummyNames.includes(o.buyer_name)) return true;
+  return false;
+}
+
 // Ensure database file exists
 function initDatabase() {
   if (!fs.existsSync(DB_DIR)) {
@@ -60,66 +69,9 @@ function initDatabase() {
   }
 
   if (!fs.existsSync(DB_PATH)) {
-    // Generate initial mock orders for beautiful financial dashboard on first run
-    const mockOrders: Order[] = [
-      {
-        id: 'ord-1001',
-        product_id: 'gmaps-review',
-        product_name: 'Review Management Google Maps',
-        buyer_name: 'Budi Santoso',
-        phone_number: '+6281234567890',
-        notes: 'Mohon optimasi untuk ulasan positif dari customer real',
-        target_link: 'https://maps.google.com/?cid=12345',
-        quantity: 10,
-        total_price: 150000,
-        payment_status: 'PAID',
-        created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() // 3 days ago
-      },
-      {
-        id: 'ord-1002',
-        product_id: 'gmaps-creation',
-        product_name: 'Pembuatan Titik Google Maps',
-        buyer_name: 'Siti Rahma',
-        phone_number: '+628987654321',
-        notes: 'Toko Kelontong Berkah Jaya, samping masjid Al-Ikhlas',
-        target_link: '',
-        quantity: 1,
-        total_price: 150000,
-        payment_status: 'PAID',
-        created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() // 1 day ago
-      },
-      {
-        id: 'ord-1003',
-        product_id: 'socmed-report',
-        product_name: 'Jasa Report Konten Sosial Media',
-        buyer_name: 'Randi Wijaya',
-        phone_number: '+62855112233',
-        notes: 'Akun penipu yang mengatasnamakan brand kami',
-        target_link: 'https://instagram.com/p/mockup_fake_account',
-        target_spam_phone: '+62899999999',
-        quantity: 5,
-        total_price: 125000,
-        payment_status: 'PENDING',
-        created_at: new Date().toISOString() // Today
-      },
-      {
-        id: 'ord-1004',
-        product_id: 'tripadvisor-review',
-        product_name: 'Review Management Tripadvisor',
-        buyer_name: 'Agus Salim',
-        phone_number: '+62877665544',
-        notes: 'Hotel Melati Indah, ajak ulasan ramah keluarga',
-        target_link: 'https://tripadvisor.com/Hotel_Review-mock',
-        quantity: 8,
-        total_price: 160000,
-        payment_status: 'PAID',
-        created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString() // 5 days ago
-      }
-    ];
-
     const dbContent = {
       products: INITIAL_PRODUCTS,
-      orders: mockOrders,
+      orders: [],
       shopee_orders: [],
       maps_reviews: []
     };
@@ -141,6 +93,16 @@ function readDatabase() {
     if (!parsed.deleted_orders) parsed.deleted_orders = [];
     if (!parsed.deleted_shopee_orders) parsed.deleted_shopee_orders = [];
     if (!parsed.deleted_maps_reviews) parsed.deleted_maps_reviews = [];
+
+    if (Array.isArray(parsed.orders)) {
+      const origLen = parsed.orders.length;
+      parsed.orders = parsed.orders.filter((o: any) => !isDummyOrder(o));
+      if (parsed.orders.length !== origLen) {
+        fs.writeFileSync(DB_PATH, JSON.stringify(parsed, null, 2), 'utf-8');
+      }
+    } else {
+      parsed.orders = [];
+    }
     return parsed;
   } catch (error) {
     console.error('Error reading database:', error);
@@ -391,9 +353,12 @@ app.get('/api/orders', async (req, res) => {
 
   if (supabase) {
     try {
+      // Purge dummy orders from Supabase if present
+      await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
+
       const data = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false);
       if (data) {
-        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
+        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
         return res.json(filtered);
       }
     } catch (err) {
@@ -402,7 +367,7 @@ app.get('/api/orders', async (req, res) => {
   }
 
   const sortedOrders = [...db.orders]
-    .filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id))
+    .filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o))
     .sort((a: Order, b: Order) => 
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
@@ -829,7 +794,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
 
       if (ordersData && productsData) {
         const rawOrders = ordersData as Order[];
-        const orders = rawOrders.filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
+        const orders = rawOrders.filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
 
         const totalOrders = orders.length;
         const totalRevenue = orders
@@ -871,7 +836,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
   }
 
   const rawOrders = db.orders as Order[];
-  const orders = rawOrders.filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id));
+  const orders = rawOrders.filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
 
   const totalOrders = orders.length;
   const totalRevenue = orders
