@@ -127,25 +127,53 @@ function writeDatabase(data: any) {
   }
 }
 
+// Server-side in-memory cache for Supabase queries to reduce egress & API overhead
+const serverSupabaseCache = new Map<string, { timestamp: number; data: any[] }>();
+const SERVER_CACHE_TTL_MS = 5000; // 5 seconds
+
+function clearServerSupabaseCache(table?: string) {
+  if (table) {
+    for (const key of serverSupabaseCache.keys()) {
+      if (key.startsWith(table + ':')) {
+        serverSupabaseCache.delete(key);
+      }
+    }
+  } else {
+    serverSupabaseCache.clear();
+  }
+}
+
 /**
- * Helper to fetch all rows from Supabase bypassing PostgREST's default 1000-row limit.
- * Uses pagination with range(from, to) until all records are retrieved.
+ * Helper to fetch rows from Supabase with limit and pagination.
  */
 async function fetchAllSupabaseRows<T = any>(
   client: any,
   table: string,
   orderBy: string = 'created_at',
-  ascending: boolean = false
+  ascending: boolean = false,
+  limit: number = 500,
+  forceRefresh: boolean = false
 ): Promise<T[]> {
   if (!client) return [];
+
+  const maxRows = Math.max(1, Math.min(limit, 2000));
+  const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}`;
+  const cached = serverSupabaseCache.get(cacheKey);
+  const now = Date.now();
+
+  if (!forceRefresh && cached && (now - cached.timestamp < SERVER_CACHE_TTL_MS)) {
+    return cached.data as T[];
+  }
+
   let allRows: T[] = [];
   let page = 0;
-  const pageSize = 1000;
+  const pageSize = Math.min(100, maxRows);
   let hasMore = true;
 
-  while (hasMore) {
+  while (hasMore && allRows.length < maxRows) {
     const from = page * pageSize;
-    const to = from + pageSize - 1;
+    const fetchSize = Math.min(pageSize, maxRows - allRows.length);
+    const to = from + fetchSize - 1;
     let query = client.from(table).select('*');
     if (orderBy) {
       query = query.order(orderBy, { ascending });
@@ -159,7 +187,7 @@ async function fetchAllSupabaseRows<T = any>(
 
     if (data && data.length > 0) {
       allRows = allRows.concat(data as T[]);
-      if (data.length < pageSize) {
+      if (data.length < fetchSize || allRows.length >= maxRows) {
         hasMore = false;
       } else {
         page++;
@@ -169,6 +197,7 @@ async function fetchAllSupabaseRows<T = any>(
     }
   }
 
+  serverSupabaseCache.set(cacheKey, { timestamp: Date.now(), data: allRows });
   return allRows;
 }
 
@@ -176,14 +205,16 @@ async function fetchAllSupabaseRows<T = any>(
 
 // 1. PRODUCTS API
 app.get('/api/products', async (req, res) => {
+  const limit = Number(req.query.limit) || 500;
   if (supabase) {
     try {
-      const data = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true);
+      const data = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true, limit);
       if (data) {
         if (data.length === 0) {
           console.log('Server auto-seeding products table in Supabase...');
           await supabase.from('products').insert(INITIAL_PRODUCTS);
-          const seeded = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true);
+          clearServerSupabaseCache('products');
+          const seeded = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true, limit);
           if (seeded) return res.json(seeded);
         } else {
           return res.json(data);
@@ -348,6 +379,7 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // 2. ORDERS API
 app.get('/api/orders', async (req, res) => {
+  const limit = Number(req.query.limit) || 500;
   const db = readDatabase();
   const deletedOrders = db.deleted_orders || [];
 
@@ -356,7 +388,7 @@ app.get('/api/orders', async (req, res) => {
       // Purge dummy orders from Supabase if present
       await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
 
-      const data = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false);
+      const data = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false, limit);
       if (data) {
         const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
         return res.json(filtered);
@@ -545,12 +577,13 @@ app.delete('/api/orders/:id', async (req, res) => {
 
 // --- SHOPEE ORDERS API ---
 app.get('/api/shopee_orders', async (req, res) => {
+  const limit = Number(req.query.limit) || 500;
   const db = readDatabase();
   const deletedShopee = db.deleted_shopee_orders || [];
 
   if (supabase) {
     try {
-      const data = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false);
+      const data = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, limit);
       if (data) {
         const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
         return res.json(filtered);
@@ -663,12 +696,13 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
 
 // --- MAPS REVIEWS API ---
 app.get('/api/maps_reviews', async (req, res) => {
+  const limit = Number(req.query.limit) || 500;
   const db = readDatabase();
   const deletedMaps = db.deleted_maps_reviews || [];
 
   if (supabase) {
     try {
-      const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false);
+      const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, limit);
       if (data) {
         const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
         return res.json(filtered);

@@ -63,25 +63,54 @@ export function dbIsSupabaseConnected(): boolean {
   return isSupabaseConfigured && !supabaseFailed;
 }
 
+// In-memory cache for fetchAllSupabaseRows to reduce Egress
+const supabaseQueryCache = new Map<string, { timestamp: number; data: any[] }>();
+const CACHE_TTL_MS = 5000; // 5 seconds cache TTL
+
+export function clearSupabaseCache(table?: string) {
+  if (table) {
+    for (const key of supabaseQueryCache.keys()) {
+      if (key.startsWith(table + ':')) {
+        supabaseQueryCache.delete(key);
+      }
+    }
+  } else {
+    supabaseQueryCache.clear();
+  }
+}
+
 /**
- * Helper to fetch all rows from Supabase bypassing PostgREST's default 1000-row limit.
- * Uses pagination with range(from, to) until all records are retrieved.
+ * Helper to fetch rows from Supabase with limit and pagination.
+ * Uses pagination with range(from, to) up to limit records.
  */
 export async function fetchAllSupabaseRows<T = any>(
   client: any,
   table: string,
   orderBy: string = 'created_at',
-  ascending: boolean = false
+  ascending: boolean = false,
+  forceRefresh: boolean = false,
+  limit: number = 500
 ): Promise<T[]> {
   if (!client) return [];
+
+  const maxRows = Math.max(1, Math.min(limit, 2000));
+  const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}`;
+  const cached = supabaseQueryCache.get(cacheKey);
+  const now = Date.now();
+
+  if (!forceRefresh && cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+    return cached.data as T[];
+  }
+
   let allRows: T[] = [];
   let page = 0;
-  const pageSize = 1000;
+  const pageSize = Math.min(100, maxRows);
   let hasMore = true;
 
-  while (hasMore) {
+  while (hasMore && allRows.length < maxRows) {
     const from = page * pageSize;
-    const to = from + pageSize - 1;
+    const fetchSize = Math.min(pageSize, maxRows - allRows.length);
+    const to = from + fetchSize - 1;
     let query = client.from(table).select('*');
     if (orderBy) {
       query = query.order(orderBy, { ascending });
@@ -95,7 +124,7 @@ export async function fetchAllSupabaseRows<T = any>(
 
     if (data && data.length > 0) {
       allRows = allRows.concat(data as T[]);
-      if (data.length < pageSize) {
+      if (data.length < fetchSize || allRows.length >= maxRows) {
         hasMore = false;
       } else {
         page++;
@@ -105,6 +134,7 @@ export async function fetchAllSupabaseRows<T = any>(
     }
   }
 
+  supabaseQueryCache.set(cacheKey, { timestamp: Date.now(), data: allRows });
   return allRows;
 }
 
@@ -514,10 +544,10 @@ function deleteLocalStorageMapsReview(id: string) {
 // --- DB OPERATION ADAPTERS ---
 
 // 1. PRODUCTS
-export async function dbGetProducts(): Promise<Product[]> {
+export async function dbGetProducts(limit: number = 500): Promise<Product[]> {
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const data = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true);
+      const data = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true, false, limit);
       
       if (data) {
         if (data.length === 0) {
@@ -547,7 +577,7 @@ export async function dbGetProducts(): Promise<Product[]> {
   }
 
   return safeFetch<Product[]>(
-    '/api/products',
+    `/api/products?limit=${limit}`,
     undefined,
     'gmsolution_local_products',
     () => INITIAL_PRODUCTS
@@ -577,6 +607,7 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
         .single();
       
       if (!error && data) {
+        clearSupabaseCache('products');
         return data as Product;
       }
       
@@ -590,6 +621,7 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
           .single();
           
         if (!retryResult.error && retryResult.data) {
+          clearSupabaseCache('products');
           return retryResult.data as Product;
         }
         console.warn('Supabase create product retry warning, falling back to Local/API:', retryResult.error || error);
@@ -745,7 +777,7 @@ export async function dbDeleteProduct(id: string): Promise<boolean> {
 
 
 // 2. ORDERS
-export async function dbGetOrders(): Promise<Order[]> {
+export async function dbGetOrders(limit: number = 500): Promise<Order[]> {
   const deletedOrders = getClientDeletedOrders();
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
@@ -753,7 +785,7 @@ export async function dbGetOrders(): Promise<Order[]> {
       // Delete dummy seed orders from Supabase if they exist
       await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
 
-      const data = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false);
+      const data = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false, false, limit);
       
       if (data) {
         localStorage.setItem('gmsolution_seeded_orders', 'true');
@@ -776,7 +808,7 @@ export async function dbGetOrders(): Promise<Order[]> {
   }
 
   const res = await safeFetch<Order[]>(
-    '/api/orders',
+    `/api/orders?limit=${limit}`,
     undefined,
     'gmsolution_local_orders',
     () => []
@@ -810,6 +842,7 @@ export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
         .single();
       
       if (!error && data) {
+        clearSupabaseCache('orders');
         const result = data as Order;
         triggerSheetsSync('order', 'insert', result);
         return result;
@@ -1070,12 +1103,12 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
 
 
 // 4. SHOPEE ORDERS
-export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
+export async function dbGetShopeeOrders(limit: number = 500): Promise<ShopeeOrder[]> {
   const deletedShopee = getClientDeletedShopeeOrders();
   let list: ShopeeOrder[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const data = await fetchAllSupabaseRows<ShopeeOrder>(supabase, 'shopee_orders', 'created_at', false);
+      const data = await fetchAllSupabaseRows<ShopeeOrder>(supabase, 'shopee_orders', 'created_at', false, false, limit);
       if (data) {
         list = data;
       }
@@ -1087,7 +1120,7 @@ export async function dbGetShopeeOrders(): Promise<ShopeeOrder[]> {
 
   if (list.length === 0) {
     list = await safeFetch<ShopeeOrder[]>(
-      '/api/shopee_orders',
+      `/api/shopee_orders?limit=${limit}`,
       undefined,
       'gmsolution_local_shopee_orders',
       () => []
@@ -1298,12 +1331,12 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
 
 
 // 5. MAPS REVIEWS
-export async function dbGetMapsReviews(): Promise<MapsReview[]> {
+export async function dbGetMapsReviews(limit: number = 500): Promise<MapsReview[]> {
   const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const data = await fetchAllSupabaseRows<MapsReview>(supabase, 'maps_reviews', 'created_at', false);
+      const data = await fetchAllSupabaseRows<MapsReview>(supabase, 'maps_reviews', 'created_at', false, false, limit);
       if (data) {
         const mapped = data.map((item: any) => {
           let accounts: string[] = [];
