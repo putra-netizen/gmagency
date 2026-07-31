@@ -129,7 +129,7 @@ function writeDatabase(data: any) {
 
 // Server-side in-memory cache for Supabase queries to reduce egress & API overhead
 const serverSupabaseCache = new Map<string, { timestamp: number; data: any[] }>();
-const SERVER_CACHE_TTL_MS = 5000; // 5 seconds
+const SERVER_CACHE_TTL_MS = 60000; // 60 seconds TTL
 
 function clearServerSupabaseCache(table?: string) {
   if (table) {
@@ -151,12 +151,12 @@ async function fetchAllSupabaseRows<T = any>(
   table: string,
   orderBy: string = 'created_at',
   ascending: boolean = false,
-  limit: number = 500,
+  limit: number = 10000,
   forceRefresh: boolean = false
 ): Promise<T[]> {
   if (!client) return [];
 
-  const maxRows = Math.max(1, Math.min(limit, 2000));
+  const maxRows = Math.max(1, Math.min(limit, 50000));
   const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}`;
   const cached = serverSupabaseCache.get(cacheKey);
   const now = Date.now();
@@ -167,7 +167,7 @@ async function fetchAllSupabaseRows<T = any>(
 
   let allRows: T[] = [];
   let page = 0;
-  const pageSize = Math.min(100, maxRows);
+  const pageSize = Math.min(1000, maxRows); // 1000 rows per chunk
   let hasMore = true;
 
   while (hasMore && allRows.length < maxRows) {
@@ -379,7 +379,7 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // 2. ORDERS API
 app.get('/api/orders', async (req, res) => {
-  const limit = Number(req.query.limit) || 500;
+  const limit = Number(req.query.limit) || 10000;
   const db = readDatabase();
   const deletedOrders = db.deleted_orders || [];
 
@@ -577,7 +577,7 @@ app.delete('/api/orders/:id', async (req, res) => {
 
 // --- SHOPEE ORDERS API ---
 app.get('/api/shopee_orders', async (req, res) => {
-  const limit = Number(req.query.limit) || 500;
+  const limit = Number(req.query.limit) || 10000;
   const db = readDatabase();
   const deletedShopee = db.deleted_shopee_orders || [];
 
@@ -696,7 +696,7 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
 
 // --- MAPS REVIEWS API ---
 app.get('/api/maps_reviews', async (req, res) => {
-  const limit = Number(req.query.limit) || 500;
+  const limit = Number(req.query.limit) || 10000;
   const db = readDatabase();
   const deletedMaps = db.deleted_maps_reviews || [];
 

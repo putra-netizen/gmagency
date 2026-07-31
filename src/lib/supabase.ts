@@ -65,7 +65,7 @@ export function dbIsSupabaseConnected(): boolean {
 
 // In-memory cache for fetchAllSupabaseRows to reduce Egress
 const supabaseQueryCache = new Map<string, { timestamp: number; data: any[] }>();
-const CACHE_TTL_MS = 5000; // 5 seconds cache TTL
+const CACHE_TTL_MS = 60000; // 60 seconds cache TTL to drastically reduce egress
 
 export function clearSupabaseCache(table?: string) {
   if (table) {
@@ -89,11 +89,11 @@ export async function fetchAllSupabaseRows<T = any>(
   orderBy: string = 'created_at',
   ascending: boolean = false,
   forceRefresh: boolean = false,
-  limit: number = 500
+  limit: number = 10000
 ): Promise<T[]> {
   if (!client) return [];
 
-  const maxRows = Math.max(1, Math.min(limit, 2000));
+  const maxRows = Math.max(1, Math.min(limit, 50000));
   const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}`;
   const cached = supabaseQueryCache.get(cacheKey);
   const now = Date.now();
@@ -104,7 +104,7 @@ export async function fetchAllSupabaseRows<T = any>(
 
   let allRows: T[] = [];
   let page = 0;
-  const pageSize = Math.min(100, maxRows);
+  const pageSize = Math.min(1000, maxRows); // 1000 rows per request (90% fewer API calls than 100)
   let hasMore = true;
 
   while (hasMore && allRows.length < maxRows) {
@@ -777,7 +777,7 @@ export async function dbDeleteProduct(id: string): Promise<boolean> {
 
 
 // 2. ORDERS
-export async function dbGetOrders(limit: number = 500): Promise<Order[]> {
+export async function dbGetOrders(limit: number = 10000): Promise<Order[]> {
   const deletedOrders = getClientDeletedOrders();
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
@@ -1103,7 +1103,7 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
 
 
 // 4. SHOPEE ORDERS
-export async function dbGetShopeeOrders(limit: number = 500): Promise<ShopeeOrder[]> {
+export async function dbGetShopeeOrders(limit: number = 10000): Promise<ShopeeOrder[]> {
   const deletedShopee = getClientDeletedShopeeOrders();
   let list: ShopeeOrder[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
@@ -1331,7 +1331,7 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
 
 
 // 5. MAPS REVIEWS
-export async function dbGetMapsReviews(limit: number = 500): Promise<MapsReview[]> {
+export async function dbGetMapsReviews(limit: number = 10000): Promise<MapsReview[]> {
   const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {

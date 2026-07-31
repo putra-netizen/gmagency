@@ -241,13 +241,14 @@ export default function App() {
       loadProducts();
       
       const interval = setInterval(() => {
+        if (document.hidden) return;
         // Silent background refresh of products to provide automatic realtime updates
         dbGetProducts()
           .then((data) => {
             setProducts(data);
           })
           .catch((err) => console.error('Silent products refresh failed:', err));
-      }, 15000);
+      }, 60000);
       
       return () => clearInterval(interval);
     }

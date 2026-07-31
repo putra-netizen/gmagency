@@ -78,8 +78,10 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
       loadOrdersData();
 
       const interval = setInterval(() => {
-        loadOrdersData(true); // silent refresh
-      }, 5000);
+        if (!document.hidden) {
+          loadOrdersData(true); // silent refresh
+        }
+      }, 30000);
 
       return () => clearInterval(interval);
     }

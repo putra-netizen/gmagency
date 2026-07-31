@@ -883,12 +883,13 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   useEffect(() => {
     loadDashboardData();
     const interval = setInterval(() => {
+      if (document.hidden) return;
       dbGetProducts().then(prodsData => setProducts(prodsData)).catch(err => console.error(err));
       dbGetOrders().then(ordsData => setOrders(ordsData)).catch(err => console.error(err));
       dbGetShopeeOrders().then(shopeeData => setShopeeOrders(shopeeData)).catch(err => console.error(err));
       dbGetMapsReviews().then(mapsData => setMapsReviews(mapsData)).catch(err => console.error(err));
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(err => console.error(err));
-    }, 5000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
