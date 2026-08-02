@@ -16,6 +16,7 @@ import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview } from '../types';
+import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { 
   Copy, 
   Plus, 
@@ -369,27 +370,17 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [searchShopee, setSearchShopee] = useState('');
   const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
   const [shopeeTypeFilter, setShopeeTypeFilter] = useState<'all' | 'report' | 'spam_wa'>('all');
-  const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [timeFilterShopee, setTimeFilterShopee] = useState<TimeFilterConfig>({ mode: 'all' });
   const [pageShopee, setPageShopee] = useState(1);
 
   const [searchMaps, setSearchMaps] = useState('');
   const [sortMaps, setSortMaps] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'all' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('all');
-  const [timeFilterMaps, setTimeFilterMaps] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [timeFilterMaps, setTimeFilterMaps] = useState<TimeFilterConfig>({ mode: 'all' });
   const [pageMaps, setPageMaps] = useState(1);
 
-  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'today' | 'week' | 'month') => {
-    if (timeframe === 'all' || !createdAtStr) return true;
-    const dateObj = new Date(createdAtStr);
-    const now = new Date();
-    if (timeframe === 'today') {
-      return dateObj.toDateString() === now.toDateString();
-    }
-    const diffTime = Math.abs(now.getTime() - dateObj.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (timeframe === 'week') return diffDays <= 7;
-    if (timeframe === 'month') return diffDays <= 30;
-    return true;
+  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: TimeFilterConfig | string) => {
+    return isWithinCustomTimeframe(createdAtStr, timeframe);
   };
 
   // Loading states
@@ -1685,20 +1676,12 @@ Format Chat : ${data.notes || '-'}`;
                       </select>
                     </div>
 
-                    {/* Timeframe Filter (Beautiful Dropdown) */}
-                    <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-100 text-[10px] w-full sm:w-auto">
-                      <span className="text-slate-455 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
-                      <select
-                        value={timeFilterShopee}
-                        onChange={(e) => setTimeFilterShopee(e.target.value as any)}
-                        className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase"
-                      >
-                        <option value="all">SEMUA</option>
-                        <option value="today">HARI INI</option>
-                        <option value="week">MINGGU</option>
-                        <option value="month">BULAN</option>
-                      </select>
-                    </div>
+                    {/* Timeframe Filter (Monthly Date Range Picker) */}
+                    <MonthlyDateRangePicker
+                      value={timeFilterShopee}
+                      onChange={setTimeFilterShopee}
+                      currentLang="id"
+                    />
                   </div>
                 </div>
 
@@ -2177,20 +2160,12 @@ Format Chat : ${data.notes || '-'}`;
                            </select>
                          </div>
  
-                         {/* Timeframe Filter (Minimalist badge/pills style) */}
-                         <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
-                           <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Waktu:</span>
-                           <select
-                             value={timeFilterMaps}
-                             onChange={(e) => setTimeFilterMaps(e.target.value as any)}
-                             className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase ml-1.5"
-                           >
-                             <option value="all">SEMUA</option>
-                             <option value="today">HARI INI</option>
-                             <option value="week">MINGGU</option>
-                             <option value="month">BULAN</option>
-                           </select>
-                         </div>
+                         {/* Timeframe Filter (Monthly Date Range Picker) */}
+                         <MonthlyDateRangePicker
+                           value={timeFilterMaps}
+                           onChange={setTimeFilterMaps}
+                           currentLang="id"
+                         />
                        </div>
                      </div>
  

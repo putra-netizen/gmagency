@@ -20,13 +20,15 @@ import { getQrisConfig, saveQrisConfig, resetQrisConfig } from '../utils/qrisHel
 import { toast } from '../utils/toast';
 import { getSheetsSyncConfig, saveSheetsSyncConfig, getGoogleAppsScriptTemplate } from '../utils/sheetsSyncHelper';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
+import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
+import { FinanceView } from './FinanceView';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
   Briefcase, Save, AlertCircle, FileText, Check, Database, X, Globe,
   ExternalLink, Image as ImageIcon, Settings, ShoppingCart, Copy, ArrowLeft,
   Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
-  FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft
+  FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft, Wallet
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -271,8 +273,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'order' | 'product' } | null>(null);
   
-  // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'
-  const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'settings'>('orders');
+  // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'keuangan' | 'settings'
+  const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'keuangan' | 'settings'>('orders');
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
 
   // Settings view nested tab states
@@ -378,22 +380,22 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   // Search and Sort states for each table
   const [searchUnpaid, setSearchUnpaid] = useState('');
   const [sortUnpaid, setSortUnpaid] = useState<'all' | 'pending' | 'progress' | 'done'>('all');
-  const [timeFilterUnpaid, setTimeFilterUnpaid] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [timeFilterUnpaid, setTimeFilterUnpaid] = useState<TimeFilterConfig>({ mode: 'all' });
   const [serviceFilterUnpaid, setServiceFilterUnpaid] = useState<string>('all');
 
   const [searchPaid, setSearchPaid] = useState('');
   const [sortPaid, setSortPaid] = useState<'all' | 'pending' | 'progress' | 'done'>('all');
-  const [timeFilterPaid, setTimeFilterPaid] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [timeFilterPaid, setTimeFilterPaid] = useState<TimeFilterConfig>({ mode: 'all' });
   const [serviceFilterPaid, setServiceFilterPaid] = useState<string>('all');
 
   const [searchShopee, setSearchShopee] = useState('');
   const [sortShopee, setSortShopee] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
-  const [timeFilterShopee, setTimeFilterShopee] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [timeFilterShopee, setTimeFilterShopee] = useState<TimeFilterConfig>({ mode: 'all' });
   const [shopeeTypeFilter, setShopeeTypeFilter] = useState<'all' | 'report' | 'spam_wa'>('all');
 
   const [searchReview, setSearchReview] = useState('');
   const [sortReview, setSortReview] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
-  const [timeFilterReview, setTimeFilterReview] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [timeFilterReview, setTimeFilterReview] = useState<TimeFilterConfig>({ mode: 'all' });
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('SEMUA');
 
   // Pagination states
@@ -408,24 +410,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   useEffect(() => { setPageShopee(1); }, [searchShopee, shopeeTypeFilter, sortShopee, timeFilterShopee]);
   useEffect(() => { setPageReview(1); }, [searchReview, reviewTypeFilter, sortReview, timeFilterReview]);
 
-  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: 'all' | 'today' | 'week' | 'month') => {
-    if (timeframe === 'all' || !createdAtStr) return true;
-    const dateObj = new Date(createdAtStr);
-    const now = new Date();
-    
-    if (timeframe === 'today') {
-      return (
-        dateObj.getDate() === now.getDate() &&
-        dateObj.getMonth() === now.getMonth() &&
-        dateObj.getFullYear() === now.getFullYear()
-      );
-    }
-    
-    const diffTime = Math.abs(now.getTime() - dateObj.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (timeframe === 'week') return diffDays <= 7;
-    if (timeframe === 'month') return diffDays <= 30;
-    return true;
+  const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: TimeFilterConfig | string) => {
+    return isWithinCustomTimeframe(createdAtStr, timeframe);
   };
 
   // Authentication states
@@ -479,11 +465,36 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     const onNavbarRefresh = () => {
       loadDashboardData();
     };
+    const onNavigateKeuangan = () => {
+      setActiveTab('keuangan');
+      window.history.pushState(null, '', '/admin/keuangan');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    };
+    const onNavigateKatalog = () => {
+      setActiveTab('settings');
+      setActiveSettingsTab('products');
+      window.history.pushState(null, '', '/admin/settings');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    };
+    const onNavigateSheets = () => {
+      setActiveTab('settings');
+      setActiveSettingsTab('export_transactions');
+      window.history.pushState(null, '', '/admin/settings');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    };
+
     window.addEventListener('admin-logout', onNavbarLogout);
     window.addEventListener('admin-refresh', onNavbarRefresh);
+    window.addEventListener('admin-navigate-keuangan', onNavigateKeuangan);
+    window.addEventListener('admin-navigate-katalog', onNavigateKatalog);
+    window.addEventListener('admin-navigate-sheets', onNavigateSheets);
+
     return () => {
       window.removeEventListener('admin-logout', onNavbarLogout);
       window.removeEventListener('admin-refresh', onNavbarRefresh);
+      window.removeEventListener('admin-navigate-keuangan', onNavigateKeuangan);
+      window.removeEventListener('admin-navigate-katalog', onNavigateKatalog);
+      window.removeEventListener('admin-navigate-sheets', onNavigateSheets);
     };
   }, []);
 
@@ -899,8 +910,10 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       const pathname = window.location.pathname;
       if (pathname === '/admin/settings' || pathname === '/admin/settings/') {
         setActiveTab('settings');
+      } else if (pathname === '/admin/devpayroll' || pathname === '/admin/devpayroll/' || pathname === '/admin/keuangan' || pathname === '/admin/keuangan/') {
+        setActiveTab('keuangan');
       } else if (pathname === '/admin' || pathname === '/admin/') {
-        setActiveTab(prev => prev === 'settings' ? 'orders' : prev);
+        setActiveTab(prev => (prev === 'settings' || prev === 'keuangan') ? 'orders' : prev);
       }
     };
     checkLocationRoute();
@@ -1507,55 +1520,33 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="admin-panel-container">
       
-      {/* Content Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-5 mb-8">
-        <div>
-          {activeTab === 'settings' ? (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => {
-                  setActiveTab('orders');
-                  window.history.pushState(null, '', '/admin');
-                  window.dispatchEvent(new PopStateEvent('popstate'));
-                }}
-                className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200 transition-all cursor-pointer border border-slate-200/50"
-                id="admin-settings-back-btn"
-              >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>{currentLang === 'id' ? 'Kembali' : 'Back'}</span>
-                </button>
-                <div className="h-6 w-px bg-slate-200" />
-                <Settings className="h-6 w-6 text-blue-600 animate-spin-slow" />
-                <h1 className="text-2xl font-black text-slate-950 font-sans tracking-tight uppercase">
-                  Settings Admin
-                </h1>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                {activeTab === 'orders' ? (
-                  <ShoppingBag className="h-6 w-6 text-blue-600" />
-                ) : activeTab === 'shopee_orders' ? (
-                  <ShoppingCart className="h-6 w-6 text-blue-600" />
-                ) : (
-                  <Star className="h-6 w-6 text-blue-600" />
-                )}
-                <h1 className="text-2xl font-black text-slate-950 font-sans tracking-tight uppercase">
-                  {activeTab === 'orders' ? (currentLang === 'id' ? 'Pesanan Web' : 'Web Orders')
-                    : activeTab === 'shopee_orders' ? (currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders')
-                    : 'Review Orders'}
-                </h1>
-              </div>
-            )}
-            <p className="text-sm text-slate-500 font-medium mt-2">
-              {activeTab === 'settings' 
-                ? 'Kelola katalog layanan, harga produk, dan sinkronisasi Google Spreadsheet.'
-                : activeTab === 'orders' ? 'Kelola pesanan dari website utama GM AGENCY.'
+      {/* Content Header - Only rendered on primary order tabs */}
+      {activeTab !== 'settings' && activeTab !== 'keuangan' && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 mb-8">
+          <div>
+            <div className="flex items-center gap-2">
+              {activeTab === 'orders' ? (
+                <ShoppingBag className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              ) : activeTab === 'shopee_orders' ? (
+                <ShoppingCart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              ) : (
+                <Star className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              )}
+              <h1 className="text-2xl font-black text-slate-950 dark:text-slate-100 font-sans tracking-tight uppercase">
+                {activeTab === 'orders' ? (currentLang === 'id' ? 'Pesanan Web' : 'Web Orders')
+                  : activeTab === 'shopee_orders' ? (currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders')
+                  : 'Review Orders'}
+              </h1>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-2">
+              {activeTab === 'orders' ? 'Kelola pesanan dari website utama GM AGENCY.'
                 : activeTab === 'shopee_orders' ? 'Kelola pesanan dari toko Shopee.'
                 : 'Pantau pesanan review rating Google Maps, Tripadvisor, dan Review Apps.'
               }
             </p>
           </div>
         </div>
+      )}
 
         {errorMsg && (
           <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 p-4 text-sm font-semibold text-red-700">
@@ -1564,8 +1555,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
           </div>
         )}
 
-        {/* Conditionally hide the stats dashboard if activeTab is 'settings' */}
-        {activeTab !== 'settings' && (
+        {/* Conditionally hide the operational dashboard stats if activeTab is 'settings' or 'keuangan' */}
+        {activeTab !== 'settings' && activeTab !== 'keuangan' && (
           <>
             {/* Quick Access Admin-SHP Bypass Portal */}
             <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -1606,101 +1597,99 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
               </div>
             </div>
 
-            {/* 1. STATS OVERVIEW ROW (Financial Dashboard Card) - Highly Polished & Organized */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
-              <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-6 flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
-                Ikhtisar Keuangan & Kinerja Operasional
-              </h2>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-                {/* Featured Financial Card */}
-                <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 dark:from-slate-950 dark:to-slate-900 text-white rounded-2xl p-6 shadow-md flex flex-col justify-between relative overflow-hidden">
-                  <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+            {/* 1. KINERJA OPERASIONAL DASHBOARD CARD - Clean, Realtime, No Financial Revenue Info */}
+            {(() => {
+              // Calculate realtime operational stats (Web + Shopee)
+              const onProgressCount = 
+                orders.filter(o => o.status !== 'DONE').length +
+                shopeeOrders.filter(s => s.status !== 'DONE').length;
+
+              const completedCount = 
+                orders.filter(o => o.status === 'DONE').length +
+                shopeeOrders.filter(s => s.status === 'DONE').length;
+
+              const totalOpOrders = orders.length + shopeeOrders.length;
+              const completedOpPercentage = totalOpOrders > 0 ? Math.round((completedCount / totalOpOrders) * 100) : 0;
+
+              return (
+                <div id="stats-operational-overview" className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
+                  <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        Kinerja Operasional Dashboard
+                      </h2>
+                    </div>
+                  </div>
                   
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Pendapatan</span>
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
-                        <DollarSign className="h-5 w-5" />
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Web Orders */}
+                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
+                          <ShoppingBag className="h-4 w-4" />
+                        </div>
+                        <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Web Orders</span>
+                      </div>
+                      <div>
+                        <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                          {orders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
+                        </span>
                       </div>
                     </div>
-                    <div className="text-3xl sm:text-4xl font-black font-sans tracking-tight text-emerald-400 select-all">
-                      {formatRupiah(stats?.totalRevenue ?? 0)}
-                    </div>
-                  </div>
-                  
-                  <div className="mt-6 pt-4 border-t border-slate-800/80 relative z-10 flex items-center justify-between text-xs text-slate-400">
-                    <span className="font-medium">Total Akumulasi Transaksi</span>
-                    <span className="bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-md font-bold text-[10px]">Lunas</span>
-                  </div>
-                </div>
 
-                {/* Sub Metrics Grid */}
-                <div className="lg:col-span-7 grid grid-cols-2 gap-4">
-                  {/* Web Orders */}
-                  <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
-                        <ShoppingBag className="h-4 w-4" />
+                    {/* Shopee Orders */}
+                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400">
+                          <ShoppingCart className="h-4 w-4" />
+                        </div>
+                        <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Shopee Orders</span>
                       </div>
-                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Web Orders</span>
+                      <div>
+                        <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                          {shopeeOrders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                        {orders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Shopee Orders */}
-                  <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400">
-                        <ShoppingCart className="h-4 w-4" />
+                    {/* On Progress Orders */}
+                    <div className="bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400">
+                          <Clock className="h-4 w-4 animate-pulse" />
+                        </div>
+                        <span className="text-[11px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider">On Progress Orders</span>
                       </div>
-                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Shopee Orders</span>
+                      <div>
+                        <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                          {onProgressCount} <span className="text-xs font-bold text-amber-600 dark:text-amber-400">proses</span>
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                        {shopeeOrders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Pending Orders */}
-                  <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
-                        <Clock className="h-4 w-4 animate-pulse" />
+                    {/* Completed Orders */}
+                    <div className="bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="h-4 w-4" />
+                        </div>
+                        <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Completed Orders</span>
                       </div>
-                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t.pendingOrders}</span>
-                    </div>
-                    <div>
-                      <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                        {stats?.pendingOrders ?? 0} <span className="text-xs font-medium text-slate-400">menunggu</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Completed Orders */}
-                  <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100/80 dark:border-slate-800/50 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400">
-                        <CheckCircle2 className="h-4 w-4" />
+                      <div>
+                        <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                          {completedCount}
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">({completedOpPercentage}%)</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block mt-0.5">
+                          Khusus status "DONE"
+                        </span>
                       </div>
-                      <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t.completedOrders}</span>
-                    </div>
-                    <div>
-                      <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                        {stats?.completedOrders ?? 0}
-                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">({getCompletedPercentage()}%)</span>
-                      </span>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Tab Navigations */}
             <div className="flex items-center border-b border-slate-200 mb-6">
@@ -1722,6 +1711,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                 <ShoppingBag className="h-4 w-4" />
                 <span>{currentLang === 'id' ? 'Pesanan Web' : 'Web Orders'}</span>
               </button>
+
               <button
                 onClick={() => {
                   isTabClicking.current = true;
@@ -1740,6 +1730,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                 <ShoppingCart className="h-4 w-4" />
                 <span>{currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders'}</span>
               </button>
+
               <button
                 onClick={() => {
                   isTabClicking.current = true;
@@ -1818,20 +1809,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </select>
                   </div>
 
-                  {/* Timeframe Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
-                    <select
-                      value={timeFilterUnpaid}
-                      onChange={(e) => setTimeFilterUnpaid(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
-                      <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
-                      <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
-                      <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
-                    </select>
-                  </div>
+                  {/* Timeframe Filter (Monthly Date Range Picker) */}
+                  <MonthlyDateRangePicker
+                    value={timeFilterUnpaid}
+                    onChange={setTimeFilterUnpaid}
+                    currentLang={currentLang}
+                  />
                 </div>
               </div>
 
@@ -2206,20 +2189,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </select>
                   </div>
 
-                  {/* Timeframe Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
-                    <select
-                      value={timeFilterPaid}
-                      onChange={(e) => setTimeFilterPaid(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
-                      <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
-                      <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
-                      <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
-                    </select>
-                  </div>
+                  {/* Timeframe Filter (Monthly Date Range Picker) */}
+                  <MonthlyDateRangePicker
+                    value={timeFilterPaid}
+                    onChange={setTimeFilterPaid}
+                    currentLang={currentLang}
+                  />
                 </div>
               </div>
 
@@ -2620,20 +2595,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </select>
                   </div>
 
-                  {/* Timeframe Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
-                    <select
-                      value={timeFilterShopee}
-                      onChange={(e) => setTimeFilterShopee(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
-                      <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
-                      <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
-                      <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
-                    </select>
-                  </div>
+                  {/* Timeframe Filter (Monthly Date Range Picker) */}
+                  <MonthlyDateRangePicker
+                    value={timeFilterShopee}
+                    onChange={setTimeFilterShopee}
+                    currentLang={currentLang}
+                  />
                 </div>
               </div>
 
@@ -2912,20 +2879,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </select>
                   </div>
 
-                  {/* Timeframe Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
-                    <select
-                      value={timeFilterReview}
-                      onChange={(e) => setTimeFilterReview(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
-                      <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
-                      <option value="week">{currentLang === 'id' ? 'MINGGU' : 'WEEK'}</option>
-                      <option value="month">{currentLang === 'id' ? 'BULAN' : 'MONTH'}</option>
-                    </select>
-                  </div>
+                  {/* Timeframe Filter (Monthly Date Range Picker) */}
+                  <MonthlyDateRangePicker
+                    value={timeFilterReview}
+                    onChange={setTimeFilterReview}
+                    currentLang={currentLang}
+                  />
                 </div>
               </div>
 
@@ -3248,9 +3207,24 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
           {activeTab === 'settings' && (
             <div className="flex flex-col lg:flex-row gap-8 items-start w-full" id="admin-settings-dashboard">
               {/* Left Sidebar for Navigation - Desktop and Mobile Hamburger */}
-              <div className="w-full lg:w-64 bg-white rounded-2xl border border-slate-100 p-4 shadow-sm shrink-0">
+              <div className="w-full lg:w-64 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 shadow-sm shrink-0 space-y-3">
+                {/* Back to Dashboard Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('orders');
+                    window.history.pushState(null, '', '/admin');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-black transition-all border border-slate-200 dark:border-slate-700/80 cursor-pointer shadow-xs active:scale-95"
+                  id="btn-back-to-dashboard-from-settings"
+                >
+                  <ArrowLeft className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span>Kembali ke Dashboard</span>
+                </button>
+
                 {/* Desktop Header */}
-                <div className="px-3 mb-4 hidden lg:block">
+                <div className="px-3 mb-2 hidden lg:block border-t border-slate-100 dark:border-slate-800 pt-3">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pengaturan Admin</h3>
                   <p className="text-[11px] text-slate-500 font-medium mt-1">Kelola produk, integrasi & akses</p>
                 </div>
@@ -4305,6 +4279,20 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
               )}
               </div>
             </div>
+          )}
+
+          {/* 5. HALAMAN KHUSUS KEUANGAN */}
+          {activeTab === 'keuangan' && (
+            <FinanceView
+              orders={orders}
+              currentLang={currentLang}
+              onUpdateOrderStatus={handleUpdateOrderStatus}
+              onBackToDashboard={() => {
+                setActiveTab('orders');
+                window.history.pushState(null, '', '/admin');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+            />
           )}
         </>
       )}

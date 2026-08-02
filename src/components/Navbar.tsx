@@ -8,7 +8,7 @@ import { motion } from 'motion/react';
 import GMLogo from './GMLogo';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
-import { Globe, ShieldAlert, Home, Grid, Settings, RefreshCw, LogOut, Sun, Moon } from 'lucide-react';
+import { Globe, ShieldAlert, Home, Grid, Settings, RefreshCw, LogOut, Sun, Moon, Menu, X, Wallet, Package, FileSpreadsheet } from 'lucide-react';
 
 interface NavbarProps {
   currentLang: Language;
@@ -32,6 +32,7 @@ export default function Navbar({
   const t = TRANSLATIONS[currentLang];
 
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
 
   const [isAdminAuth, setIsAdminAuth] = useState(() => {
     try {
@@ -107,16 +108,24 @@ export default function Navbar({
         
         {/* Logo brand or Admin Title */}
         {currentView === 'admin' ? (
-          <div className="flex items-center gap-2 sm:gap-3" id="admin-logo-status-container">
-            {/* Beautiful compact Admin title - no image, no GM Agency name */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg bg-blue-600 text-white font-black text-[11px] sm:text-xs tracking-wider shadow-sm select-none">
-                AD
-              </div>
-              <span className="text-xs sm:text-sm font-black tracking-wider font-sans uppercase text-slate-800">
-                Admin Panel
-              </span>
-            </div>
+          <div className="relative flex items-center gap-2 sm:gap-3" id="admin-logo-status-container">
+            {/* Hamburger Menu Button (Replaces "AD" logo) */}
+            <button
+              onClick={() => setIsAdminMenuOpen(prev => !prev)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all cursor-pointer shadow-md active:scale-95 border border-slate-700/50"
+              title="Menu Admin"
+              id="admin-hamburger-btn"
+            >
+              {isAdminMenuOpen ? (
+                <X className="h-5 w-5 text-amber-400 transition-transform duration-200" />
+              ) : (
+                <Menu className="h-5 w-5 text-white transition-transform duration-200" />
+              )}
+            </button>
+
+            <span className="text-xs sm:text-sm font-black tracking-wider font-sans uppercase text-slate-800 dark:text-slate-100">
+              Admin Panel
+            </span>
 
             {/* Supabase connection status pill (Admin role only!) */}
             <div 
@@ -130,6 +139,107 @@ export default function Navbar({
                 {supabaseConnected ? 'AKTIF' : 'OFFLINE'}
               </span>
             </div>
+
+            {/* Premium Hamburger Menu Dropdown Popover */}
+            {isAdminMenuOpen && (
+              <>
+                {/* Backdrop overlay */}
+                <div 
+                  className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[2px]" 
+                  onClick={() => setIsAdminMenuOpen(false)} 
+                />
+
+                {/* Dropdown Card */}
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-0 top-full mt-2.5 z-50 w-72 sm:w-80 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-2.5 shadow-2xl ring-1 ring-black/5"
+                  id="admin-hamburger-dropdown"
+                >
+                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-1 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                      Menu Utama Admin
+                    </span>
+                    <span className="bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-blue-100 dark:border-blue-900">
+                      PREMIUM NAV
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {/* 1. KEUANGAN */}
+                    <button
+                      onClick={() => {
+                        setIsAdminMenuOpen(false);
+                        window.history.pushState(null, '', '/admin/devpayroll');
+                        window.dispatchEvent(new PopStateEvent('popstate'));
+                        window.dispatchEvent(new CustomEvent('admin-navigate-keuangan'));
+                      }}
+                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-emerald-50/80 dark:hover:bg-emerald-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-emerald-200 dark:hover:border-emerald-900/60 bg-slate-50/50 dark:bg-slate-800/30"
+                      id="menu-item-keuangan"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform shadow-xs">
+                        <Wallet className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
+                          <span>KEUANGAN</span>
+                          <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-bold">NAVBAR</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                          Ikhtisar omset & total pendapatan
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* 2. EDIT KATALOG */}
+                    <button
+                      onClick={() => {
+                        setIsAdminMenuOpen(false);
+                        window.dispatchEvent(new CustomEvent('admin-navigate-katalog'));
+                      }}
+                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50/80 dark:hover:bg-blue-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-blue-200 dark:hover:border-blue-900/60 bg-slate-50/50 dark:bg-slate-800/30"
+                      id="menu-item-edit-katalog"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-transform shadow-xs">
+                        <Package className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                          EDIT KATALOG
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                          CRUD kelola produk & layanan
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* 3. EXPORT SHEET */}
+                    <button
+                      onClick={() => {
+                        setIsAdminMenuOpen(false);
+                        window.dispatchEvent(new CustomEvent('admin-navigate-sheets'));
+                      }}
+                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-teal-50/80 dark:hover:bg-teal-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-teal-200 dark:hover:border-teal-900/60 bg-slate-50/50 dark:bg-slate-800/30"
+                      id="menu-item-export-sheet"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 group-hover:scale-105 transition-transform shadow-xs">
+                        <FileSpreadsheet className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                          EXPORT SHEET
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                          Export CSV & Google Sheets Sync
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </motion.div>
+              </>
+            )}
           </div>
         ) : (
           /* Normal Logo brand encapsulated in white capsule wrapper */
@@ -159,7 +269,7 @@ export default function Navbar({
             </div>
           )}
 
-          {/* Admin panel actions (Refresh, Settings, and Sign Out) */}
+          {/* Admin panel actions (Refresh and Sign Out) */}
           {currentView === 'admin' && isAdminAuth && (
             <>
               {/* Refresh (icon only, minimal) */}
@@ -172,23 +282,6 @@ export default function Navbar({
                 id="nav-refresh-admin"
               >
                 <RefreshCw className="h-4 w-4 text-slate-500 hover:text-slate-700" />
-              </button>
-
-              {/* Settings */}
-              <button
-                onClick={() => {
-                  window.history.pushState(null, '', '/admin/settings');
-                  window.dispatchEvent(new PopStateEvent('popstate'));
-                }}
-                className={`h-9 w-9 items-center justify-center rounded-full transition-all flex border cursor-pointer ${
-                  currentPath.includes('settings')
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:text-slate-950'
-                }`}
-                title="Settings Admin"
-                id="nav-settings-admin"
-              >
-                <Settings className="h-4 w-4 animate-spin-slow" />
               </button>
 
               {/* Log Out (icon only, minimal) */}
