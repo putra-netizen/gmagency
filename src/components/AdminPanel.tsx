@@ -1024,17 +1024,25 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     const targetReview = mapsReviews.find(r => r.id === reviewId);
     if (!targetReview) return;
 
-    const updatedAccounts = [...(targetReview.reviewer_accounts || []), nameToAdd];
-    
+    const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
+    const updatedAccounts = [...currentAccounts, nameToAdd];
+
+    // Optimistically update UI immediately
+    setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
+    setTempAccountInput(prev => ({ ...prev, [reviewId]: '' }));
+
     try {
-      await dbUpdateMapsReview(reviewId, {
+      const saved = await dbUpdateMapsReview(reviewId, {
         reviewer_accounts: updatedAccounts
       });
-      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
-      setTempAccountInput(prev => ({ ...prev, [reviewId]: '' }));
+      if (saved && Array.isArray(saved.reviewer_accounts)) {
+        setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: saved.reviewer_accounts } : r));
+      }
       logAdminShpAction('Main Admin', 'Tambah Reviewer', `Menambahkan akun reviewer "${nameToAdd}" ke review store "${targetReview.store_name}"`);
     } catch (err) {
       console.error(err);
+      // Revert optimistic update on failure
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: currentAccounts } : r));
       toast.error(currentLang === 'id' ? `Gagal menambah akun progres: ${err instanceof Error ? err.message : String(err)}` : `Failed to add progress account: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
@@ -1044,16 +1052,24 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     const targetReview = mapsReviews.find(r => r.id === reviewId);
     if (!targetReview) return;
 
-    const updatedAccounts = (targetReview.reviewer_accounts || []).filter((_, idx) => idx !== indexToRemove);
+    const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
+    const updatedAccounts = currentAccounts.filter((_, idx) => idx !== indexToRemove);
+
+    // Optimistically update UI immediately
+    setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
 
     try {
-      await dbUpdateMapsReview(reviewId, {
+      const saved = await dbUpdateMapsReview(reviewId, {
         reviewer_accounts: updatedAccounts
       });
-      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
+      if (saved && Array.isArray(saved.reviewer_accounts)) {
+        setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: saved.reviewer_accounts } : r));
+      }
       logAdminShpAction('Main Admin', 'Hapus Reviewer', `Menghapus akun reviewer dari review store "${targetReview.store_name}"`);
     } catch (err) {
       console.error(err);
+      // Revert optimistic update on failure
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: currentAccounts } : r));
       toast.error('Gagal menghapus akun progres.');
     }
   };
@@ -1520,34 +1536,6 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="admin-panel-container">
       
-      {/* Content Header - Only rendered on primary order tabs */}
-      {activeTab !== 'settings' && activeTab !== 'keuangan' && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 mb-8">
-          <div>
-            <div className="flex items-center gap-2">
-              {activeTab === 'orders' ? (
-                <ShoppingBag className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              ) : activeTab === 'shopee_orders' ? (
-                <ShoppingCart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              ) : (
-                <Star className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              )}
-              <h1 className="text-2xl font-black text-slate-950 dark:text-slate-100 font-sans tracking-tight uppercase">
-                {activeTab === 'orders' ? (currentLang === 'id' ? 'Pesanan Web' : 'Web Orders')
-                  : activeTab === 'shopee_orders' ? (currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders')
-                  : 'Review Orders'}
-              </h1>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-2">
-              {activeTab === 'orders' ? 'Kelola pesanan dari website utama GM AGENCY.'
-                : activeTab === 'shopee_orders' ? 'Kelola pesanan dari toko Shopee.'
-                : 'Pantau pesanan review rating Google Maps, Tripadvisor, dan Review Apps.'
-              }
-            </p>
-          </div>
-        </div>
-      )}
-
         {errorMsg && (
           <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 p-4 text-sm font-semibold text-red-700">
             <AlertCircle className="h-5 w-5 shrink-0" />

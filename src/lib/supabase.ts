@@ -504,29 +504,77 @@ function deleteLocalStorageShopeeOrder(id: string) {
   }
 }
 
+export function normalizeMapsReview(item: any): MapsReview {
+  if (!item) return item;
+  let accounts: string[] = [];
+
+  if (Array.isArray(item.reviewer_accounts)) {
+    accounts = item.reviewer_accounts;
+  } else if (typeof item.reviewer_accounts === 'string') {
+    try {
+      const parsed = JSON.parse(item.reviewer_accounts);
+      if (Array.isArray(parsed)) {
+        accounts = parsed;
+      } else if (typeof parsed === 'string') {
+        accounts = [parsed];
+      }
+    } catch {
+      if (item.reviewer_accounts.trim()) {
+        accounts = item.reviewer_accounts.split(',').map((s: string) => s.trim());
+      }
+    }
+  }
+
+  // Filter out invalid items and format strings cleanly
+  accounts = accounts
+    .map((acc: any) => (typeof acc === 'string' ? acc.trim() : (acc && acc.name) ? String(acc.name).trim() : String(acc).trim()))
+    .filter(acc => acc.length > 0 && acc !== '[object Object]');
+
+  const withStatusNotes = deserializeStatusAndNotes(item);
+
+  return {
+    ...withStatusNotes,
+    id: String(item.id || ''),
+    client_name: String(item.client_name || ''),
+    maps_link: String(item.maps_link || ''),
+    store_name: String(item.store_name || ''),
+    target_count: Number(item.target_count) || 0,
+    reviewer_accounts: accounts,
+    proof_link: String(item.proof_link || ''),
+    notes: String(withStatusNotes.notes || ''),
+    review_type: (item.review_type as any) || 'G_MAPS',
+    created_by: String(item.created_by || '')
+  };
+}
+
 function getLocalMapsReviews(): MapsReview[] {
   try {
     const stored = localStorage.getItem('gmsolution_local_maps_reviews');
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return parsed.map(normalizeMapsReview);
+      }
+    }
   } catch (e) {
-    console.error(e);
+    console.error('Error reading local maps_reviews:', e);
   }
-  localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify([]));
   return [];
 }
 
 function updateLocalStorageMapsReview(review: MapsReview) {
   try {
+    const normalized = normalizeMapsReview(review);
     const list = getLocalMapsReviews();
-    const index = list.findIndex(r => r.id === review.id);
+    const index = list.findIndex(r => r.id === normalized.id);
     if (index !== -1) {
-      list[index] = review;
+      list[index] = normalized;
     } else {
-      list.push(review);
+      list.push(normalized);
     }
     localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(list));
   } catch (e) {
-    console.error(e);
+    console.error('Error updating local maps_reviews:', e);
   }
 }
 
@@ -1337,24 +1385,8 @@ export async function dbGetMapsReviews(limit: number = 10000): Promise<MapsRevie
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const data = await fetchAllSupabaseRows<MapsReview>(supabase, 'maps_reviews', 'created_at', false, false, limit);
-      if (data) {
-        const mapped = data.map((item: any) => {
-          let accounts: string[] = [];
-          if (Array.isArray(item.reviewer_accounts)) {
-            accounts = item.reviewer_accounts;
-          } else if (typeof item.reviewer_accounts === 'string') {
-            try {
-              accounts = JSON.parse(item.reviewer_accounts);
-            } catch {
-              accounts = [];
-            }
-          }
-          return {
-            ...item,
-            reviewer_accounts: accounts
-          };
-        });
-        list = mapped as MapsReview[];
+      if (data && Array.isArray(data)) {
+        list = data.map(normalizeMapsReview);
       }
     } catch (err) {
       console.warn('Supabase maps reviews exception, falling back to Local/API:', err);
@@ -1363,26 +1395,41 @@ export async function dbGetMapsReviews(limit: number = 10000): Promise<MapsRevie
   }
 
   if (list.length === 0) {
-    list = await safeFetch<MapsReview[]>(
+    const rawList = await safeFetch<MapsReview[]>(
       '/api/maps_reviews',
       undefined,
       'gmsolution_local_maps_reviews',
       () => []
     );
+    if (Array.isArray(rawList)) {
+      list = rawList.map(normalizeMapsReview);
+    }
   }
 
   const filtered = list.filter(o => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
-  return filtered.map(deserializeStatusAndNotes);
+  const finalNormalized = filtered.map(normalizeMapsReview);
+
+  // Sync to local storage as fallback cache
+  try {
+    localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(finalNormalized));
+  } catch {}
+
+  return finalNormalized;
 }
 
 export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promise<MapsReview> {
   const mapId = reviewData.id || 'map-' + Date.now().toString().slice(-6);
+  const rawAccounts = Array.isArray(reviewData.reviewer_accounts) ? reviewData.reviewer_accounts : [];
+  const cleanAccounts = rawAccounts
+    .map(a => (typeof a === 'string' ? a.trim() : String(a).trim()))
+    .filter(a => a.length > 0);
+
   const completeReview: MapsReview = {
     id: mapId,
     client_name: reviewData.client_name || '',
     maps_link: reviewData.maps_link || '',
     target_count: Number(reviewData.target_count) || 0,
-    reviewer_accounts: reviewData.reviewer_accounts || [],
+    reviewer_accounts: cleanAccounts,
     proof_link: reviewData.proof_link || '',
     status: reviewData.status || 'PENDING',
     created_at: reviewData.created_at || new Date().toISOString(),
@@ -1407,7 +1454,8 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
         .select()
         .single();
       if (!error && data) {
-        const result = deserializeStatusAndNotes(data as MapsReview);
+        const result = normalizeMapsReview(data);
+        updateLocalStorageMapsReview(result);
         triggerSheetsSync('maps_review', 'insert', result);
         return result;
       }
@@ -1431,8 +1479,8 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        updateLocalStorageMapsReview(data);
-        const result = deserializeStatusAndNotes(data as MapsReview);
+        const result = normalizeMapsReview(data);
+        updateLocalStorageMapsReview(result);
         triggerSheetsSync('maps_review', 'insert', result);
         return result;
       }
@@ -1441,33 +1489,49 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
     console.warn('Failed to create Maps review via API, saving to LocalStorage:', err);
   }
 
-  updateLocalStorageMapsReview(dbReview);
-  triggerSheetsSync('maps_review', 'insert', completeReview);
-  return completeReview;
+  const localResult = normalizeMapsReview(dbReview);
+  updateLocalStorageMapsReview(localResult);
+  triggerSheetsSync('maps_review', 'insert', localResult);
+  return localResult;
 }
 
 export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsReview>): Promise<MapsReview> {
   let currentItem: MapsReview | null = null;
-  const list = getLocalMapsReviews();
+  const list = getLocalMapsReviews().map(normalizeMapsReview);
   const ex = list.find(r => r.id === id);
   if (ex) {
-    currentItem = deserializeStatusAndNotes(ex);
+    currentItem = ex;
   }
 
   if (!currentItem && isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data } = await supabase.from('maps_reviews').select('*').eq('id', id).maybeSingle();
-      if (data) currentItem = deserializeStatusAndNotes(data);
+      if (data) currentItem = normalizeMapsReview(data);
     } catch {}
   }
 
-  const finalData = { ...reviewData };
+  const finalData: any = { ...reviewData };
   if (reviewData.status !== undefined || reviewData.notes !== undefined) {
     const notesToUse = reviewData.notes !== undefined ? reviewData.notes : (currentItem?.notes || '');
     const statusToUse = reviewData.status !== undefined ? reviewData.status : (currentItem?.status || 'PENDING');
     const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(notesToUse, statusToUse);
     finalData.status = dbStatus;
     finalData.notes = dbNotes;
+  }
+
+  if (reviewData.reviewer_accounts !== undefined) {
+    if (Array.isArray(reviewData.reviewer_accounts)) {
+      finalData.reviewer_accounts = reviewData.reviewer_accounts
+        .map(a => (typeof a === 'string' ? a.trim() : String(a).trim()))
+        .filter(a => a.length > 0);
+    } else if (typeof reviewData.reviewer_accounts === 'string') {
+      try {
+        const parsed = JSON.parse(reviewData.reviewer_accounts);
+        finalData.reviewer_accounts = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        finalData.reviewer_accounts = [];
+      }
+    }
   }
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
@@ -1479,7 +1543,8 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
         .select()
         .single();
       if (!error && data) {
-        const result = deserializeStatusAndNotes(data as MapsReview);
+        const result = normalizeMapsReview(data);
+        updateLocalStorageMapsReview(result);
         triggerSheetsSync('maps_review', 'update', result);
         return result;
       }
@@ -1503,8 +1568,8 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        updateLocalStorageMapsReview(data);
-        const result = deserializeStatusAndNotes(data as MapsReview);
+        const result = normalizeMapsReview(data);
+        updateLocalStorageMapsReview(result);
         triggerSheetsSync('maps_review', 'update', result);
         return result;
       }
@@ -1514,20 +1579,22 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
   }
 
   if (ex) {
-    const updated = {
+    const updated = normalizeMapsReview({
       ...ex,
       ...finalData
-    } as MapsReview;
-    const idx = list.findIndex(r => r.id === id);
-    if (idx !== -1) {
-      list[idx] = updated;
-      localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(list));
-    }
-    const result = deserializeStatusAndNotes(updated);
-    triggerSheetsSync('maps_review', 'update', result);
-    return result;
+    });
+    updateLocalStorageMapsReview(updated);
+    triggerSheetsSync('maps_review', 'update', updated);
+    return updated;
   }
-  throw new Error('Maps review not found in local storage fallback');
+
+  const fallback = normalizeMapsReview({
+    id,
+    ...(currentItem || {}),
+    ...finalData
+  });
+  updateLocalStorageMapsReview(fallback);
+  return fallback;
 }
 
 export async function dbDeleteMapsReview(id: string): Promise<boolean> {

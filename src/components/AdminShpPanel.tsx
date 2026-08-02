@@ -1000,19 +1000,27 @@ Format Chat : ${data.notes || '-'}`;
     const targetReview = mapsReviews.find(r => r.id === reviewId);
     if (!targetReview) return;
 
-    const updatedAccounts = [...(targetReview.reviewer_accounts || []), nameToAdd];
-    
+    const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
+    const updatedAccounts = [...currentAccounts, nameToAdd];
+
+    // Optimistically update UI immediately
+    setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
+    setTempAccountInput(prev => ({ ...prev, [reviewId]: '' }));
+
     try {
-      await dbUpdateMapsReview(reviewId, {
+      const saved = await dbUpdateMapsReview(reviewId, {
         reviewer_accounts: updatedAccounts
       });
-      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
-      setTempAccountInput(prev => ({ ...prev, [reviewId]: '' }));
+      if (saved && Array.isArray(saved.reviewer_accounts)) {
+        setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: saved.reviewer_accounts } : r));
+      }
       if (currentAdminUser) {
         logAdminShpAction(currentAdminUser, 'Tambah Reviewer', `Menambahkan akun reviewer "${nameToAdd}" ke review store "${targetReview.store_name}"`);
       }
     } catch (err) {
       console.error(err);
+      // Revert optimistic update on failure
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: currentAccounts } : r));
       toast.error(currentLang === 'id' ? `Gagal menambah akun progres: ${err instanceof Error ? err.message : String(err)}` : `Failed to add progress account: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
@@ -1022,18 +1030,26 @@ Format Chat : ${data.notes || '-'}`;
     const targetReview = mapsReviews.find(r => r.id === reviewId);
     if (!targetReview) return;
 
-    const updatedAccounts = (targetReview.reviewer_accounts || []).filter((_, idx) => idx !== indexToRemove);
+    const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
+    const updatedAccounts = currentAccounts.filter((_, idx) => idx !== indexToRemove);
+
+    // Optimistically update UI immediately
+    setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
 
     try {
-      await dbUpdateMapsReview(reviewId, {
+      const saved = await dbUpdateMapsReview(reviewId, {
         reviewer_accounts: updatedAccounts
       });
-      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
+      if (saved && Array.isArray(saved.reviewer_accounts)) {
+        setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: saved.reviewer_accounts } : r));
+      }
       if (currentAdminUser) {
         logAdminShpAction(currentAdminUser, 'Hapus Reviewer', `Menghapus akun reviewer dari review store "${targetReview.store_name}"`);
       }
     } catch (err) {
       console.error(err);
+      // Revert optimistic update on failure
+      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: currentAccounts } : r));
       toast.error('Gagal menghapus akun progres.');
     }
   };

@@ -704,7 +704,26 @@ app.get('/api/maps_reviews', async (req, res) => {
     try {
       const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, limit);
       if (data) {
-        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
+        const normalized = data.map((item: any) => {
+          let accounts: string[] = [];
+          if (Array.isArray(item.reviewer_accounts)) {
+            accounts = item.reviewer_accounts;
+          } else if (typeof item.reviewer_accounts === 'string') {
+            try {
+              const parsed = JSON.parse(item.reviewer_accounts);
+              accounts = Array.isArray(parsed) ? parsed : [];
+            } catch {
+              accounts = [];
+            }
+          }
+          return {
+            ...item,
+            reviewer_accounts: accounts
+              .map((a: any) => String(a).trim())
+              .filter((a: string) => a.length > 0)
+          };
+        });
+        const filtered = normalized.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
         return res.json(filtered);
       }
     } catch (err) {
@@ -712,15 +731,32 @@ app.get('/api/maps_reviews', async (req, res) => {
     }
   }
 
-  const filteredLocal = (db.maps_reviews || []).filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
+  const filteredLocal = (db.maps_reviews || [])
+    .filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id))
+    .map((o: any) => {
+      let accounts: string[] = [];
+      if (Array.isArray(o.reviewer_accounts)) accounts = o.reviewer_accounts;
+      else if (typeof o.reviewer_accounts === 'string') {
+        try { accounts = JSON.parse(o.reviewer_accounts); } catch { accounts = []; }
+      }
+      return {
+        ...o,
+        reviewer_accounts: (Array.isArray(accounts) ? accounts : [])
+          .map((a: any) => String(a).trim())
+          .filter((a: string) => a.length > 0)
+      };
+    });
   res.json(filteredLocal);
 });
 
 app.post('/api/maps_reviews', async (req, res) => {
+  const rawAccounts = Array.isArray(req.body.reviewer_accounts) ? req.body.reviewer_accounts : [];
+  const cleanAccounts = rawAccounts.map((a: any) => String(a).trim()).filter((a: string) => a.length > 0);
+
   const newReview = {
     id: 'map-' + Date.now().toString().slice(-6),
     ...req.body,
-    reviewer_accounts: req.body.reviewer_accounts || [],
+    reviewer_accounts: cleanAccounts,
     proof_link: req.body.proof_link || '',
     status: req.body.status || 'PENDING',
     created_at: new Date().toISOString()
@@ -734,7 +770,10 @@ app.post('/api/maps_reviews', async (req, res) => {
         .select()
         .single();
       if (!error && data) {
-        return res.status(201).json(data);
+        return res.status(201).json({
+          ...data,
+          reviewer_accounts: cleanAccounts
+        });
       }
       console.error('Supabase error inserting maps_review:', error);
     } catch (err) {
@@ -761,7 +800,19 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
         .select()
         .single();
       if (!error && data) {
-        return res.json(data);
+        let accounts: string[] = [];
+        if (Array.isArray(data.reviewer_accounts)) accounts = data.reviewer_accounts;
+        else if (typeof data.reviewer_accounts === 'string') {
+          try { accounts = JSON.parse(data.reviewer_accounts); } catch { accounts = []; }
+        } else if (Array.isArray(req.body.reviewer_accounts)) {
+          accounts = req.body.reviewer_accounts;
+        }
+        return res.json({
+          ...data,
+          reviewer_accounts: accounts
+            .map((a: any) => String(a).trim())
+            .filter((a: string) => a.length > 0)
+        });
       }
       console.error('Supabase error updating maps_review:', error);
     } catch (err) {
@@ -777,7 +828,17 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
       ...req.body
     };
     writeDatabase(db);
-    res.json(db.maps_reviews[idx]);
+    let accounts: string[] = [];
+    if (Array.isArray(db.maps_reviews[idx].reviewer_accounts)) accounts = db.maps_reviews[idx].reviewer_accounts;
+    else if (typeof db.maps_reviews[idx].reviewer_accounts === 'string') {
+      try { accounts = JSON.parse(db.maps_reviews[idx].reviewer_accounts); } catch { accounts = []; }
+    }
+    res.json({
+      ...db.maps_reviews[idx],
+      reviewer_accounts: accounts
+        .map((a: any) => String(a).trim())
+        .filter((a: string) => a.length > 0)
+    });
   } else {
     res.status(404).json({ error: 'Maps review not found' });
   }

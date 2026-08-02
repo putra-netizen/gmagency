@@ -124,7 +124,7 @@ export default function Navbar({
             </button>
 
             <span className="text-xs sm:text-sm font-black tracking-wider font-sans uppercase text-slate-800 dark:text-slate-100">
-              Admin Panel
+              ADMIN WORKING SPACE
             </span>
 
             {/* Supabase connection status pill (Admin role only!) */}
