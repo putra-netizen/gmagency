@@ -694,6 +694,36 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
   res.json({ success: true, message: 'Shopee order deleted and blacklisted' });
 });
 
+// Helper for robust reviewer_accounts parsing in server
+function parseServerReviewerAccounts(input: any): string[] {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    return input
+      .map((a: any) => (typeof a === 'string' ? a.trim() : (a && (a.name || a.account)) ? String(a.name || a.account).trim() : String(a).trim()))
+      .filter((a: string) => a.length > 0 && a !== '[object Object]');
+  }
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parseServerReviewerAccounts(parsed);
+      if (typeof parsed === 'string') return parseServerReviewerAccounts(parsed);
+    } catch {}
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      const inner = trimmed.slice(1, -1).trim();
+      if (!inner) return [];
+      const items = inner.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+      return items.filter(s => s.length > 0);
+    }
+    if (trimmed.includes(',')) {
+      return trimmed.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    }
+    return [trimmed];
+  }
+  return [];
+}
+
 // --- MAPS REVIEWS API ---
 app.get('/api/maps_reviews', async (req, res) => {
   const limit = Number(req.query.limit) || 10000;
@@ -704,25 +734,10 @@ app.get('/api/maps_reviews', async (req, res) => {
     try {
       const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, limit);
       if (data) {
-        const normalized = data.map((item: any) => {
-          let accounts: string[] = [];
-          if (Array.isArray(item.reviewer_accounts)) {
-            accounts = item.reviewer_accounts;
-          } else if (typeof item.reviewer_accounts === 'string') {
-            try {
-              const parsed = JSON.parse(item.reviewer_accounts);
-              accounts = Array.isArray(parsed) ? parsed : [];
-            } catch {
-              accounts = [];
-            }
-          }
-          return {
-            ...item,
-            reviewer_accounts: accounts
-              .map((a: any) => String(a).trim())
-              .filter((a: string) => a.length > 0)
-          };
-        });
+        const normalized = data.map((item: any) => ({
+          ...item,
+          reviewer_accounts: parseServerReviewerAccounts(item.reviewer_accounts)
+        }));
         const filtered = normalized.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
         return res.json(filtered);
       }
@@ -733,25 +748,15 @@ app.get('/api/maps_reviews', async (req, res) => {
 
   const filteredLocal = (db.maps_reviews || [])
     .filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id))
-    .map((o: any) => {
-      let accounts: string[] = [];
-      if (Array.isArray(o.reviewer_accounts)) accounts = o.reviewer_accounts;
-      else if (typeof o.reviewer_accounts === 'string') {
-        try { accounts = JSON.parse(o.reviewer_accounts); } catch { accounts = []; }
-      }
-      return {
-        ...o,
-        reviewer_accounts: (Array.isArray(accounts) ? accounts : [])
-          .map((a: any) => String(a).trim())
-          .filter((a: string) => a.length > 0)
-      };
-    });
+    .map((o: any) => ({
+      ...o,
+      reviewer_accounts: parseServerReviewerAccounts(o.reviewer_accounts)
+    }));
   res.json(filteredLocal);
 });
 
 app.post('/api/maps_reviews', async (req, res) => {
-  const rawAccounts = Array.isArray(req.body.reviewer_accounts) ? req.body.reviewer_accounts : [];
-  const cleanAccounts = rawAccounts.map((a: any) => String(a).trim()).filter((a: string) => a.length > 0);
+  const cleanAccounts = parseServerReviewerAccounts(req.body.reviewer_accounts);
 
   const newReview = {
     id: 'map-' + Date.now().toString().slice(-6),
@@ -790,28 +795,28 @@ app.post('/api/maps_reviews', async (req, res) => {
 
 app.put('/api/maps_reviews/:id', async (req, res) => {
   const { id } = req.params;
+  const reqAccounts = req.body.reviewer_accounts !== undefined ? parseServerReviewerAccounts(req.body.reviewer_accounts) : undefined;
+  const updatePayload = { ...req.body };
+  if (reqAccounts !== undefined) {
+    updatePayload.reviewer_accounts = reqAccounts;
+  }
 
   if (supabase) {
     try {
       const { data, error } = await supabase
         .from('maps_reviews')
-        .update(req.body)
+        .update(updatePayload)
         .eq('id', id)
         .select()
         .single();
       if (!error && data) {
-        let accounts: string[] = [];
-        if (Array.isArray(data.reviewer_accounts)) accounts = data.reviewer_accounts;
-        else if (typeof data.reviewer_accounts === 'string') {
-          try { accounts = JSON.parse(data.reviewer_accounts); } catch { accounts = []; }
-        } else if (Array.isArray(req.body.reviewer_accounts)) {
-          accounts = req.body.reviewer_accounts;
+        let accounts = parseServerReviewerAccounts(data.reviewer_accounts);
+        if (reqAccounts && reqAccounts.length > accounts.length) {
+          accounts = reqAccounts;
         }
         return res.json({
           ...data,
           reviewer_accounts: accounts
-            .map((a: any) => String(a).trim())
-            .filter((a: string) => a.length > 0)
         });
       }
       console.error('Supabase error updating maps_review:', error);
@@ -825,19 +830,16 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
   if (idx !== -1) {
     db.maps_reviews[idx] = {
       ...db.maps_reviews[idx],
-      ...req.body
+      ...updatePayload
     };
     writeDatabase(db);
-    let accounts: string[] = [];
-    if (Array.isArray(db.maps_reviews[idx].reviewer_accounts)) accounts = db.maps_reviews[idx].reviewer_accounts;
-    else if (typeof db.maps_reviews[idx].reviewer_accounts === 'string') {
-      try { accounts = JSON.parse(db.maps_reviews[idx].reviewer_accounts); } catch { accounts = []; }
+    let accounts = parseServerReviewerAccounts(db.maps_reviews[idx].reviewer_accounts);
+    if (reqAccounts && reqAccounts.length > accounts.length) {
+      accounts = reqAccounts;
     }
     res.json({
       ...db.maps_reviews[idx],
       reviewer_accounts: accounts
-        .map((a: any) => String(a).trim())
-        .filter((a: string) => a.length > 0)
     });
   } else {
     res.status(404).json({ error: 'Maps review not found' });

@@ -167,7 +167,7 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
                 : 'We empower thousands of businesses and brands to protect and optimize their local SEO and social media presence through manual campaign networks.'}
             </p>
 
-            {/* LIVE PERMANENT METRICS INSTRUCTION (125k+ orders & 1000+ customers served) */}
+            {/* LIVE PERMANENT METRICS INSTRUCTION (250K+ Delivery & 2500+ Customers) */}
             <div className={`mt-8 grid grid-cols-2 gap-4 w-full max-w-md border rounded-2xl p-4 shadow-md transition-colors ${
               isDark 
                 ? 'bg-slate-850/90 border-slate-800' 
@@ -181,8 +181,8 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
                   </span>
                   <span className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Total Delivery</span>
                 </div>
-                <div className="text-3xl sm:text-4xl font-extrabold text-emerald-500 font-display tracking-tight mt-1.5">125K+</div>
-                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Orders Completed</span>
+                <div className="text-3xl sm:text-4xl font-extrabold text-emerald-500 font-display tracking-tight mt-1.5">250K+</div>
+                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Delivery Completed</span>
               </div>
 
               <div className="flex flex-col pl-2">
@@ -191,10 +191,10 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
                   </span>
-                  <span className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Trusted Clients</span>
+                  <span className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Customers</span>
                 </div>
-                <div className="text-3xl sm:text-4xl font-extrabold text-blue-600 font-display tracking-tight mt-1.5">1000+</div>
-                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Active Partners</span>
+                <div className="text-3xl sm:text-4xl font-extrabold text-blue-600 font-display tracking-tight mt-1.5">2500+</div>
+                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Active Customers</span>
               </div>
             </div>
 

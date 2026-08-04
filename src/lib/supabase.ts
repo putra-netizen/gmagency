@@ -504,32 +504,38 @@ function deleteLocalStorageShopeeOrder(id: string) {
   }
 }
 
+export function parseReviewerAccounts(input: any): string[] {
+  if (!input) return [];
+  if (Array.isArray(input)) {
+    return input
+      .map(a => (typeof a === 'string' ? a.trim() : (a && (a.name || a.account)) ? String(a.name || a.account).trim() : String(a).trim()))
+      .filter(a => a.length > 0 && a !== '[object Object]');
+  }
+  if (typeof input === 'string') {
+    const trimmed = input.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parseReviewerAccounts(parsed);
+      if (typeof parsed === 'string') return parseReviewerAccounts(parsed);
+    } catch {}
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      const inner = trimmed.slice(1, -1).trim();
+      if (!inner) return [];
+      const items = inner.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+      return items.filter(s => s.length > 0);
+    }
+    if (trimmed.includes(',')) {
+      return trimmed.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    }
+    return [trimmed];
+  }
+  return [];
+}
+
 export function normalizeMapsReview(item: any): MapsReview {
   if (!item) return item;
-  let accounts: string[] = [];
-
-  if (Array.isArray(item.reviewer_accounts)) {
-    accounts = item.reviewer_accounts;
-  } else if (typeof item.reviewer_accounts === 'string') {
-    try {
-      const parsed = JSON.parse(item.reviewer_accounts);
-      if (Array.isArray(parsed)) {
-        accounts = parsed;
-      } else if (typeof parsed === 'string') {
-        accounts = [parsed];
-      }
-    } catch {
-      if (item.reviewer_accounts.trim()) {
-        accounts = item.reviewer_accounts.split(',').map((s: string) => s.trim());
-      }
-    }
-  }
-
-  // Filter out invalid items and format strings cleanly
-  accounts = accounts
-    .map((acc: any) => (typeof acc === 'string' ? acc.trim() : (acc && acc.name) ? String(acc.name).trim() : String(acc).trim()))
-    .filter(acc => acc.length > 0 && acc !== '[object Object]');
-
+  const accounts = parseReviewerAccounts(item.reviewer_accounts);
   const withStatusNotes = deserializeStatusAndNotes(item);
 
   return {
@@ -543,7 +549,8 @@ export function normalizeMapsReview(item: any): MapsReview {
     proof_link: String(item.proof_link || ''),
     notes: String(withStatusNotes.notes || ''),
     review_type: (item.review_type as any) || 'G_MAPS',
-    created_by: String(item.created_by || '')
+    created_by: String(item.created_by || ''),
+    created_at: item.created_at || item.createdAt || new Date().toISOString()
   };
 }
 
@@ -1520,18 +1527,7 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
   }
 
   if (reviewData.reviewer_accounts !== undefined) {
-    if (Array.isArray(reviewData.reviewer_accounts)) {
-      finalData.reviewer_accounts = reviewData.reviewer_accounts
-        .map(a => (typeof a === 'string' ? a.trim() : String(a).trim()))
-        .filter(a => a.length > 0);
-    } else if (typeof reviewData.reviewer_accounts === 'string') {
-      try {
-        const parsed = JSON.parse(reviewData.reviewer_accounts);
-        finalData.reviewer_accounts = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        finalData.reviewer_accounts = [];
-      }
-    }
+    finalData.reviewer_accounts = parseReviewerAccounts(reviewData.reviewer_accounts);
   }
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
@@ -1544,6 +1540,9 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
         .single();
       if (!error && data) {
         const result = normalizeMapsReview(data);
+        if (Array.isArray(finalData.reviewer_accounts) && finalData.reviewer_accounts.length > result.reviewer_accounts.length) {
+          result.reviewer_accounts = finalData.reviewer_accounts;
+        }
         updateLocalStorageMapsReview(result);
         triggerSheetsSync('maps_review', 'update', result);
         return result;
@@ -1569,6 +1568,9 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
         const result = normalizeMapsReview(data);
+        if (Array.isArray(finalData.reviewer_accounts) && finalData.reviewer_accounts.length > result.reviewer_accounts.length) {
+          result.reviewer_accounts = finalData.reviewer_accounts;
+        }
         updateLocalStorageMapsReview(result);
         triggerSheetsSync('maps_review', 'update', result);
         return result;

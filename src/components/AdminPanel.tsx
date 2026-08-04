@@ -898,7 +898,22 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       dbGetProducts().then(prodsData => setProducts(prodsData)).catch(err => console.error(err));
       dbGetOrders().then(ordsData => setOrders(ordsData)).catch(err => console.error(err));
       dbGetShopeeOrders().then(shopeeData => setShopeeOrders(shopeeData)).catch(err => console.error(err));
-      dbGetMapsReviews().then(mapsData => setMapsReviews(mapsData)).catch(err => console.error(err));
+      dbGetMapsReviews().then(mapsData => {
+        setMapsReviews(prev => {
+          if (!prev || prev.length === 0) return mapsData;
+          return mapsData.map(newItem => {
+            const existing = prev.find(p => p.id === newItem.id);
+            if (existing) {
+              const existingAccounts = existing.reviewer_accounts || [];
+              const newAccounts = newItem.reviewer_accounts || [];
+              if (existingAccounts.length > newAccounts.length) {
+                return { ...newItem, reviewer_accounts: existingAccounts };
+              }
+            }
+            return newItem;
+          });
+        });
+      }).catch(err => console.error(err));
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(err => console.error(err));
     }, 30000);
     return () => clearInterval(interval);
@@ -1036,7 +1051,14 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
         reviewer_accounts: updatedAccounts
       });
       if (saved && Array.isArray(saved.reviewer_accounts)) {
-        setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: saved.reviewer_accounts } : r));
+        const finalAccounts = saved.reviewer_accounts.length >= updatedAccounts.length
+          ? saved.reviewer_accounts
+          : updatedAccounts;
+        setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
+          ...r,
+          ...saved,
+          reviewer_accounts: finalAccounts
+        } : r));
       }
       logAdminShpAction('Main Admin', 'Tambah Reviewer', `Menambahkan akun reviewer "${nameToAdd}" ke review store "${targetReview.store_name}"`);
     } catch (err) {
@@ -1063,7 +1085,11 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
         reviewer_accounts: updatedAccounts
       });
       if (saved && Array.isArray(saved.reviewer_accounts)) {
-        setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: saved.reviewer_accounts } : r));
+        setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
+          ...r,
+          ...saved,
+          reviewer_accounts: saved.reviewer_accounts
+        } : r));
       }
       logAdminShpAction('Main Admin', 'Hapus Reviewer', `Menghapus akun reviewer dari review store "${targetReview.store_name}"`);
     } catch (err) {
@@ -1526,7 +1552,11 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
         (r.review_type || '').toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    .sort((a, b) => {
+      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+    });
 
   const paginatedUnpaidOrders = filteredUnpaidOrders.slice((pageUnpaid - 1) * ITEMS_PER_PAGE, pageUnpaid * ITEMS_PER_PAGE);
   const paginatedPaidOrders = filteredPaidOrders.slice((pagePaid - 1) * ITEMS_PER_PAGE, pagePaid * ITEMS_PER_PAGE);

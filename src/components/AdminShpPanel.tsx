@@ -1012,7 +1012,14 @@ Format Chat : ${data.notes || '-'}`;
         reviewer_accounts: updatedAccounts
       });
       if (saved && Array.isArray(saved.reviewer_accounts)) {
-        setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: saved.reviewer_accounts } : r));
+        const finalAccounts = saved.reviewer_accounts.length >= updatedAccounts.length
+          ? saved.reviewer_accounts
+          : updatedAccounts;
+        setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
+          ...r,
+          ...saved,
+          reviewer_accounts: finalAccounts
+        } : r));
       }
       if (currentAdminUser) {
         logAdminShpAction(currentAdminUser, 'Tambah Reviewer', `Menambahkan akun reviewer "${nameToAdd}" ke review store "${targetReview.store_name}"`);
@@ -1041,7 +1048,11 @@ Format Chat : ${data.notes || '-'}`;
         reviewer_accounts: updatedAccounts
       });
       if (saved && Array.isArray(saved.reviewer_accounts)) {
-        setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: saved.reviewer_accounts } : r));
+        setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
+          ...r,
+          ...saved,
+          reviewer_accounts: saved.reviewer_accounts
+        } : r));
       }
       if (currentAdminUser) {
         logAdminShpAction(currentAdminUser, 'Hapus Reviewer', `Menghapus akun reviewer dari review store "${targetReview.store_name}"`);
@@ -1249,7 +1260,11 @@ Format Chat : ${data.notes || '-'}`;
         (review.review_type || '').toLowerCase().includes(q)
       );
     })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    .sort((a, b) => {
+      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+    });
 
   const paginatedShopeeOrders = filteredShopeeOrders.slice((pageShopee - 1) * ITEMS_PER_PAGE, pageShopee * ITEMS_PER_PAGE);
   const paginatedMapsReviews = filteredMapsReviews.slice((pageMaps - 1) * ITEMS_PER_PAGE, pageMaps * ITEMS_PER_PAGE);
