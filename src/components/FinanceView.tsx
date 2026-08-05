@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from '../utils/toast';
 
-export const FINANCE_WEB_URL = 'https://laporanfinancegm-8amryahz4-malesdahlah322-2894s-projects.vercel.app/';
+export const FINANCE_WEB_URL = 'https://laporanfinancegm.vercel.app/';
 
 /**
  * Authentication check helper for Finance Access
@@ -44,23 +44,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [pinError, setPinError] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(false);
 
-  // Directly redirect or open the finance web URL
-  const redirectToFinanceWeb = (inNewTab: boolean = true) => {
-    if (inNewTab) {
-      const win = window.open(FINANCE_WEB_URL, '_blank', 'noopener,noreferrer');
-      if (!win) {
-        // Fallback to current window redirect if popups are blocked
-        window.location.href = FINANCE_WEB_URL;
-      }
-    } else {
-      window.location.href = FINANCE_WEB_URL;
-    }
+  // Directly open the finance web URL in a new tab without redirecting/closing the GM Agency website
+  const openFinanceWebInNewTab = () => {
+    window.open(FINANCE_WEB_URL, '_blank', 'noopener,noreferrer');
   };
 
-  // Auto direct when component mounts if device is already authenticated
+  // Auto direct in new tab when component mounts if device is already authenticated
   useEffect(() => {
     if (isDeviceAuth) {
-      redirectToFinanceWeb(true);
+      openFinanceWebInNewTab();
     }
   }, [isDeviceAuth]);
 
@@ -84,10 +76,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         localStorage.setItem('gm_finance_auth_time', new Date().toISOString());
         setIsDeviceAuth(true);
         setPinInput('');
-        toast.success('PIN Benar! Akses diautentikasi.');
+        toast.success('PIN Benar! Membuka Portal Keuangan di Tab Baru...');
         
-        // Directly open finance web URL
-        redirectToFinanceWeb(true);
+        // Directly open finance web URL in new tab
+        openFinanceWebInNewTab();
       } else {
         setPinError(true);
         toast.error('PIN Keuangan Salah! Akses ditolak.');
@@ -154,7 +146,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               Laporan Finance GM Agency
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 font-medium leading-relaxed">
-              Perangkat Anda terverifikasi aman. Mengalihkan langsung ke portal keuangan...
+              Perangkat Anda terverifikasi aman. Membuka portal keuangan di tab baru tanpa menutup web GM Agency...
             </p>
           </div>
 
@@ -165,18 +157,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-md mx-auto">
             <button
               type="button"
-              onClick={() => redirectToFinanceWeb(true)}
-              className="w-full sm:w-auto flex-1 py-3.5 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-950/50 active:scale-95 cursor-pointer flex items-center justify-center gap-2.5"
+              onClick={openFinanceWebInNewTab}
+              className="w-full py-3.5 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-950/50 active:scale-95 cursor-pointer flex items-center justify-center gap-2.5"
             >
-              <span>Buka Web Finance (Tab Baru)</span>
+              <span>Buka Web Finance di Tab Baru</span>
               <ExternalLink className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => redirectToFinanceWeb(false)}
-              className="w-full sm:w-auto py-3.5 px-6 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs uppercase tracking-wider transition-all border border-slate-700/80 cursor-pointer flex items-center justify-center gap-2"
-            >
-              <span>Buka di Halaman Ini</span>
             </button>
           </div>
         </div>
