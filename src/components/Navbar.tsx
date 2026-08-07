@@ -245,7 +245,7 @@ export default function Navbar({
           /* Normal Logo brand encapsulated in white capsule wrapper */
           <div 
             onClick={() => onViewChange('home')} 
-            className="cursor-pointer transition-all duration-200 active:scale-95 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full py-1.5 px-3 sm:py-2 sm:px-4 flex items-center justify-center shadow-md shadow-black/5 hover:shadow-lg hover:bg-slate-50 dark:hover:bg-slate-900"
+            className="cursor-pointer transition-all duration-200 active:scale-95 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full py-1 px-3 sm:py-1.5 sm:px-3.5 flex items-center justify-center shadow-xs hover:shadow-sm hover:bg-slate-50 dark:hover:bg-slate-900"
             id="brand-logo-container"
           >
             <GMLogo size="sm" showSubtitle={true} />

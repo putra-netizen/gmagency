@@ -144,16 +144,6 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
           
           {/* Main content column */}
           <div className="flex flex-col items-start lg:col-span-6 z-10">
-            {/* Promo / Trust Badge */}
-            <div className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold shadow-sm backdrop-blur ${
-              isDark 
-                ? 'bg-slate-800/80 border border-slate-700/60 text-blue-400' 
-                : 'bg-blue-50 border border-blue-100 text-blue-600'
-            }`}>
-              <Sparkles className={`h-3.5 w-3.5 animate-pulse ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
-              <span>{currentLang === 'id' ? 'Layanan Reputasi Bisnis #1' : '#1 Business Reputation Service'}</span>
-            </div>
-
             {/* Static primary title + description with dynamic highlights */}
             <h1 className={`mt-6 text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-5xl leading-[1.1] font-sans ${isDark ? 'text-white' : 'text-slate-900'}`}>
               {currentLang === 'id' 
