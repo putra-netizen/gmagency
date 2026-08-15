@@ -1,7 +1,7 @@
 import { jsPDF, GState } from 'jspdf';
 import { MapsReview } from '../types';
 
-const LOGO_URL = "https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png";
+const LOGO_URL = "/logo.png";
 
 let cachedLogoBase64: string | null = null;
 

@@ -58,7 +58,7 @@ export default function GMLogo({ className = '', size = 'md', showSubtitle = tru
         {/* Inner solid mask + image */}
         <div className="absolute inset-[1.5px] rounded-full bg-white dark:bg-slate-900 overflow-hidden z-10 flex items-center justify-center">
           <img
-            src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
+            src="/logo.png"
             alt="GM Agency"
             className="w-full h-full object-cover rounded-full"
             referrerPolicy="no-referrer"

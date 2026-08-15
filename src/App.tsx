@@ -387,7 +387,7 @@ export default function App() {
                 <div className="flex items-center gap-2.5">
                   <div className="relative h-10 w-10 shrink-0 p-0.5 rounded-full border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center overflow-hidden">
                     <img
-                      src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
+                      src="/logo.png"
                       alt="GM Agency"
                       className="w-full h-full object-cover rounded-full"
                       referrerPolicy="no-referrer"
@@ -556,7 +556,7 @@ export default function App() {
               {/* Enlarged Favicon Logo */}
               <div className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-2xl overflow-hidden border-2 border-blue-500/50 bg-white shadow-md shadow-blue-500/20 shrink-0 flex items-center justify-center p-0.5">
                 <img
-                  src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
+                  src="/logo.png"
                   alt="GM AGENCY App Logo"
                   className="w-full h-full object-cover rounded-xl"
                   referrerPolicy="no-referrer"

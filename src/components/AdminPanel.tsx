@@ -4303,7 +4303,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     <div className="space-y-4">
                       <div className="relative h-24 w-24 rounded-2xl overflow-hidden border-2 border-blue-500/50 bg-white shadow-md shadow-blue-500/20 flex items-center justify-center p-0.5">
                         <img
-                          src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
+                          src="/logo.png"
                           alt="GM AGENCY App Logo"
                           className="w-full h-full object-cover rounded-xl"
                           referrerPolicy="no-referrer"
