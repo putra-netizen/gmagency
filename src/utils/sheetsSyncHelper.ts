@@ -33,12 +33,35 @@ export function getSheetsSyncConfig(): SheetsSyncConfig {
   };
 }
 
-export function saveSheetsSyncConfig(config: SheetsSyncConfig): void {
+export async function saveSheetsSyncConfig(config: SheetsSyncConfig): Promise<void> {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    // Persist to backend server so backend endpoints can also sync with sheets
+    fetch('/api/sheets-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    }).catch(err => console.warn('Backend sheets config sync notice:', err));
   } catch (err) {
     console.error('Error saving sheets sync config:', err);
   }
+}
+
+/**
+ * Triggers complete pull and synchronization of all rows from Google Spreadsheet.
+ */
+export async function pullAllSheetsData(webhookUrl?: string, sharedSecret?: string): Promise<{ success: boolean; message: string; counts?: any; errors?: string[] }> {
+  const config = getSheetsSyncConfig();
+  const targetUrl = (webhookUrl || config.webhookUrl || '').trim();
+  const secret = (sharedSecret || config.sharedSecret || DEFAULT_SHARED_SECRET).trim();
+
+  const res = await fetch('/api/sheets-sync-pull', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ webhookUrl: targetUrl, sharedSecret: secret })
+  });
+
+  return await res.json();
 }
 
 /**
@@ -51,8 +74,14 @@ function buildRowObject(type: 'order' | 'shopee_order' | 'maps_review', payload:
   const formattedDate = rawCreatedAt.substring(0, 19).replace('T', ' ');
 
   const reviewerStr = Array.isArray(payload.reviewer_accounts)
-    ? payload.reviewer_accounts.map((r: any) => r.name || String(r)).join(', ')
+    ? payload.reviewer_accounts.map((r: any) => typeof r === 'string' ? r : (r.name || String(r))).join(', ')
     : (payload.reviewer_accounts_str || payload.reviewer_accounts || '');
+
+  const reviewerJson = Array.isArray(payload.reviewer_accounts)
+    ? JSON.stringify(payload.reviewer_accounts.map((r: any) => typeof r === 'string' ? r : (r.name || String(r))))
+    : (typeof payload.reviewer_accounts_str === 'string' && payload.reviewer_accounts_str.startsWith('[')
+        ? payload.reviewer_accounts_str
+        : JSON.stringify((reviewerStr || '').split(',').map((s: string) => s.trim()).filter(Boolean)));
 
   const base: Record<string, any> = {
     id: payload.id || '',
@@ -61,6 +90,7 @@ function buildRowObject(type: 'order' | 'shopee_order' | 'maps_review', payload:
     'ID Target': payload.id || '',
     created_at: formattedDate,
     'Tanggal': formattedDate,
+    'TANGGAL': formattedDate,
     updated_at: now,
     'Terakhir Diubah': now,
   };
@@ -70,74 +100,103 @@ function buildRowObject(type: 'order' | 'shopee_order' | 'maps_review', payload:
       ...base,
       buyer_name: payload.buyer_name || '',
       'Nama Pembeli': payload.buyer_name || '',
+      'PEMBELI': payload.buyer_name || '',
       phone_number: payload.phone_number || payload.whatsapp_number || '',
       whatsapp_number: payload.phone_number || payload.whatsapp_number || '',
       'No. WhatsApp': payload.phone_number || payload.whatsapp_number || '',
+      'NO WA': payload.phone_number || payload.whatsapp_number || '',
       product_name: payload.product_name || '',
       'Nama Produk/Layanan': payload.product_name || '',
+      'PRODUK': payload.product_name || '',
       target_link: payload.target_link || '',
       'Link Target': payload.target_link || '',
+      'TARGET': payload.target_link || '',
       target_spam_phone: payload.target_spam_phone || '',
       'Target Spam': payload.target_spam_phone || '',
+      'TARGET SPAM': payload.target_spam_phone || '',
       total_price: Number(payload.total_price || payload.price || 0),
       price: Number(payload.total_price || payload.price || 0),
       'Total Harga (Rp)': Number(payload.total_price || payload.price || 0),
+      'TOTAL HARGA': Number(payload.total_price || payload.price || 0),
       payment_status: payload.payment_status || payload.status || 'PENDING',
       payment_method: payload.payment_method || 'QRIS',
       'Metode Pembayaran': payload.payment_method || 'QRIS',
+      'METODE PEMBAYARAN': payload.payment_method || 'QRIS',
       status: payload.payment_status || payload.status || 'PENDING',
       'Status Pembayaran': payload.payment_status || payload.status || 'PENDING',
+      'STATUS PEMBAYARAN': payload.payment_status || payload.status || 'PENDING',
+      'STATUS': payload.payment_status || payload.status || 'PENDING',
       notes: payload.notes || '',
       'Catatan': payload.notes || '',
+      'CATATAN': payload.notes || '',
       created_by: payload.created_by || '',
     };
   }
 
   if (type === 'shopee_order') {
+    const rawStatus = (payload.status || payload.job_status || 'PENDING').toUpperCase();
     return {
       ...base,
       store_name: payload.store_name || '',
       'Nama Toko': payload.store_name || '',
+      'STORE': payload.store_name || '',
       buyer_name: payload.buyer_name || '',
       'Nama Pembeli': payload.buyer_name || '',
+      'PEMBELI': payload.buyer_name || '',
       service_type: payload.service_type || '',
       'Jenis Layanan': payload.service_type || '',
+      'JENIS JASA': payload.service_type || '',
       quantity: Number(payload.quantity || 1),
       'Jumlah': Number(payload.quantity || 1),
+      'SLOT': Number(payload.quantity || 1),
       target_link: payload.target_link || '',
       'Link Produk': payload.target_link || '',
-      status: payload.status || payload.job_status || 'PENDING',
-      job_status: payload.status || payload.job_status || 'PENDING',
-      'Status Pengerjaan': payload.status || payload.job_status || 'PENDING',
+      'TARGET': payload.target_link || '',
+      status: rawStatus,
+      job_status: rawStatus,
+      'Status Pengerjaan': rawStatus,
+      'STATUS': rawStatus,
       worker_assigned: payload.worker_assigned || payload.worker_id || '',
       'Petugas': payload.worker_assigned || payload.worker_id || '',
+      'WORKER': payload.worker_assigned || payload.worker_id || '',
       notes: payload.notes || '',
       'Catatan': payload.notes || '',
+      'WORK ORDER': payload.notes || '',
       created_by: payload.created_by || '',
     };
   }
 
   // maps_review
+  const rawStatus = (payload.status || 'PENDING').toUpperCase();
   return {
     ...base,
     client_name: payload.client_name || '',
     'Nama Klien': payload.client_name || '',
+    'KLIEN': payload.client_name || '',
     store_name: payload.store_name || '',
     'Nama Tempat': payload.store_name || '',
+    'STORE': payload.store_name || '',
     target_count: Number(payload.target_count || payload.quantity || 0),
     'Target Review': Number(payload.target_count || payload.quantity || 0),
+    'SLOT': Number(payload.target_count || payload.quantity || 0),
     maps_link: payload.maps_link || payload.target_link || '',
     'Link Maps/Review': payload.maps_link || payload.target_link || '',
+    'TARGET LINK': payload.maps_link || payload.target_link || '',
     review_type: payload.review_type || 'G_MAPS',
     'Tipe Review': payload.review_type || 'G_MAPS',
-    status: payload.status || 'PENDING',
-    'Status': payload.status || 'PENDING',
+    'TIPE REVIEW': payload.review_type || 'G_MAPS',
+    status: rawStatus,
+    'Status': rawStatus,
+    'STATUS': rawStatus,
     reviewer_accounts_str: reviewerStr,
     'Akun Reviewer': reviewerStr,
+    'INPUT PROGRE': reviewerJson,
     proof_link: payload.proof_link || '',
     'Link Bukti': payload.proof_link || '',
+    'LINK BUKTI': payload.proof_link || '',
     notes: payload.notes || '',
     'Catatan': payload.notes || '',
+    'CLUE': payload.notes || '',
     created_by: payload.created_by || '',
   };
 }
@@ -370,6 +429,20 @@ function checkAuth_(secret) {
 
 function getOrCreateSheet_(name) {
   const doc = SpreadsheetApp.getActiveSpreadsheet();
+  const sheets = doc.getSheets();
+  const lowerTarget = String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  for (var i = 0; i < sheets.length; i++) {
+    const sName = sheets[i].getName();
+    const cleanS = sName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanS === lowerTarget || sName.toLowerCase() === String(name).toLowerCase()) {
+      return sheets[i];
+    }
+    if (lowerTarget.indexOf('shopee') !== -1 && cleanS.indexOf('shopee') !== -1) return sheets[i];
+    if (lowerTarget.indexOf('review') !== -1 && (cleanS.indexOf('review') !== -1 || cleanS.indexOf('map') !== -1)) return sheets[i];
+    if (lowerTarget.indexOf('web') !== -1 && cleanS.indexOf('web') !== -1) return sheets[i];
+  }
+
   let sheet = doc.getSheetByName(name);
   if (!sheet) {
     sheet = doc.insertSheet(name);
@@ -395,10 +468,13 @@ function sheetToObjects_(sheet) {
   
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    if (!row[0]) continue;
+    if (!row[0] && !row[1] && !row[2]) continue;
     var obj = {};
     for (var j = 0; j < header.length; j++) {
-      obj[header[j]] = row[j];
+      var key = header[j];
+      if (key !== undefined && key !== null && String(key).trim() !== "") {
+        obj[key] = row[j];
+      }
     }
     results.push(obj);
   }
@@ -410,7 +486,7 @@ function findRowNumber_(sheet, rowId) {
   if (lastRow < 2) return -1;
   const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
   for (var i = 0; i < ids.length; i++) {
-    if (String(ids[i]) === String(rowId)) {
+    if (String(ids[i]).trim() === String(rowId).trim()) {
       return i + 2;
     }
   }
@@ -430,8 +506,15 @@ function appendRow_(sheet, rowObj, sheetName) {
 
   const now = new Date().toISOString();
   const values = header.map(function(h) {
-    if (h === "updated_at") return now;
+    if (String(h).toLowerCase() === "updated_at") return now;
     if (rowObj[h] !== undefined && rowObj[h] !== null) return rowObj[h];
+    // Case-insensitive key match
+    var lowerH = String(h).toLowerCase();
+    for (var k in rowObj) {
+      if (k.toLowerCase() === lowerH && rowObj[k] !== undefined && rowObj[k] !== null) {
+        return rowObj[k];
+      }
+    }
     return "";
   });
 
@@ -448,7 +531,14 @@ function updateFields_(sheet, rowId, fields, expectedUpdatedAt) {
     return { ok: true, appended: true };
   }
 
-  const uaCol = header.indexOf("updated_at") + 1;
+  var uaCol = -1;
+  for (var h = 0; h < header.length; h++) {
+    if (String(header[h]).toLowerCase() === "updated_at") {
+      uaCol = h + 1;
+      break;
+    }
+  }
+
   if (expectedUpdatedAt && uaCol > 0) {
     const current = sheet.getRange(rowNum, uaCol).getValue();
     const currentStr = current instanceof Date ? current.toISOString() : String(current);
@@ -458,9 +548,16 @@ function updateFields_(sheet, rowId, fields, expectedUpdatedAt) {
   }
 
   Object.keys(fields).forEach(function(key) {
-    const col = header.indexOf(key) + 1;
-    if (col > 0) {
-      sheet.getRange(rowNum, col).setValue(fields[key]);
+    var targetCol = -1;
+    var lowerKey = key.toLowerCase();
+    for (var c = 0; c < header.length; c++) {
+      if (String(header[c]).toLowerCase() === lowerKey || header[c] === key) {
+        targetCol = c + 1;
+        break;
+      }
+    }
+    if (targetCol > 0) {
+      sheet.getRange(rowNum, targetCol).setValue(fields[key]);
     }
   });
 

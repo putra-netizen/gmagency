@@ -24,7 +24,7 @@ import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus } from './src/types';
 import { createClient } from '@supabase/supabase-js';
 import { getCachedRows, patchCacheRow, upsertCacheRow, invalidateCache } from './src/lib/sheetCache';
-import { updateOrderFields, normalizeSheetName, ordersSheetService } from './src/lib/sheetsBridge';
+import { updateOrderFields, normalizeSheetName, normalizeSheetRow, ordersSheetService, readLocalDatabase, writeLocalDatabase } from './src/lib/sheetsBridge';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -1087,6 +1087,132 @@ app.post('/api/sheets-webhook', async (req, res) => {
   } catch (err: any) {
     console.error('Error handling /api/sheets-webhook:', err);
     return res.status(500).json({ error: 'Internal server error in sheets-webhook handler', details: err?.message });
+  }
+});
+
+// GET SHEETS SYNC CONFIG
+app.get('/api/sheets-config', (req, res) => {
+  const db = readLocalDatabase();
+  res.json(db.sheets_sync_config || { enabled: false, webhookUrl: '', sharedSecret: 'gmsolution_secret_2026' });
+});
+
+// SAVE SHEETS SYNC CONFIG
+app.post('/api/sheets-config', (req, res) => {
+  try {
+    const { enabled, webhookUrl, sharedSecret } = req.body;
+    const db = readLocalDatabase();
+    db.sheets_sync_config = {
+      enabled: !!enabled,
+      webhookUrl: (webhookUrl || '').trim(),
+      sharedSecret: (sharedSecret || 'gmsolution_secret_2026').trim()
+    };
+    writeLocalDatabase(db);
+    invalidateCache('Web_Orders');
+    invalidateCache('Shopee_Orders');
+    invalidateCache('Review_Orders');
+    clearServerSupabaseCache();
+    return res.json({ success: true, config: db.sheets_sync_config });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PULL ALL DATA FROM GOOGLE SPREADSHEET INTO SUPABASE & LOCAL DATABASE
+app.post('/api/sheets-sync-pull', async (req, res) => {
+  try {
+    const db = readLocalDatabase();
+    const webhookUrl = (req.body?.webhookUrl || db.sheets_sync_config?.webhookUrl || process.env.SHEETS_WEBHOOK_URL || '').trim();
+    const secret = (req.body?.sharedSecret || db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026').trim();
+
+    if (!webhookUrl || !webhookUrl.startsWith('http')) {
+      return res.status(400).json({ error: 'URL Google Apps Script Web App belum diisi dengan benar.' });
+    }
+
+    // Save config if provided
+    db.sheets_sync_config = {
+      enabled: true,
+      webhookUrl,
+      sharedSecret: secret
+    };
+    writeLocalDatabase(db);
+
+    const sheetsToFetch = ['Web_Orders', 'Shopee_Orders', 'Review_Orders'] as const;
+    const results: Record<string, number> = { Web_Orders: 0, Shopee_Orders: 0, Review_Orders: 0 };
+    const errors: string[] = [];
+
+    for (const sheetName of sheetsToFetch) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const fetchUrl = `${webhookUrl}?action=getRows&sheet=${encodeURIComponent(sheetName)}&secret=${encodeURIComponent(secret)}`;
+        const fetchRes = await fetch(fetchUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!fetchRes.ok) {
+          errors.push(`Gagal membaca ${sheetName}: HTTP ${fetchRes.status}`);
+          continue;
+        }
+
+        const json = await fetchRes.json();
+        const rawRows = Array.isArray(json) ? json : (json.data || json.rows || []);
+
+        if (Array.isArray(rawRows)) {
+          const normalizedRows = rawRows
+            .filter((r: any) => r && (r.id || r.row_id || r['ID Pesanan'] || r['ID Target'] || r['Nama Pembeli'] || r.buyer_name || r.client_name || r.store_name))
+            .map((r: any) => normalizeSheetRow(sheetName, r));
+
+          results[sheetName] = normalizedRows.length;
+
+          // 1. Sync to Supabase if connected
+          if (supabase && normalizedRows.length > 0) {
+            try {
+              const tableName = sheetName === 'Web_Orders' ? 'orders' : (sheetName === 'Shopee_Orders' ? 'shopee_orders' : 'maps_reviews');
+              // Batch upsert in chunks of 200
+              for (let i = 0; i < normalizedRows.length; i += 200) {
+                const chunk = normalizedRows.slice(i, i + 200);
+                await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+              }
+            } catch (supErr: any) {
+              console.warn(`[sheets-sync-pull] Supabase upsert error for ${sheetName}:`, supErr?.message);
+            }
+          }
+
+          // 2. Sync to local db.json
+          if (sheetName === 'Web_Orders') {
+            const existingMap = new Map<string, any>((db.orders || []).map((o: any) => [String(o.id), o]));
+            normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
+            db.orders = Array.from(existingMap.values());
+          } else if (sheetName === 'Shopee_Orders') {
+            const existingMap = new Map<string, any>((db.shopee_orders || []).map((o: any) => [String(o.id), o]));
+            normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
+            db.shopee_orders = Array.from(existingMap.values());
+          } else if (sheetName === 'Review_Orders') {
+            const existingMap = new Map<string, any>((db.maps_reviews || []).map((o: any) => [String(o.id), o]));
+            normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
+            db.maps_reviews = Array.from(existingMap.values());
+          }
+        }
+      } catch (err: any) {
+        console.error(`[sheets-sync-pull] Error processing ${sheetName}:`, err);
+        errors.push(`Error ${sheetName}: ${err.message}`);
+      }
+    }
+
+    writeLocalDatabase(db);
+    invalidateCache('Web_Orders');
+    invalidateCache('Shopee_Orders');
+    invalidateCache('Review_Orders');
+    clearServerSupabaseCache();
+
+    return res.json({
+      success: true,
+      message: `Berhasil menyinkronkan data dari Spreadsheet! Web Orders: ${results.Web_Orders}, Shopee Orders: ${results.Shopee_Orders}, Review Orders: ${results.Review_Orders}`,
+      counts: results,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (err: any) {
+    console.error('Error in /api/sheets-sync-pull:', err);
+    return res.status(500).json({ error: 'Gagal menarik data dari Google Sheets', details: err?.message });
   }
 });
 

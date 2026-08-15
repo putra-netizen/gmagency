@@ -19,7 +19,7 @@ import { getAdminShpLogs, clearAdminShpLogs, AdminShpLog, logAdminShpAction } fr
 import { formatRupiah } from './ProductCard';
 import { getQrisConfig, saveQrisConfig, resetQrisConfig } from '../utils/qrisHelper';
 import { toast } from '../utils/toast';
-import { getSheetsSyncConfig, saveSheetsSyncConfig, getGoogleAppsScriptTemplate } from '../utils/sheetsSyncHelper';
+import { getSheetsSyncConfig, saveSheetsSyncConfig, pullAllSheetsData, getGoogleAppsScriptTemplate } from '../utils/sheetsSyncHelper';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { FinanceView } from './FinanceView';
@@ -284,6 +284,56 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   // Google Sheets sync config state
   const [sheetsSyncConfig, setSheetsSyncConfigState] = useState(() => getSheetsSyncConfig());
   const [copiedTemplate, setCopiedTemplate] = useState(false);
+  const [isPullingSheets, setIsPullingSheets] = useState(false);
+
+  // Hydrate sheets config from backend on mount
+  useEffect(() => {
+    fetch('/api/sheets-config')
+      .then(r => r.json())
+      .then(cfg => {
+        if (cfg && cfg.webhookUrl) {
+          setSheetsSyncConfigState(prev => ({
+            enabled: cfg.enabled ?? prev.enabled,
+            webhookUrl: cfg.webhookUrl || prev.webhookUrl,
+            sharedSecret: cfg.sharedSecret || prev.sharedSecret
+          }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handlePullAllSheetsData = async (overrideUrl?: string, overrideSecret?: string) => {
+    const targetUrl = (overrideUrl || sheetsSyncConfig.webhookUrl || '').trim();
+    const targetSecret = (overrideSecret || sheetsSyncConfig.sharedSecret || 'gmsolution_secret_2026').trim();
+
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+      toast.error(currentLang === 'id' ? 'Harap masukkan URL Web App Google Apps Script yang valid terlebih dahulu!' : 'Please enter a valid Google Apps Script Web App URL first!');
+      return;
+    }
+
+    setIsPullingSheets(true);
+    toast.info(currentLang === 'id' ? 'Sedang menarik dan menyinkronkan data dari Google Spreadsheet...' : 'Pulling and synchronizing data from Google Sheets...');
+
+    try {
+      const result = await pullAllSheetsData(targetUrl, targetSecret);
+      if (result.success) {
+        toast.success(result.message || (currentLang === 'id' ? 'Berhasil menyinkronkan data dari spreadsheet!' : 'Successfully synced data from spreadsheet!'));
+        await Promise.all([
+          refetchOrders(),
+          refetchShopeeOrders(),
+          refetchMapsReviews(),
+          loadDashboardData()
+        ]);
+      } else {
+        toast.error(result.message || (result as any).error || 'Gagal menarik data dari Google Sheets');
+      }
+    } catch (err: any) {
+      console.error('Error pulling sheets data:', err);
+      toast.error('Gagal menarik data: ' + err.message);
+    } finally {
+      setIsPullingSheets(false);
+    }
+  };
 
   // Custom credentials state for adminshp1..4
   const [adminshpCreds, setAdminshpCreds] = useState<Record<string, { username: string; password: string }>>(() => {
@@ -1627,6 +1677,21 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                         <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                         Kinerja Operasional Dashboard
                       </h2>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      {sheetsSyncConfig.webhookUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handlePullAllSheetsData()}
+                          disabled={isPullingSheets}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/60 rounded-xl border border-emerald-200/60 dark:border-emerald-800/60 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                          title="Tarik & sinkronkan seluruh data transaksi dari Google Spreadsheet"
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${isPullingSheets ? 'animate-spin' : ''}`} />
+                          <span>{isPullingSheets ? 'Menyinkronkan...' : 'Tarik Data Spreadsheet'}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                   
@@ -4019,75 +4084,90 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                           </div>
 
                           {/* Action buttons */}
-                          <div className="flex gap-2.5 pt-2">
+                          <div className="flex flex-col gap-2.5 pt-2">
+                            <div className="flex gap-2.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  saveSheetsSyncConfig(sheetsSyncConfig);
+                                  toast.success('Konfigurasi Google Sheets berhasil disimpan!');
+                                }}
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition-colors cursor-pointer"
+                              >
+                                <Save className="h-4 w-4" />
+                                <span>Simpan Konfigurasi</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!sheetsSyncConfig.webhookUrl) {
+                                    toast.error('Harap masukkan URL Web App terlebih dahulu!');
+                                    return;
+                                  }
+                                  toast.info('Mengirim data uji sinkronisasi...');
+                                  try {
+                                    const testPayload = {
+                                      id: 'test-sync-' + Math.floor(Math.random() * 10000),
+                                      buyer_name: 'Tes Sinkronisasi GM Solution',
+                                      product_name: 'Layanan Tes Google Sheets Sync',
+                                      quantity: 1,
+                                      total_price: 150000,
+                                      price: 150000,
+                                      payment_status: 'PAID',
+                                      status: 'PAID',
+                                      created_at: new Date().toISOString(),
+                                      notes: 'Tes koneksi real-time spreadsheet'
+                                    };
+                                    
+                                    const currentSecret = sheetsSyncConfig.sharedSecret || 'gmsolution_secret_2026';
+
+                                    await fetch(sheetsSyncConfig.webhookUrl, {
+                                      method: 'POST',
+                                      mode: 'no-cors',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        secret: currentSecret,
+                                        sheet: 'Web_Orders',
+                                        action: 'append',
+                                        row_id: testPayload.id,
+                                        row: testPayload,
+                                        fields: testPayload,
+                                        type: 'order',
+                                        id: testPayload.id,
+                                        timestamp: new Date().toISOString(),
+                                        payload: testPayload,
+                                        event_type: 'insert',
+                                        table_type: 'order',
+                                        data: testPayload
+                                      })
+                                    });
+                                    toast.success('Tes sinkronisasi berhasil dikirim! Silakan periksa spreadsheet Anda.');
+                                  } catch (err) {
+                                    console.error('Test sync error:', err);
+                                    toast.error('Gagal mengirim tes sinkronisasi. Periksa koneksi Anda.');
+                                  }
+                                }}
+                                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                                <span>Tes Koneksi</span>
+                              </button>
+                            </div>
+
+                            {/* Tarik Semua Data dari Spreadsheet Sekarang */}
                             <button
                               type="button"
-                              onClick={() => {
-                                saveSheetsSyncConfig(sheetsSyncConfig);
-                                toast.success('Konfigurasi Google Sheets berhasil disimpan!');
-                              }}
-                              className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow transition-colors cursor-pointer"
+                              onClick={() => handlePullAllSheetsData()}
+                              disabled={isPullingSheets || !sheetsSyncConfig.webhookUrl}
+                              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-xs font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <Save className="h-4 w-4" />
-                              <span>Simpan Konfigurasi</span>
+                              <Download className={`h-4 w-4 ${isPullingSheets ? 'animate-bounce' : ''}`} />
+                              <span>{isPullingSheets ? 'Sedang Menarik & Menyinkronkan Data...' : '📥 Tarik & Sinkronkan Semua Data dari Spreadsheet Sekarang'}</span>
                             </button>
-
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (!sheetsSyncConfig.webhookUrl) {
-                                  toast.error('Harap masukkan URL Web App terlebih dahulu!');
-                                  return;
-                                }
-                                toast.info('Mengirim data uji sinkronisasi...');
-                                try {
-                                  const testPayload = {
-                                    id: 'test-sync-' + Math.floor(Math.random() * 10000),
-                                    buyer_name: 'Tes Sinkronisasi GM Solution',
-                                    product_name: 'Layanan Tes Google Sheets Sync',
-                                    quantity: 1,
-                                    total_price: 150000,
-                                    price: 150000,
-                                    payment_status: 'PAID',
-                                    status: 'PAID',
-                                    created_at: new Date().toISOString(),
-                                    notes: 'Tes koneksi real-time spreadsheet'
-                                  };
-                                  
-                                  const currentSecret = sheetsSyncConfig.sharedSecret || 'gmsolution_secret_2026';
-
-                                  // Call API logic directly with both modern and fallback payloads
-                                  await fetch(sheetsSyncConfig.webhookUrl, {
-                                    method: 'POST',
-                                    mode: 'no-cors',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      secret: currentSecret,
-                                      sheet: 'Web_Orders',
-                                      action: 'append',
-                                      row_id: testPayload.id,
-                                      row: testPayload,
-                                      fields: testPayload,
-                                      type: 'order',
-                                      id: testPayload.id,
-                                      timestamp: new Date().toISOString(),
-                                      payload: testPayload,
-                                      event_type: 'insert',
-                                      table_type: 'order',
-                                      data: testPayload
-                                    })
-                                  });
-                                  toast.success('Tes sinkronisasi berhasil dikirim! Silakan periksa spreadsheet Anda.');
-                                } catch (err) {
-                                  console.error('Test sync error:', err);
-                                  toast.error('Gagal mengirim tes sinkronisasi. Periksa koneksi Anda.');
-                                }
-                              }}
-                              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer"
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                              <span>Tes Koneksi</span>
-                            </button>
+                            <p className="text-[10px] text-slate-400 font-medium text-center">
+                              Mengimpor seluruh isi sheet (Web_Orders, Shopee_Orders, Review_Orders) langsung ke database web aplikasi.
+                            </p>
                           </div>
                         </div>
                       </div>
