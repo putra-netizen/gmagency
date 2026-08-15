@@ -185,6 +185,51 @@ export function normalizeClientSheetRow(sheetName: string, raw: Record<string, a
 }
 
 /**
+ * Loads data from Google Apps Script via JSONP to bypass all browser CORS restrictions.
+ */
+function fetchGoogleScriptJsonp(targetUrl: string, params: Record<string, string>, timeoutMs = 12000): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'gscript_cb_' + Math.random().toString(36).substring(2, 10);
+    const script = document.createElement('script');
+    let isFinished = false;
+
+    const timer = setTimeout(() => {
+      if (isFinished) return;
+      cleanup();
+      reject(new Error('Koneksi Google Apps Script timeout (12 detik).'));
+    }, timeoutMs);
+
+    function cleanup() {
+      isFinished = true;
+      clearTimeout(timer);
+      try {
+        if ((window as any)[callbackName]) {
+          delete (window as any)[callbackName];
+        }
+      } catch {}
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    }
+
+    (window as any)[callbackName] = (data: any) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Gagal memuat respons skrip Google.'));
+    };
+
+    const query = new URLSearchParams({ ...params, callback: callbackName }).toString();
+    const separator = targetUrl.includes('?') ? '&' : '?';
+    script.src = `${targetUrl}${separator}${query}`;
+    document.head.appendChild(script);
+  });
+}
+
+/**
  * Direct client-side fetch from Google Apps Script Web App (works on static hosting & Supabase).
  */
 async function pullDirectFromGoogleAppsScript(
@@ -213,34 +258,53 @@ async function pullDirectFromGoogleAppsScript(
     let rawRows: any[] = [];
 
     for (const alias of sheetConf.aliases) {
+      // 1. Try JSONP first (zero CORS issues in browser)
       try {
-        const fetchUrl = `${targetUrl}?action=getRows&sheet=${encodeURIComponent(alias)}&secret=${encodeURIComponent(secret)}`;
-        const res = await fetch(fetchUrl, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-          redirect: 'follow'
-        });
+        const jsonpData = await fetchGoogleScriptJsonp(targetUrl, {
+          action: 'getRows',
+          sheet: alias,
+          secret: secret
+        }, 8000);
 
-        if (res.status === 404) {
-          had404 = true;
+        const rows = Array.isArray(jsonpData) ? jsonpData : (jsonpData?.data || jsonpData?.rows || []);
+        if (Array.isArray(rows) && rows.length > 0) {
+          rawRows = rows;
           break;
         }
+      } catch {
+        // Fallback to simple fetch if JSONP was not supported by older deployed script
+      }
 
-        if (res.ok) {
-          const text = await res.text();
-          if (text && !text.startsWith('<')) {
-            try {
-              const json = JSON.parse(text);
-              const rows = Array.isArray(json) ? json : (json.data || json.rows || []);
-              if (Array.isArray(rows) && rows.length > 0) {
-                rawRows = rows;
-                break;
-              }
-            } catch {}
+      // 2. Fallback to standard fetch
+      if (rawRows.length === 0) {
+        try {
+          const fetchUrl = `${targetUrl}?action=getRows&sheet=${encodeURIComponent(alias)}&secret=${encodeURIComponent(secret)}`;
+          const res = await fetch(fetchUrl, {
+            method: 'GET',
+            redirect: 'follow'
+          });
+
+          if (res.status === 404) {
+            had404 = true;
+            break;
           }
+
+          if (res.ok) {
+            const text = await res.text();
+            if (text && !text.startsWith('<')) {
+              try {
+                const json = JSON.parse(text);
+                const rows = Array.isArray(json) ? json : (json.data || json.rows || []);
+                if (Array.isArray(rows) && rows.length > 0) {
+                  rawRows = rows;
+                  break;
+                }
+              } catch {}
+            }
+          }
+        } catch {
+          // Ignore network error on alias retry
         }
-      } catch (e) {
-        // Continue to next alias
       }
     }
 
@@ -586,15 +650,17 @@ function doGet(e) {
     const sheetName = params.sheet || "Web_Orders";
     const sheet = getOrCreateSheet_(sheetName);
     const data = sheetToObjects_(sheet);
+    const callback = params.callback || params.prefix;
 
     if (params.row_id || params.id) {
       const searchId = String(params.row_id || params.id);
       const row = data.find(function(r) { return String(r.id || r.row_id) === searchId; });
-      return jsonOutput_(row || null);
+      return jsonOutput_(row || null, callback);
     }
-    return jsonOutput_(data);
+    return jsonOutput_(data, callback);
   } catch (err) {
-    return jsonOutput_({ error: err.message });
+    var cb = (e && e.parameter) ? (e.parameter.callback || e.parameter.prefix) : null;
+    return jsonOutput_({ error: err.message }, cb);
   }
 }
 
@@ -721,8 +787,14 @@ function getOrCreateSheet_(name) {
   return sheet;
 }
 
-function jsonOutput_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+function jsonOutput_(obj, callback) {
+  var str = JSON.stringify(obj);
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + str + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(str)
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function sheetToObjects_(sheet) {
