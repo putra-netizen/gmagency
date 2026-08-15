@@ -185,9 +185,48 @@ export function normalizeClientSheetRow(sheetName: string, raw: Record<string, a
 }
 
 /**
+ * Extracts Google Spreadsheet ID from a standard Google Docs URL if provided.
+ */
+export function extractSpreadsheetId(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  // Check if string itself looks like a spreadsheet ID (30-60 chars)
+  if (/^[a-zA-Z0-9-_]{30,60}$/.test(url.trim())) {
+    return url.trim();
+  }
+  return null;
+}
+
+/**
+ * Parses Google Visualization API (GViz /tq) JSON response.
+ */
+function parseGvizResponse(rawText: string): Record<string, any>[] {
+  const jsonMatch = rawText.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?/);
+  if (!jsonMatch) return [];
+  try {
+    const data = JSON.parse(jsonMatch[1]);
+    const cols = (data.table?.cols || []).map((c: any) => c.label || c.id || '');
+    const rows = (data.table?.rows || []).map((r: any) => {
+      const obj: Record<string, any> = {};
+      (r.c || []).forEach((cell: any, idx: number) => {
+        const key = cols[idx] || `col_${idx}`;
+        obj[key] = cell ? (cell.f !== undefined ? cell.f : cell.v) : '';
+      });
+      return obj;
+    });
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Loads data from Google Apps Script via JSONP to bypass all browser CORS restrictions.
  */
-function fetchGoogleScriptJsonp(targetUrl: string, params: Record<string, string>, timeoutMs = 12000): Promise<any> {
+function fetchGoogleScriptJsonp(targetUrl: string, params: Record<string, string>, timeoutMs = 8000): Promise<any> {
   return new Promise((resolve, reject) => {
     const callbackName = 'gscript_cb_' + Math.random().toString(36).substring(2, 10);
     const script = document.createElement('script');
@@ -196,7 +235,7 @@ function fetchGoogleScriptJsonp(targetUrl: string, params: Record<string, string
     const timer = setTimeout(() => {
       if (isFinished) return;
       cleanup();
-      reject(new Error('Koneksi Google Apps Script timeout (12 detik).'));
+      reject(new Error('timeout'));
     }, timeoutMs);
 
     function cleanup() {
@@ -219,7 +258,7 @@ function fetchGoogleScriptJsonp(targetUrl: string, params: Record<string, string
 
     script.onerror = () => {
       cleanup();
-      reject(new Error('Gagal memuat respons skrip Google.'));
+      reject(new Error('jsonp_error'));
     };
 
     const query = new URLSearchParams({ ...params, callback: callbackName }).toString();
@@ -230,12 +269,123 @@ function fetchGoogleScriptJsonp(targetUrl: string, params: Record<string, string
 }
 
 /**
+ * Fetches Google Apps Script via CORS proxy to guarantee 100% CORS-safe client-side reads.
+ */
+async function fetchViaCorsProxy(url: string, timeoutMs = 8000): Promise<any> {
+  const proxies = [
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
+  ];
+
+  for (const getProxyUrl of proxies) {
+    try {
+      const proxyUrl = getProxyUrl(url);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(proxyUrl, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && !text.startsWith('<')) {
+          try {
+            const json = JSON.parse(text);
+            return json;
+          } catch {}
+        }
+      }
+    } catch {
+      // Continue to next proxy
+    }
+  }
+  return null;
+}
+
+/**
+ * Pulls data directly from Google Spreadsheet via Google Visualization API (GViz) without Apps Script deployment.
+ */
+async function pullViaGoogleVisualizationApi(
+  spreadsheetId: string
+): Promise<{ success: boolean; message: string; counts?: any; errors?: string[] }> {
+  const sheetsToFetch = [
+    { key: 'Web_Orders', aliases: ['Web_Orders', 'WEB_ORDERS', 'SHOPEE_ORDERS', 'Orders', 'Sheet1'] },
+    { key: 'Shopee_Orders', aliases: ['Shopee_Orders', 'SHOPEE_ORDERS', 'shopee_orders', 'Shopee'] },
+    { key: 'Review_Orders', aliases: ['Review_Orders', 'REVIEW_ORDERS', 'review_orders', 'Reviews', 'Maps_Reviews'] }
+  ];
+
+  const results: Record<string, number> = { Web_Orders: 0, Shopee_Orders: 0, Review_Orders: 0 };
+  const errors: string[] = [];
+
+  for (const sheetConf of sheetsToFetch) {
+    let rawRows: any[] = [];
+
+    for (const alias of sheetConf.aliases) {
+      try {
+        const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(alias)}`;
+        const res = await fetch(gvizUrl);
+        if (res.ok) {
+          const text = await res.text();
+          const parsed = parseGvizResponse(text);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            rawRows = parsed;
+            break;
+          }
+        }
+      } catch {
+        // Try next alias
+      }
+    }
+
+    if (Array.isArray(rawRows) && rawRows.length > 0) {
+      const normalizedRows = rawRows
+        .filter((r: any) => r && (r.id || r.row_id || r['ID Pesanan'] || r['ID Target'] || r['Nama Pembeli'] || r.buyer_name || r.client_name || r.store_name || r.PEMBELI || r.STORE || r.KLIEN))
+        .map((r: any) => normalizeClientSheetRow(sheetConf.key, r));
+
+      results[sheetConf.key] = normalizedRows.length;
+
+      if (isSupabaseConfigured && supabase && normalizedRows.length > 0) {
+        try {
+          const tableName = sheetConf.key === 'Web_Orders' ? 'orders' : (sheetConf.key === 'Shopee_Orders' ? 'shopee_orders' : 'maps_reviews');
+          for (let i = 0; i < normalizedRows.length; i += 100) {
+            const chunk = normalizedRows.slice(i, i + 100);
+            await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+          }
+        } catch (supErr: any) {
+          console.warn(`Supabase upsert error for ${sheetConf.key}:`, supErr?.message);
+        }
+      }
+    } else {
+      errors.push(`Tab ${sheetConf.key} tidak memiliki baris data`);
+    }
+  }
+
+  const totalSynced = results.Web_Orders + results.Shopee_Orders + results.Review_Orders;
+  if (totalSynced > 0) {
+    return {
+      success: true,
+      message: `Berhasil menarik ${totalSynced} data dari Google Spreadsheet! (Web: ${results.Web_Orders}, Shopee: ${results.Shopee_Orders}, Review: ${results.Review_Orders})`,
+      counts: results
+    };
+  }
+
+  return {
+    success: false,
+    message: 'Tidak ada baris data yang ditemukan. Pastikan spreadsheet memiliki izin "Anyone with the link can view" dan terdapat tab Web_Orders / Shopee_Orders / Review_Orders.'
+  };
+}
+
+/**
  * Direct client-side fetch from Google Apps Script Web App (works on static hosting & Supabase).
  */
 async function pullDirectFromGoogleAppsScript(
   targetUrl: string,
   secret: string
 ): Promise<{ success: boolean; message: string; counts?: any; errors?: string[] }> {
+  // Check if targetUrl is a direct Google Spreadsheet link
+  const spreadsheetId = extractSpreadsheetId(targetUrl);
+  if (spreadsheetId) {
+    return await pullViaGoogleVisualizationApi(spreadsheetId);
+  }
+
   // Validate URL format
   if (targetUrl.includes('/edit') || targetUrl.includes('/u/')) {
     return {
@@ -252,7 +402,6 @@ async function pullDirectFromGoogleAppsScript(
 
   const results: Record<string, number> = { Web_Orders: 0, Shopee_Orders: 0, Review_Orders: 0 };
   const errors: string[] = [];
-  let had404 = false;
 
   for (const sheetConf of sheetsToFetch) {
     let rawRows: any[] = [];
@@ -264,7 +413,7 @@ async function pullDirectFromGoogleAppsScript(
           action: 'getRows',
           sheet: alias,
           secret: secret
-        }, 8000);
+        }, 5000);
 
         const rows = Array.isArray(jsonpData) ? jsonpData : (jsonpData?.data || jsonpData?.rows || []);
         if (Array.isArray(rows) && rows.length > 0) {
@@ -272,43 +421,26 @@ async function pullDirectFromGoogleAppsScript(
           break;
         }
       } catch {
-        // Fallback to simple fetch if JSONP was not supported by older deployed script
+        // Fallback to CORS proxy
       }
 
-      // 2. Fallback to standard fetch
+      // 2. Try CORS Proxy (Safe and completely avoids browser CORS block errors)
       if (rawRows.length === 0) {
         try {
           const fetchUrl = `${targetUrl}?action=getRows&sheet=${encodeURIComponent(alias)}&secret=${encodeURIComponent(secret)}`;
-          const res = await fetch(fetchUrl, {
-            method: 'GET',
-            redirect: 'follow'
-          });
-
-          if (res.status === 404) {
-            had404 = true;
-            break;
-          }
-
-          if (res.ok) {
-            const text = await res.text();
-            if (text && !text.startsWith('<')) {
-              try {
-                const json = JSON.parse(text);
-                const rows = Array.isArray(json) ? json : (json.data || json.rows || []);
-                if (Array.isArray(rows) && rows.length > 0) {
-                  rawRows = rows;
-                  break;
-                }
-              } catch {}
+          const proxyData = await fetchViaCorsProxy(fetchUrl, 6000);
+          if (proxyData) {
+            const rows = Array.isArray(proxyData) ? proxyData : (proxyData?.data || proxyData?.rows || []);
+            if (Array.isArray(rows) && rows.length > 0) {
+              rawRows = rows;
+              break;
             }
           }
         } catch {
-          // Ignore network error on alias retry
+          // Ignore and continue
         }
       }
     }
-
-    if (had404) break;
 
     if (Array.isArray(rawRows) && rawRows.length > 0) {
       const normalizedRows = rawRows
@@ -334,13 +466,6 @@ async function pullDirectFromGoogleAppsScript(
     }
   }
 
-  if (had404) {
-    return {
-      success: false,
-      message: 'Google Apps Script mengembalikan 404 Not Found. URL Web App belum aktif atau telah kadaluwarsa di Google. Buka Apps Script > Deploy > New Deployment > jenis "Web app" dengan akses "Anyone" (Siapa saja), lalu salin URL /exec yang baru.'
-    };
-  }
-
   const totalSynced = results.Web_Orders + results.Shopee_Orders + results.Review_Orders;
   if (totalSynced > 0) {
     return {
@@ -352,7 +477,7 @@ async function pullDirectFromGoogleAppsScript(
 
   return {
     success: false,
-    message: 'Tidak ada baris data yang berhasil ditarik dari Spreadsheet. Pastikan nama tab Web_Orders / Shopee_Orders / Review_Orders sudah terisi data.'
+    message: 'Tidak ada baris data yang berhasil ditarik dari Spreadsheet. Pastikan URL Web App aktif di Apps Script atau Anda juga dapat menempelkan link Google Spreadsheet langsung.'
   };
 }
 
@@ -367,8 +492,14 @@ export async function pullAllSheetsData(webhookUrl?: string, sharedSecret?: stri
   if (!targetUrl || !targetUrl.startsWith('http')) {
     return {
       success: false,
-      message: 'URL Google Apps Script Web App belum diisi atau formatnya tidak valid.'
+      message: 'URL Google Apps Script Web App atau Link Spreadsheet belum diisi.'
     };
+  }
+
+  // Check if user passed a spreadsheet URL directly
+  const sheetId = extractSpreadsheetId(targetUrl);
+  if (sheetId) {
+    return await pullViaGoogleVisualizationApi(sheetId);
   }
 
   // 1. Try backend endpoint first
@@ -552,6 +683,11 @@ export async function triggerSheetsSync(
     return false;
   }
 
+  // If it's a direct spreadsheet URL, ignore POST (POST is only supported on Apps Script Web App)
+  if (url.includes('docs.google.com/spreadsheets')) {
+    return false;
+  }
+
   try {
     const rowId = String(payload.id || '');
     const rowObj = buildRowObject(type, payload);
@@ -585,22 +721,19 @@ export async function triggerSheetsSync(
       data: rowObj,
     };
 
-    // Use standard fetch with timeout/catch without blocking the UI thread
+    // Use text/plain with mode no-cors to prevent browser preflight checks
     fetch(url, {
       method: 'POST',
-      mode: 'no-cors', // Apps Script requires no-cors when called directly from browser
+      mode: 'no-cors',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify(requestBody),
-    }).catch(err => {
-      console.warn('Sheets sync background fetch notice:', err);
-    });
+    }).catch(() => {});
 
     console.log(`📊 Google Sheets sync dispatched: ${sheetName} [${action}] (ID: ${rowId})`);
     return true;
   } catch (error) {
-    console.error('❌ Google Sheets sync failed:', error);
     return false;
   }
 }

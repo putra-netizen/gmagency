@@ -1125,7 +1125,7 @@ app.post('/api/sheets-sync-pull', async (req, res) => {
     const secret = (req.body?.sharedSecret || db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026').trim();
 
     if (!webhookUrl || !webhookUrl.startsWith('http')) {
-      return res.status(400).json({ error: 'URL Google Apps Script Web App belum diisi dengan benar.' });
+      return res.status(400).json({ error: 'URL Google Apps Script Web App atau Link Spreadsheet belum diisi dengan benar.' });
     }
 
     // Save config if provided
@@ -1135,6 +1135,15 @@ app.post('/api/sheets-sync-pull', async (req, res) => {
       sharedSecret: secret
     };
     writeLocalDatabase(db);
+
+    // Extract spreadsheet ID if direct link
+    let spreadsheetId: string | null = null;
+    const match = webhookUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) {
+      spreadsheetId = match[1];
+    } else if (/^[a-zA-Z0-9-_]{30,60}$/.test(webhookUrl)) {
+      spreadsheetId = webhookUrl;
+    }
 
     const sheetsToFetch = [
       { key: 'Web_Orders', aliases: ['SHOPEE_ORDERS', 'Web_Orders', 'WEB_ORDERS', 'web_orders', 'Orders', 'orders'] },
@@ -1149,34 +1158,61 @@ app.post('/api/sheets-sync-pull', async (req, res) => {
       const standardName = sheetConfig.key;
       let rawRows: any[] = [];
 
-      // Try aliases in order until rows are found
-      for (const sheetAlias of sheetConfig.aliases) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 8000);
-          const fetchUrl = `${webhookUrl}?action=getRows&sheet=${encodeURIComponent(sheetAlias)}&secret=${encodeURIComponent(secret)}`;
-          const fetchRes = await fetch(fetchUrl, {
-            signal: controller.signal,
-            headers: { 'Accept': 'application/json' },
-            redirect: 'follow'
-          });
-          clearTimeout(timeoutId);
-
-          if (fetchRes.ok) {
-            const text = await fetchRes.text();
-            if (text && !text.startsWith('<')) {
-              try {
-                const json = JSON.parse(text);
-                const rows = Array.isArray(json) ? json : (json.data || json.rows || []);
-                if (Array.isArray(rows) && rows.length > 0) {
-                  rawRows = rows;
-                  break; // Found data with this alias!
-                }
-              } catch (e) {}
+      // If spreadsheet ID, fetch via Google Visualization API
+      if (spreadsheetId) {
+        for (const sheetAlias of sheetConfig.aliases) {
+          try {
+            const gvizUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetAlias)}`;
+            const fetchRes = await fetch(gvizUrl);
+            if (fetchRes.ok) {
+              const text = await fetchRes.text();
+              const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?/);
+              if (jsonMatch) {
+                const data = JSON.parse(jsonMatch[1]);
+                const cols = (data.table?.cols || []).map((c: any) => c.label || c.id || '');
+                rawRows = (data.table?.rows || []).map((r: any) => {
+                  const obj: Record<string, any> = {};
+                  (r.c || []).forEach((cell: any, idx: number) => {
+                    const key = cols[idx] || `col_${idx}`;
+                    obj[key] = cell ? (cell.f !== undefined ? cell.f : cell.v) : '';
+                  });
+                  return obj;
+                });
+                if (rawRows.length > 0) break;
+              }
             }
+          } catch (e) {}
+        }
+      } else {
+        // Try aliases in order until rows are found via Web App
+        for (const sheetAlias of sheetConfig.aliases) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const fetchUrl = `${webhookUrl}?action=getRows&sheet=${encodeURIComponent(sheetAlias)}&secret=${encodeURIComponent(secret)}`;
+            const fetchRes = await fetch(fetchUrl, {
+              signal: controller.signal,
+              headers: { 'Accept': 'application/json' },
+              redirect: 'follow'
+            });
+            clearTimeout(timeoutId);
+
+            if (fetchRes.ok) {
+              const text = await fetchRes.text();
+              if (text && !text.startsWith('<')) {
+                try {
+                  const json = JSON.parse(text);
+                  const rows = Array.isArray(json) ? json : (json.data || json.rows || []);
+                  if (Array.isArray(rows) && rows.length > 0) {
+                    rawRows = rows;
+                    break; // Found data with this alias!
+                  }
+                } catch (e) {}
+              }
+            }
+          } catch (aliasErr) {
+            // Continue to next alias
           }
-        } catch (aliasErr) {
-          // Continue to next alias
         }
       }
 

@@ -4036,17 +4036,17 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                           {/* Webhook input */}
                           <div className="space-y-1">
                             <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider">
-                              Google Apps Script Web App URL
+                              URL Google Apps Script Web App / Link Google Spreadsheet
                             </label>
                             <input
                               type="text"
-                              placeholder="https://script.google.com/macros/s/.../exec"
+                              placeholder="https://script.google.com/macros/s/.../exec ATAU https://docs.google.com/spreadsheets/d/..."
                               value={sheetsSyncConfig.webhookUrl}
                               onChange={(e) => setSheetsSyncConfigState(prev => ({ ...prev, webhookUrl: e.target.value }))}
                               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-mono outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 font-sans text-xs"
                             />
                             <p className="text-[10px] text-slate-400 font-medium">
-                              Tempelkan URL Web App yang Anda dapatkan setelah mendeploy Apps Script Anda.
+                              Bisa gunakan URL Web App (berakhiran /exec) ATAU link Google Spreadsheet Anda langsung (Pastikan akses spreadsheet disetel ke "Anyone with link can view").
                             </p>
                           </div>
 
@@ -4106,11 +4106,16 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                 onClick={async () => {
                                   const url = (sheetsSyncConfig.webhookUrl || '').trim();
                                   if (!url) {
-                                    toast.error('Harap masukkan URL Web App terlebih dahulu!');
+                                    toast.error('Harap masukkan URL Web App atau Link Spreadsheet terlebih dahulu!');
+                                    return;
+                                  }
+                                  if (url.includes('docs.google.com/spreadsheets')) {
+                                    toast.info('Menguji koneksi baca Google Spreadsheet...');
+                                    const res = await handlePullAllSheetsData();
                                     return;
                                   }
                                   if (url.includes('/edit') || url.includes('/u/')) {
-                                    toast.error('URL yang dimasukkan adalah link editor skrip. Pastikan Anda menyalin URL Web App hasil Deploy yang berakhiran /exec.');
+                                    toast.error('URL yang dimasukkan adalah link editor skrip. Pastikan Anda menyalin URL Web App hasil Deploy yang berakhiran /exec atau link Google Spreadsheet langsung.');
                                     return;
                                   }
                                   toast.info('Mengirim data uji sinkronisasi...');
@@ -4133,7 +4138,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                     await fetch(url, {
                                       method: 'POST',
                                       mode: 'no-cors',
-                                      headers: { 'Content-Type': 'application/json' },
+                                      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                                       body: JSON.stringify({
                                         secret: currentSecret,
                                         sheet: 'Web_Orders',
