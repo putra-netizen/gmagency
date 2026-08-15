@@ -516,14 +516,15 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
         target_count: editMapsTargetCount,
         notes: editMapsNotes,
         review_type: editMapsReviewType,
-        reviewer_accounts: editMapsAccounts
+        reviewer_accounts: editMapsAccounts,
+        status: editingMapsReview.status
       };
       await dbUpdateMapsReview(editingMapsReview.id, updated);
       toast.success(currentLang === 'id' ? 'Review Maps berhasil diperbarui' : 'Maps review updated successfully');
       setIsMapsModalOpen(false);
       setEditingMapsReview(null);
       // Reload lists
-      const data = await dbGetMapsReviews();
+      const data = await dbGetMapsReviews(10000, true);
       setMapsReviews(data);
     } catch (err) {
       console.error(err);

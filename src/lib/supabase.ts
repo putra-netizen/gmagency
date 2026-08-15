@@ -203,21 +203,23 @@ export function blacklistClientMapsReview(id: string) {
 
 // Helpers for mapping status values like 'READY' or 'SUDAH DIREKAP' to/from Supabase to avoid CHECK constraints
 export function serializeStatusAndNotes(notes: string | undefined, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' | undefined): { status: 'PENDING' | 'PROGRESS' | 'DONE'; notes: string } {
-  let cleanNotes = notes || '';
+  let cleanNotes = (notes || '').trim();
   // Strip any existing metadata tags
-  cleanNotes = cleanNotes.replace(/\[STATUS:(READY|SUDAH DIREKAP)\]/g, '').trim();
+  cleanNotes = cleanNotes.replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
 
   let dbStatus: 'PENDING' | 'PROGRESS' | 'DONE' = 'PENDING';
   if (status === 'READY') {
     dbStatus = 'PROGRESS';
-    cleanNotes = (cleanNotes + '\n[STATUS:READY]').trim();
+    cleanNotes = cleanNotes ? `${cleanNotes}\n[STATUS:READY]` : '[STATUS:READY]';
   } else if (status === 'SUDAH DIREKAP') {
     dbStatus = 'PROGRESS';
-    cleanNotes = (cleanNotes + '\n[STATUS:SUDAH DIREKAP]').trim();
+    cleanNotes = cleanNotes ? `${cleanNotes}\n[STATUS:SUDAH DIREKAP]` : '[STATUS:SUDAH DIREKAP]';
   } else if (status === 'PROGRESS') {
     dbStatus = 'PROGRESS';
   } else if (status === 'DONE') {
     dbStatus = 'DONE';
+  } else if (status === 'PENDING') {
+    dbStatus = 'PENDING';
   }
 
   return { status: dbStatus, notes: cleanNotes };
@@ -228,12 +230,14 @@ export function deserializeStatusAndNotes<T extends { notes?: string; status?: a
   let status = item.status || 'PENDING';
   let notes = item.notes || '';
 
-  if (notes.includes('[STATUS:READY]')) {
-    status = 'READY';
-    notes = notes.replace(/\[STATUS:READY\]/g, '').trim();
-  } else if (notes.includes('[STATUS:SUDAH DIREKAP]')) {
-    status = 'SUDAH DIREKAP';
-    notes = notes.replace(/\[STATUS:SUDAH DIREKAP\]/g, '').trim();
+  if (typeof notes === 'string') {
+    if (notes.includes('[STATUS:READY]')) {
+      status = 'READY';
+      notes = notes.replace(/\[STATUS:READY\]/g, '').trim();
+    } else if (notes.includes('[STATUS:SUDAH DIREKAP]')) {
+      status = 'SUDAH DIREKAP';
+      notes = notes.replace(/\[STATUS:SUDAH DIREKAP\]/g, '').trim();
+    }
   }
 
   return {
@@ -258,7 +262,18 @@ async function safeFetch<T>(
   getDefaultData?: () => T
 ): Promise<T> {
   try {
-    const response = await fetch(url, options);
+    const separator = url.includes('?') ? '&' : '?';
+    const cacheBusterUrl = `${url}${separator}_t=${Date.now()}`;
+    const fetchOptions: RequestInit = {
+      ...options,
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        ...(options?.headers || {})
+      }
+    };
+
+    const response = await fetch(cacheBusterUrl, fetchOptions);
     if (response.ok) {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
@@ -599,10 +614,10 @@ function deleteLocalStorageMapsReview(id: string) {
 // --- DB OPERATION ADAPTERS ---
 
 // 1. PRODUCTS
-export async function dbGetProducts(limit: number = 500): Promise<Product[]> {
+export async function dbGetProducts(limit: number = 500, forceRefresh: boolean = false): Promise<Product[]> {
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const data = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true, false, limit);
+      const data = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true, forceRefresh, limit);
       
       if (data) {
         if (data.length === 0) {
@@ -711,6 +726,7 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
 }
 
 export async function dbUpdateProduct(id: string, product: Partial<Product>): Promise<Product> {
+  clearSupabaseCache('products');
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
@@ -721,7 +737,10 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
         .single();
       
       if (!error && data) {
-        return data as Product;
+        clearSupabaseCache('products');
+        const result = data as Product;
+        updateLocalStorageProduct(result);
+        return result;
       }
       
       if (error) {
@@ -735,7 +754,10 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
           .single();
           
         if (!retryResult.error && retryResult.data) {
-          return retryResult.data as Product;
+          clearSupabaseCache('products');
+          const result = retryResult.data as Product;
+          updateLocalStorageProduct(result);
+          return result;
         }
         console.warn('Supabase update product retry warning, falling back to Local/API:', retryResult.error || error);
         supabaseFailed = true;
@@ -792,6 +814,7 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
 }
 
 export async function dbDeleteProduct(id: string): Promise<boolean> {
+  clearSupabaseCache('products');
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { error } = await supabase
@@ -832,7 +855,7 @@ export async function dbDeleteProduct(id: string): Promise<boolean> {
 
 
 // 2. ORDERS
-export async function dbGetOrders(limit: number = 10000): Promise<Order[]> {
+export async function dbGetOrders(limit: number = 10000, forceRefresh: boolean = false): Promise<Order[]> {
   const deletedOrders = getClientDeletedOrders();
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
@@ -840,7 +863,7 @@ export async function dbGetOrders(limit: number = 10000): Promise<Order[]> {
       // Delete dummy seed orders from Supabase if they exist
       await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
 
-      const data = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false, false, limit);
+      const data = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false, forceRefresh, limit);
       
       if (data) {
         localStorage.setItem('gmsolution_seeded_orders', 'true');
@@ -938,6 +961,7 @@ export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
 }
 
 export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Promise<Order> {
+  clearSupabaseCache('orders');
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const { data, error } = await supabase
@@ -948,7 +972,9 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
         .single();
       
       if (!error && data) {
+        clearSupabaseCache('orders');
         const result = data as Order;
+        updateLocalStorageOrder(result);
         triggerSheetsSync('order', 'update', result);
         return result;
       }
@@ -990,7 +1016,7 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
       ...orderData
     } as Order;
     list[index] = updated;
-    localStorage.setItem('gmsolution_local_orders', JSON.stringify(list));
+    updateLocalStorageOrder(updated);
     triggerSheetsSync('order', 'update', updated);
     return updated;
   }
@@ -998,6 +1024,7 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
 }
 
 export async function dbDeleteOrder(id: string): Promise<boolean> {
+  clearSupabaseCache('orders');
   // Add to client-side blacklist immediately
   blacklistClientOrder(id);
 
@@ -1158,12 +1185,12 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
 
 
 // 4. SHOPEE ORDERS
-export async function dbGetShopeeOrders(limit: number = 10000): Promise<ShopeeOrder[]> {
+export async function dbGetShopeeOrders(limit: number = 10000, forceRefresh: boolean = false): Promise<ShopeeOrder[]> {
   const deletedShopee = getClientDeletedShopeeOrders();
   let list: ShopeeOrder[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const data = await fetchAllSupabaseRows<ShopeeOrder>(supabase, 'shopee_orders', 'created_at', false, false, limit);
+      const data = await fetchAllSupabaseRows<ShopeeOrder>(supabase, 'shopee_orders', 'created_at', false, forceRefresh, limit);
       if (data) {
         list = data;
       }
@@ -1260,6 +1287,7 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
 }
 
 export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
+  clearSupabaseCache('shopee_orders');
   let currentItem: ShopeeOrder | null = null;
   const list = getLocalShopeeOrders();
   const ex = list.find(o => o.id === id);
@@ -1292,7 +1320,9 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
         .select()
         .single();
       if (!error && data) {
+        clearSupabaseCache('shopee_orders');
         const result = deserializeStatusAndNotes(data as ShopeeOrder);
+        updateLocalStorageShopeeOrder(result);
         triggerSheetsSync('shopee_order', 'update', result);
         return result;
       }
@@ -1331,11 +1361,7 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
       ...ex,
       ...finalData
     } as ShopeeOrder;
-    const idx = list.findIndex(o => o.id === id);
-    if (idx !== -1) {
-      list[idx] = updated;
-      localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(list));
-    }
+    updateLocalStorageShopeeOrder(updated);
     const result = deserializeStatusAndNotes(updated);
     triggerSheetsSync('shopee_order', 'update', result);
     return result;
@@ -1344,6 +1370,7 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
 }
 
 export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
+  clearSupabaseCache('shopee_orders');
   // Add to client-side blacklist immediately
   blacklistClientShopeeOrder(id);
 
@@ -1386,12 +1413,12 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
 
 
 // 5. MAPS REVIEWS
-export async function dbGetMapsReviews(limit: number = 10000): Promise<MapsReview[]> {
+export async function dbGetMapsReviews(limit: number = 10000, forceRefresh: boolean = false): Promise<MapsReview[]> {
   const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
-      const data = await fetchAllSupabaseRows<MapsReview>(supabase, 'maps_reviews', 'created_at', false, false, limit);
+      const data = await fetchAllSupabaseRows<MapsReview>(supabase, 'maps_reviews', 'created_at', false, forceRefresh, limit);
       if (data && Array.isArray(data)) {
         list = data.map(normalizeMapsReview);
       }
@@ -1503,6 +1530,7 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
 }
 
 export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsReview>): Promise<MapsReview> {
+  clearSupabaseCache('maps_reviews');
   let currentItem: MapsReview | null = null;
   const list = getLocalMapsReviews().map(normalizeMapsReview);
   const ex = list.find(r => r.id === id);
@@ -1539,6 +1567,7 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
         .select()
         .single();
       if (!error && data) {
+        clearSupabaseCache('maps_reviews');
         const result = normalizeMapsReview(data);
         if (Array.isArray(finalData.reviewer_accounts) && finalData.reviewer_accounts.length > result.reviewer_accounts.length) {
           result.reviewer_accounts = finalData.reviewer_accounts;
@@ -1600,6 +1629,7 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
 }
 
 export async function dbDeleteMapsReview(id: string): Promise<boolean> {
+  clearSupabaseCache('maps_reviews');
   // Add to client-side blacklist immediately
   blacklistClientMapsReview(id);
 

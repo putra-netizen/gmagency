@@ -49,6 +49,14 @@ const PORT = 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Disable HTTP caching on all API routes to ensure real-time accuracy
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 // Path to JSON database
 const DB_DIR = path.join(process.cwd(), 'src', 'data');
 const DB_PATH = path.join(DB_DIR, 'db.json');
@@ -252,6 +260,7 @@ app.post('/api/products', async (req, res) => {
         .single();
       
       if (!error && data) {
+        clearServerSupabaseCache('products');
         return res.status(201).json(data);
       }
       
@@ -264,6 +273,7 @@ app.post('/api/products', async (req, res) => {
         .single();
         
       if (!retryResult.error && retryResult.data) {
+        clearServerSupabaseCache('products');
         return res.status(201).json(retryResult.data);
       }
       console.error('Supabase error inserting product:', retryResult.error || error);
@@ -304,6 +314,7 @@ app.put('/api/products/:id', async (req, res) => {
         .single();
 
       if (!error && data) {
+        clearServerSupabaseCache('products');
         return res.json(data);
       }
       
@@ -317,6 +328,7 @@ app.put('/api/products/:id', async (req, res) => {
         .single();
 
       if (!retryResult.error && retryResult.data) {
+        clearServerSupabaseCache('products');
         return res.json(retryResult.data);
       }
       console.error('Supabase error updating product:', retryResult.error || error);
@@ -357,6 +369,7 @@ app.delete('/api/products/:id', async (req, res) => {
         .delete()
         .eq('id', id);
       if (!error) {
+        clearServerSupabaseCache('products');
         return res.json({ success: true, message: 'Product deleted' });
       }
       console.error('Supabase error deleting product:', error);
@@ -466,6 +479,7 @@ app.post('/api/orders', async (req, res) => {
         .select()
         .single();
       if (!error && data) {
+        clearServerSupabaseCache('orders');
         return res.status(201).json(data);
       }
       console.error('Supabase error inserting order:', error);
@@ -508,6 +522,7 @@ app.put('/api/orders/:id', async (req, res) => {
         .single();
 
       if (!error && data) {
+        clearServerSupabaseCache('orders');
         return res.json(data);
       }
       console.error('Supabase error updating order:', error);
@@ -537,7 +552,14 @@ app.put('/api/orders/:id', async (req, res) => {
     writeDatabase(db);
     res.json(db.orders[index]);
   } else {
-    res.status(404).json({ error: 'Order not found' });
+    const newEntry = {
+      id,
+      ...req.body
+    };
+    if (!db.orders) db.orders = [];
+    db.orders.push(newEntry);
+    writeDatabase(db);
+    res.json(newEntry);
   }
 });
 
@@ -553,6 +575,7 @@ app.delete('/api/orders/:id', async (req, res) => {
         .eq('id', id);
       if (!error) {
         supabaseDeleted = true;
+        clearServerSupabaseCache('orders');
       } else {
         console.error('Supabase error deleting order:', error);
       }
@@ -612,6 +635,7 @@ app.post('/api/shopee_orders', async (req, res) => {
         .select()
         .single();
       if (!error && data) {
+        clearServerSupabaseCache('shopee_orders');
         return res.status(201).json(data);
       }
       console.error('Supabase error inserting shopee_order:', error);
@@ -639,6 +663,7 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
         .select()
         .single();
       if (!error && data) {
+        clearServerSupabaseCache('shopee_orders');
         return res.json(data);
       }
       console.error('Supabase error updating shopee_order:', error);
@@ -657,7 +682,14 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
     writeDatabase(db);
     res.json(db.shopee_orders[idx]);
   } else {
-    res.status(404).json({ error: 'Shopee order not found' });
+    const newEntry = {
+      id,
+      ...req.body
+    };
+    if (!db.shopee_orders) db.shopee_orders = [];
+    db.shopee_orders.push(newEntry);
+    writeDatabase(db);
+    res.json(newEntry);
   }
 });
 
@@ -673,6 +705,7 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
         .eq('id', id);
       if (!error) {
         supabaseDeleted = true;
+        clearServerSupabaseCache('shopee_orders');
       } else {
         console.error('Supabase error deleting shopee_order:', error);
       }
@@ -775,6 +808,7 @@ app.post('/api/maps_reviews', async (req, res) => {
         .select()
         .single();
       if (!error && data) {
+        clearServerSupabaseCache('maps_reviews');
         return res.status(201).json({
           ...data,
           reviewer_accounts: cleanAccounts
@@ -810,6 +844,7 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
         .select()
         .single();
       if (!error && data) {
+        clearServerSupabaseCache('maps_reviews');
         let accounts = parseServerReviewerAccounts(data.reviewer_accounts);
         if (reqAccounts && reqAccounts.length > accounts.length) {
           accounts = reqAccounts;
@@ -842,7 +877,14 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
       reviewer_accounts: accounts
     });
   } else {
-    res.status(404).json({ error: 'Maps review not found' });
+    const newEntry = {
+      id,
+      ...updatePayload
+    };
+    if (!db.maps_reviews) db.maps_reviews = [];
+    db.maps_reviews.push(newEntry);
+    writeDatabase(db);
+    res.json(newEntry);
   }
 });
 

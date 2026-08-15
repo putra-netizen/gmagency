@@ -425,6 +425,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const recentLocalStatusUpdates = useRef<Map<string, { status: string; timestamp: number }>>(new Map());
 
   // Authentication handlers
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -660,14 +661,15 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
         target_count: editMapsTargetCount,
         notes: editMapsNotes,
         review_type: editMapsReviewType,
-        reviewer_accounts: editMapsAccounts
+        reviewer_accounts: editMapsAccounts,
+        status: editingMapsReview.status
       };
       await dbUpdateMapsReview(editingMapsReview.id, updated);
       toast.success(currentLang === 'id' ? 'Review Maps berhasil diperbarui' : 'Maps review updated successfully');
       setIsMapsModalOpen(false);
       setEditingMapsReview(null);
-      // Reload lists
-      const data = await dbGetMapsReviews();
+      // Reload lists with forceRefresh
+      const data = await dbGetMapsReviews(10000, true);
       setMapsReviews(data);
     } catch (err) {
       console.error(err);
@@ -895,25 +897,71 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     loadDashboardData();
     const interval = setInterval(() => {
       if (document.hidden) return;
-      dbGetProducts().then(prodsData => setProducts(prodsData)).catch(err => console.error(err));
-      dbGetOrders().then(ordsData => setOrders(ordsData)).catch(err => console.error(err));
-      dbGetShopeeOrders().then(shopeeData => setShopeeOrders(shopeeData)).catch(err => console.error(err));
-      dbGetMapsReviews().then(mapsData => {
-        setMapsReviews(prev => {
-          if (!prev || prev.length === 0) return mapsData;
-          return mapsData.map(newItem => {
-            const existing = prev.find(p => p.id === newItem.id);
-            if (existing) {
-              const existingAccounts = existing.reviewer_accounts || [];
-              const newAccounts = newItem.reviewer_accounts || [];
-              if (existingAccounts.length > newAccounts.length) {
-                return { ...newItem, reviewer_accounts: existingAccounts };
-              }
+      const now = Date.now();
+
+      // Clean old lock entries older than 60s
+      recentLocalStatusUpdates.current.forEach((val, key) => {
+        if (now - val.timestamp > 60000) {
+          recentLocalStatusUpdates.current.delete(key);
+        }
+      });
+
+      dbGetProducts(10000, true).then(prodsData => setProducts(prodsData)).catch(err => console.error(err));
+
+      dbGetOrders(10000, true).then(ordsData => {
+        setOrders(prev => {
+          if (!prev || prev.length === 0) return ordsData;
+          return ordsData.map(newItem => {
+            const lock = recentLocalStatusUpdates.current.get(newItem.id);
+            if (lock && (now - lock.timestamp < 60000)) {
+              return { ...newItem, payment_status: lock.status as PaymentStatus };
             }
             return newItem;
           });
         });
       }).catch(err => console.error(err));
+
+      dbGetShopeeOrders(10000, true).then(shopeeData => {
+        setShopeeOrders(prev => {
+          if (!prev || prev.length === 0) return shopeeData;
+          return shopeeData.map(newItem => {
+            const lock = recentLocalStatusUpdates.current.get(newItem.id);
+            if (lock && (now - lock.timestamp < 60000)) {
+              return { ...newItem, status: lock.status as any };
+            }
+            return newItem;
+          });
+        });
+      }).catch(err => console.error(err));
+
+      dbGetMapsReviews(10000, true).then(mapsData => {
+        setMapsReviews(prev => {
+          if (!prev || prev.length === 0) return mapsData;
+          return mapsData.map(newItem => {
+            const existing = prev.find(p => p.id === newItem.id);
+            const lock = recentLocalStatusUpdates.current.get(newItem.id);
+            let finalStatus = newItem.status;
+            if (lock && (now - lock.timestamp < 60000)) {
+              finalStatus = lock.status as any;
+            }
+            if (existing) {
+              const existingAccounts = existing.reviewer_accounts || [];
+              const newAccounts = newItem.reviewer_accounts || [];
+              const mergedAccounts = existingAccounts.length > newAccounts.length ? existingAccounts : newAccounts;
+              return {
+                ...newItem,
+                status: finalStatus,
+                reviewer_accounts: mergedAccounts
+              };
+            }
+            return {
+              ...newItem,
+              status: finalStatus
+            };
+          });
+        });
+      }).catch(err => console.error(err));
+
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(err => console.error(err));
     }, 30000);
     return () => clearInterval(interval);
@@ -940,17 +988,18 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
   // Handle Order Status Update
   const handleUpdateOrderStatus = async (orderId: string, newStatus: PaymentStatus) => {
+    // 1. Lock and optimistic update
+    recentLocalStatusUpdates.current.set(orderId, { status: newStatus, timestamp: Date.now() });
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, payment_status: newStatus } : o));
+
     try {
       await dbUpdateOrder(orderId, { payment_status: newStatus });
-      
-      // Update local states
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, payment_status: newStatus } : o));
-      
-      // Refresh stats automatically
       const updatedStats = await dbGetDashboardStats();
       setStats(updatedStats);
+      toast.success(currentLang === 'id' ? `Status pesanan diubah ke ${newStatus}` : `Order status updated to ${newStatus}`);
     } catch (err) {
       console.error(err);
+      recentLocalStatusUpdates.current.delete(orderId);
       toast.error(currentLang === 'id' ? 'Gagal mengubah status.' : 'Failed to update status.');
     }
   };
@@ -977,21 +1026,37 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   };
 
   const handleUpdateShopeeStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE') => {
+    // 1. Lock and optimistic update
+    recentLocalStatusUpdates.current.set(id, { status, timestamp: Date.now() });
+    setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+
     try {
-      await dbUpdateShopeeOrder(id, { status });
-      setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+      const updated = await dbUpdateShopeeOrder(id, { status });
+      if (updated) {
+        setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, ...updated, status: updated.status || status } : o));
+      }
+      toast.success(currentLang === 'id' ? `Status Shopee diubah ke ${status}` : `Shopee status updated to ${status}`);
     } catch (err) {
       console.error(err);
+      recentLocalStatusUpdates.current.delete(id);
       toast.error('Gagal memperbarui status Shopee');
     }
   };
 
   const handleUpdateMapsStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE') => {
+    // 1. Lock and optimistic update
+    recentLocalStatusUpdates.current.set(id, { status, timestamp: Date.now() });
+    setMapsReviews(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+
     try {
-      await dbUpdateMapsReview(id, { status });
-      setMapsReviews(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+      const updated = await dbUpdateMapsReview(id, { status });
+      if (updated) {
+        setMapsReviews(prev => prev.map(r => r.id === id ? { ...r, ...updated, status: updated.status || status } : r));
+      }
+      toast.success(currentLang === 'id' ? `Status Review diubah ke ${status}` : `Review status updated to ${status}`);
     } catch (err) {
       console.error(err);
+      recentLocalStatusUpdates.current.delete(id);
       toast.error('Gagal memperbarui status Review');
     }
   };
