@@ -13,6 +13,7 @@ export interface SheetsSyncConfig {
 
 const STORAGE_KEY = 'gmsolution_sheets_sync_config';
 export const DEFAULT_SHARED_SECRET = 'gmsolution_secret_2026';
+export const EMBEDDED_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec';
 
 export function getSheetsSyncConfig(): SheetsSyncConfig {
   try {
@@ -21,7 +22,7 @@ export function getSheetsSyncConfig(): SheetsSyncConfig {
       const parsed = JSON.parse(stored);
       return {
         enabled: parsed.enabled !== undefined ? !!parsed.enabled : true,
-        webhookUrl: parsed.webhookUrl || '',
+        webhookUrl: parsed.webhookUrl && parsed.webhookUrl.trim().length > 0 ? parsed.webhookUrl.trim() : EMBEDDED_WEBHOOK_URL,
         sharedSecret: parsed.sharedSecret || DEFAULT_SHARED_SECRET,
       };
     }
@@ -30,7 +31,7 @@ export function getSheetsSyncConfig(): SheetsSyncConfig {
   }
   return {
     enabled: true,
-    webhookUrl: '',
+    webhookUrl: EMBEDDED_WEBHOOK_URL,
     sharedSecret: DEFAULT_SHARED_SECRET,
   };
 }

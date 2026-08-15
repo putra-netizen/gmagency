@@ -27,15 +27,29 @@ export function readLocalDatabase(): any {
       if (!parsed.orders) parsed.orders = [];
       if (!parsed.shopee_orders) parsed.shopee_orders = [];
       if (!parsed.maps_reviews) parsed.maps_reviews = [];
-      if (!parsed.sheets_sync_config) {
-        parsed.sheets_sync_config = { enabled: false, webhookUrl: '', sharedSecret: 'gmsolution_secret_2026' };
+      if (!parsed.sheets_sync_config || !parsed.sheets_sync_config.webhookUrl) {
+        parsed.sheets_sync_config = {
+          enabled: true,
+          webhookUrl: 'https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec',
+          sharedSecret: 'gmsolution_secret_2026'
+        };
       }
       return parsed;
     }
   } catch (err) {
     console.error('Error reading db.json in sheetsBridge:', err);
   }
-  return { products: [], orders: [], shopee_orders: [], maps_reviews: [], sheets_sync_config: { enabled: false, webhookUrl: '', sharedSecret: 'gmsolution_secret_2026' } };
+  return {
+    products: [],
+    orders: [],
+    shopee_orders: [],
+    maps_reviews: [],
+    sheets_sync_config: {
+      enabled: true,
+      webhookUrl: 'https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec',
+      sharedSecret: 'gmsolution_secret_2026'
+    }
+  };
 }
 
 export function writeLocalDatabase(data: any) {

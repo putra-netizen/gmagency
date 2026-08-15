@@ -83,5 +83,10 @@
   ],
   "orders": [],
   "shopee_orders": [],
-  "maps_reviews": []
+  "maps_reviews": [],
+  "sheets_sync_config": {
+    "enabled": true,
+    "webhookUrl": "https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec",
+    "sharedSecret": "gmsolution_secret_2026"
+  }
 }

@@ -1090,10 +1090,12 @@ app.post('/api/sheets-webhook', async (req, res) => {
   }
 });
 
+const EMBEDDED_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec';
+
 // GET SHEETS SYNC CONFIG
 app.get('/api/sheets-config', (req, res) => {
   const db = readLocalDatabase();
-  res.json(db.sheets_sync_config || { enabled: false, webhookUrl: '', sharedSecret: 'gmsolution_secret_2026' });
+  res.json(db.sheets_sync_config || { enabled: true, webhookUrl: EMBEDDED_SHEETS_URL, sharedSecret: 'gmsolution_secret_2026' });
 });
 
 // SAVE SHEETS SYNC CONFIG
@@ -1102,8 +1104,8 @@ app.post('/api/sheets-config', (req, res) => {
     const { enabled, webhookUrl, sharedSecret } = req.body;
     const db = readLocalDatabase();
     db.sheets_sync_config = {
-      enabled: !!enabled,
-      webhookUrl: (webhookUrl || '').trim(),
+      enabled: enabled !== undefined ? !!enabled : true,
+      webhookUrl: (webhookUrl && webhookUrl.trim()) || EMBEDDED_SHEETS_URL,
       sharedSecret: (sharedSecret || 'gmsolution_secret_2026').trim()
     };
     writeLocalDatabase(db);
@@ -1121,7 +1123,7 @@ app.post('/api/sheets-config', (req, res) => {
 app.post('/api/sheets-sync-pull', async (req, res) => {
   try {
     const db = readLocalDatabase();
-    const webhookUrl = (req.body?.webhookUrl || db.sheets_sync_config?.webhookUrl || process.env.SHEETS_WEBHOOK_URL || '').trim();
+    const webhookUrl = (req.body?.webhookUrl || db.sheets_sync_config?.webhookUrl || process.env.SHEETS_WEBHOOK_URL || EMBEDDED_SHEETS_URL).trim();
     const secret = (req.body?.sharedSecret || db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026').trim();
 
     if (!webhookUrl || !webhookUrl.startsWith('http')) {
