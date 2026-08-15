@@ -16,6 +16,7 @@ import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview } from '../types';
+import { usePolledOrders } from '../hooks/usePolledOrders';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { 
   Copy, 
@@ -384,8 +385,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   };
 
   // Loading states
-  const [shopeeOrders, setShopeeOrders] = useState<ShopeeOrder[]>([]);
-  const [mapsReviews, setMapsReviews] = useState<MapsReview[]>([]);
+  const { data: shopeeOrders, isLoading: isShopeeLoading, refetchNow: refetchShopeeOrders, setData: setShopeeOrders } = usePolledOrders<ShopeeOrder>('/api/shopee_orders', { intervalMs: 3000, enabled: isAuthenticated });
+  const { data: mapsReviews, isLoading: isMapsLoading, refetchNow: refetchMapsReviews, setData: setMapsReviews } = usePolledOrders<MapsReview>('/api/maps_reviews', { intervalMs: 3000, enabled: isAuthenticated });
   const [isLoading, setIsLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'maps_review' } | null>(null);
@@ -484,9 +485,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       toast.success(currentLang === 'id' ? 'Pesanan Shopee berhasil diperbarui' : 'Shopee order updated successfully');
       setIsShopeeModalOpen(false);
       setEditingShopeeOrder(null);
-      // Reload lists
-      const data = await dbGetShopeeOrders();
-      setShopeeOrders(data);
+      // Reload lists immediately
+      await refetchShopeeOrders();
     } catch (err) {
       console.error(err);
       toast.error('Gagal memperbarui pesanan Shopee');
@@ -523,9 +523,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       toast.success(currentLang === 'id' ? 'Review Maps berhasil diperbarui' : 'Maps review updated successfully');
       setIsMapsModalOpen(false);
       setEditingMapsReview(null);
-      // Reload lists
-      const data = await dbGetMapsReviews(10000, true);
-      setMapsReviews(data);
+      // Reload lists immediately
+      await refetchMapsReviews();
     } catch (err) {
       console.error(err);
       toast.error('Gagal memperbarui review Maps');
@@ -587,28 +586,10 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     if (!isAuthenticated || !currentAdminUser) return;
     setIsLoading(true);
     try {
-      const orders = await dbGetShopeeOrders();
-      const reviews = await dbGetMapsReviews();
-      
-      // Filter logs per account: each account only logs and sees their own data.
-      // Pre-existing/legacy records are shown to all for safety.
-      const ADMIN_ACCOUNTS = ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'];
-      try {
-        const credsStr = localStorage.getItem('gm_adminshp_creds');
-        if (credsStr) {
-          const custom = JSON.parse(credsStr);
-          Object.keys(custom).forEach(k => {
-            if (!ADMIN_ACCOUNTS.includes(k)) {
-              ADMIN_ACCOUNTS.push(k);
-            }
-          });
-        }
-      } catch (e) {
-        console.error(e);
-      }
-
-      setShopeeOrders(orders);
-      setMapsReviews(reviews);
+      await Promise.all([
+        refetchShopeeOrders(),
+        refetchMapsReviews()
+      ]);
     } catch (error) {
       console.error('Error loading Shopee and Maps data:', error);
     } finally {

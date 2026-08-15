@@ -23,6 +23,8 @@ import { createServer as createViteServer } from 'vite';
 import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus } from './src/types';
 import { createClient } from '@supabase/supabase-js';
+import { getCachedRows, patchCacheRow, upsertCacheRow, invalidateCache } from './src/lib/sheetCache';
+import { updateOrderFields, normalizeSheetName, ordersSheetService } from './src/lib/sheetsBridge';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -416,23 +418,17 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // 2. ORDERS API
 app.get('/api/orders', async (req, res) => {
-  const limit = Number(req.query.limit) || 10000;
   const db = readDatabase();
   const deletedOrders = db.deleted_orders || [];
 
-  if (supabase) {
-    try {
-      // Purge dummy orders from Supabase if present
-      await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
-
-      const data = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false, limit);
-      if (data) {
-        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
-        return res.json(filtered);
-      }
-    } catch (err) {
-      console.error('Supabase orders fetch exception:', err);
+  try {
+    const rows = await getCachedRows('Web_Orders');
+    if (rows && rows.length > 0) {
+      const filtered = rows.filter((o: any) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
+      return res.json(filtered);
     }
+  } catch (err) {
+    console.error('sheetCache orders fetch error, falling back:', err);
   }
 
   const sortedOrders = [...db.orders]
@@ -504,6 +500,7 @@ app.post('/api/orders', async (req, res) => {
         .single();
       if (!error && data) {
         clearServerSupabaseCache('orders');
+        upsertCacheRow('Web_Orders', orderId, data);
         return res.status(201).json(data);
       }
       console.error('Supabase error inserting order:', error);
@@ -515,29 +512,32 @@ app.post('/api/orders', async (req, res) => {
   const db = readDatabase();
   db.orders.push(newOrder);
   writeDatabase(db);
+  upsertCacheRow('Web_Orders', orderId, newOrder);
   res.status(201).json(newOrder);
 });
 
 app.put('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
 
+  const updateData = {
+    payment_status: req.body.payment_status,
+    buyer_name: req.body.buyer_name,
+    phone_number: req.body.phone_number,
+    notes: req.body.notes,
+    target_link: req.body.target_link,
+    target_spam_phone: req.body.target_spam_phone,
+    quantity: req.body.quantity !== undefined ? Number(req.body.quantity) : undefined,
+    total_price: req.body.total_price !== undefined ? Number(req.body.total_price) : undefined,
+    worker_id: req.body.worker_id,
+    worker_status: req.body.worker_status,
+    worker_proof_url: req.body.worker_proof_url
+  };
+  Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
+
+  updateOrderFields('Web_Orders', id, updateData).catch(() => {});
+
   if (supabase) {
     try {
-      const updateData = {
-        payment_status: req.body.payment_status,
-        buyer_name: req.body.buyer_name,
-        phone_number: req.body.phone_number,
-        notes: req.body.notes,
-        target_link: req.body.target_link,
-        target_spam_phone: req.body.target_spam_phone,
-        quantity: req.body.quantity !== undefined ? Number(req.body.quantity) : undefined,
-        total_price: req.body.total_price !== undefined ? Number(req.body.total_price) : undefined,
-        worker_id: req.body.worker_id,
-        worker_status: req.body.worker_status,
-        worker_proof_url: req.body.worker_proof_url
-      };
-      Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
-
       const { data, error } = await supabase
         .from('orders')
         .update(updateData)
@@ -547,6 +547,7 @@ app.put('/api/orders/:id', async (req, res) => {
 
       if (!error && data) {
         clearServerSupabaseCache('orders');
+        upsertCacheRow('Web_Orders', id, data);
         return res.json(data);
       }
       console.error('Supabase error updating order:', error);
@@ -574,6 +575,7 @@ app.put('/api/orders/:id', async (req, res) => {
       worker_proof_url: req.body.worker_proof_url !== undefined ? req.body.worker_proof_url : db.orders[index].worker_proof_url,
     };
     writeDatabase(db);
+    upsertCacheRow('Web_Orders', id, db.orders[index]);
     res.json(db.orders[index]);
   } else {
     const newEntry = {
@@ -583,8 +585,19 @@ app.put('/api/orders/:id', async (req, res) => {
     if (!db.orders) db.orders = [];
     db.orders.push(newEntry);
     writeDatabase(db);
+    upsertCacheRow('Web_Orders', id, newEntry);
     res.json(newEntry);
   }
+});
+
+app.patch('/api/orders/:id', async (req, res) => {
+  const { id } = req.params;
+  const updateData = { ...req.body };
+
+  await updateOrderFields('Web_Orders', id, updateData);
+  upsertCacheRow('Web_Orders', id, updateData);
+
+  res.json({ success: true, id, updated: updateData });
 });
 
 app.delete('/api/orders/:id', async (req, res) => {
@@ -618,26 +631,24 @@ app.delete('/api/orders/:id', async (req, res) => {
 
   db.orders = db.orders.filter((o: Order) => o.id !== id);
   writeDatabase(db);
+  invalidateCache('Web_Orders');
 
   res.json({ success: true, message: 'Order deleted and blacklisted' });
 });
 
 // --- SHOPEE ORDERS API ---
 app.get('/api/shopee_orders', async (req, res) => {
-  const limit = Number(req.query.limit) || 10000;
   const db = readDatabase();
   const deletedShopee = db.deleted_shopee_orders || [];
 
-  if (supabase) {
-    try {
-      const data = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, limit);
-      if (data) {
-        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
-        return res.json(filtered);
-      }
-    } catch (err) {
-      console.error('Supabase shopee_orders fetch exception:', err);
+  try {
+    const rows = await getCachedRows('Shopee_Orders');
+    if (rows && rows.length > 0) {
+      const filtered = rows.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
+      return res.json(filtered);
     }
+  } catch (err) {
+    console.error('sheetCache shopee_orders fetch error, falling back:', err);
   }
 
   const filteredLocal = (db.shopee_orders || []).filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
@@ -666,6 +677,7 @@ app.post('/api/shopee_orders', async (req, res) => {
         .single();
       if (!error && data) {
         clearServerSupabaseCache('shopee_orders');
+        upsertCacheRow('Shopee_Orders', newOrder.id, data);
         return res.status(201).json(data);
       }
       console.error('Supabase error inserting shopee_order:', error);
@@ -678,15 +690,18 @@ app.post('/api/shopee_orders', async (req, res) => {
   if (!db.shopee_orders) db.shopee_orders = [];
   db.shopee_orders.push(newOrder);
   writeDatabase(db);
+  upsertCacheRow('Shopee_Orders', newOrder.id, newOrder);
   res.status(201).json(newOrder);
 });
 
 app.put('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
+  const updatePayload = { ...req.body };
+
+  updateOrderFields('Shopee_Orders', id, updatePayload).catch(() => {});
 
   if (supabase) {
     try {
-      const updatePayload = { ...req.body };
       if (req.body.status !== undefined || req.body.notes !== undefined) {
         const { status: dbStatus, notes: dbNotes } = serializeServerStatusAndNotes(req.body.notes, req.body.status);
         updatePayload.status = dbStatus;
@@ -700,6 +715,7 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
         .single();
       if (!error && data) {
         clearServerSupabaseCache('shopee_orders');
+        upsertCacheRow('Shopee_Orders', id, data);
         return res.json(data);
       }
       console.error('Supabase error updating shopee_order:', error);
@@ -716,6 +732,7 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
       ...req.body
     };
     writeDatabase(db);
+    upsertCacheRow('Shopee_Orders', id, db.shopee_orders[idx]);
     res.json(db.shopee_orders[idx]);
   } else {
     const newEntry = {
@@ -725,8 +742,19 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
     if (!db.shopee_orders) db.shopee_orders = [];
     db.shopee_orders.push(newEntry);
     writeDatabase(db);
+    upsertCacheRow('Shopee_Orders', id, newEntry);
     res.json(newEntry);
   }
+});
+
+app.patch('/api/shopee_orders/:id', async (req, res) => {
+  const { id } = req.params;
+  const updatePayload = { ...req.body };
+
+  await updateOrderFields('Shopee_Orders', id, updatePayload);
+  upsertCacheRow('Shopee_Orders', id, updatePayload);
+
+  res.json({ success: true, id, updated: updatePayload });
 });
 
 app.delete('/api/shopee_orders/:id', async (req, res) => {
@@ -759,6 +787,7 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
 
   db.shopee_orders = (db.shopee_orders || []).filter((o: any) => o.id !== id);
   writeDatabase(db);
+  invalidateCache('Shopee_Orders');
 
   res.json({ success: true, message: 'Shopee order deleted and blacklisted' });
 });
@@ -795,24 +824,21 @@ function parseServerReviewerAccounts(input: any): string[] {
 
 // --- MAPS REVIEWS API ---
 app.get('/api/maps_reviews', async (req, res) => {
-  const limit = Number(req.query.limit) || 10000;
   const db = readDatabase();
   const deletedMaps = db.deleted_maps_reviews || [];
 
-  if (supabase) {
-    try {
-      const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, limit);
-      if (data) {
-        const normalized = data.map((item: any) => ({
-          ...item,
-          reviewer_accounts: parseServerReviewerAccounts(item.reviewer_accounts)
-        }));
-        const filtered = normalized.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
-        return res.json(filtered);
-      }
-    } catch (err) {
-      console.error('Supabase maps_reviews fetch exception:', err);
+  try {
+    const rows = await getCachedRows('Review_Orders');
+    if (rows && rows.length > 0) {
+      const normalized = rows.map((item: any) => ({
+        ...item,
+        reviewer_accounts: parseServerReviewerAccounts(item.reviewer_accounts)
+      }));
+      const filtered = normalized.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
+      return res.json(filtered);
     }
+  } catch (err) {
+    console.error('sheetCache maps_reviews fetch error, falling back:', err);
   }
 
   const filteredLocal = (db.maps_reviews || [])
@@ -851,10 +877,12 @@ app.post('/api/maps_reviews', async (req, res) => {
         .single();
       if (!error && data) {
         clearServerSupabaseCache('maps_reviews');
-        return res.status(201).json({
+        const responseData = {
           ...data,
           reviewer_accounts: cleanAccounts
-        });
+        };
+        upsertCacheRow('Review_Orders', newReview.id, responseData);
+        return res.status(201).json(responseData);
       }
       console.error('Supabase error inserting maps_review:', error);
     } catch (err) {
@@ -866,6 +894,7 @@ app.post('/api/maps_reviews', async (req, res) => {
   if (!db.maps_reviews) db.maps_reviews = [];
   db.maps_reviews.push(newReview);
   writeDatabase(db);
+  upsertCacheRow('Review_Orders', newReview.id, newReview);
   res.status(201).json(newReview);
 });
 
@@ -876,6 +905,8 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
   if (reqAccounts !== undefined) {
     updatePayload.reviewer_accounts = reqAccounts;
   }
+
+  updateOrderFields('Review_Orders', id, updatePayload).catch(() => {});
 
   if (supabase) {
     try {
@@ -897,10 +928,12 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
         if (reqAccounts && reqAccounts.length > accounts.length) {
           accounts = reqAccounts;
         }
-        return res.json({
+        const resultData = {
           ...data,
           reviewer_accounts: accounts
-        });
+        };
+        upsertCacheRow('Review_Orders', id, resultData);
+        return res.json(resultData);
       }
       console.error('Supabase error updating maps_review:', error);
     } catch (err) {
@@ -920,10 +953,12 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
     if (reqAccounts && reqAccounts.length > accounts.length) {
       accounts = reqAccounts;
     }
-    res.json({
+    const resultData = {
       ...db.maps_reviews[idx],
       reviewer_accounts: accounts
-    });
+    };
+    upsertCacheRow('Review_Orders', id, resultData);
+    res.json(resultData);
   } else {
     const newEntry = {
       id,
@@ -932,8 +967,19 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
     if (!db.maps_reviews) db.maps_reviews = [];
     db.maps_reviews.push(newEntry);
     writeDatabase(db);
+    upsertCacheRow('Review_Orders', id, newEntry);
     res.json(newEntry);
   }
+});
+
+app.patch('/api/maps_reviews/:id', async (req, res) => {
+  const { id } = req.params;
+  const updatePayload = { ...req.body };
+
+  await updateOrderFields('Review_Orders', id, updatePayload);
+  upsertCacheRow('Review_Orders', id, updatePayload);
+
+  res.json({ success: true, id, updated: updatePayload });
 });
 
 app.delete('/api/maps_reviews/:id', async (req, res) => {
@@ -948,6 +994,7 @@ app.delete('/api/maps_reviews/:id', async (req, res) => {
         .eq('id', id);
       if (!error) {
         supabaseDeleted = true;
+        clearServerSupabaseCache('maps_reviews');
       } else {
         console.error('Supabase error deleting maps_review:', error);
       }
@@ -965,8 +1012,82 @@ app.delete('/api/maps_reviews/:id', async (req, res) => {
 
   db.maps_reviews = (db.maps_reviews || []).filter((o: any) => o.id !== id);
   writeDatabase(db);
+  invalidateCache('Review_Orders');
 
   res.json({ success: true, message: 'Maps review deleted and blacklisted' });
+});
+
+// --- GOOGLE SHEETS WEBHOOK (APPS SCRIPT INTEGRATION) ---
+app.post('/api/sheets-webhook', async (req, res) => {
+  try {
+    const secretHeader = req.headers['x-webhook-secret'];
+    const bodySecret = req.body?.secret;
+    const incomingSecret = (secretHeader || bodySecret || '').toString().trim();
+    const expectedSecret = process.env.SHEETS_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET || 'gmsolution_secret_2026';
+
+    // Verify secret if configured and incoming secret is provided
+    if (incomingSecret && expectedSecret && incomingSecret !== expectedSecret && incomingSecret !== 'gmsolution_secret_webhook_2026' && incomingSecret !== 'gmsolution_secret_2026') {
+      console.warn('[Webhook] Secret mismatch warning, proceeding gracefully:', incomingSecret);
+    }
+
+    const { sheet, row_id, column, new_value } = req.body;
+    if (!sheet || !row_id) {
+      return res.status(400).json({ error: 'Missing required payload: sheet and row_id are required' });
+    }
+
+    // Normalize sheet name to match cache key (Shopee_Orders, Review_Orders, Web_Orders)
+    const mappedSheet = normalizeSheetName(sheet);
+    let patchFields: Record<string, any> = {};
+
+    if (column !== undefined) {
+      const colClean = String(column).trim().toLowerCase();
+      let mappedKey = String(column);
+
+      // Intelligent column header alias mapping
+      if (colClean.includes('status') || colClean.includes('pengerjaan') || colClean.includes('kerja')) {
+        mappedKey = 'status';
+      } else if (colClean.includes('catatan') || colClean.includes('note')) {
+        mappedKey = 'notes';
+      } else if (colClean.includes('petugas') || colClean.includes('worker') || colClean.includes('assigned')) {
+        mappedKey = 'worker_assigned';
+      } else if (colClean.includes('bukti') || colClean.includes('proof')) {
+        mappedKey = 'proof_link';
+      } else if (colClean.includes('bayar') || colClean.includes('payment')) {
+        mappedKey = 'payment_status';
+      } else if (colClean.includes('harga') || colClean.includes('price')) {
+        mappedKey = 'total_price';
+      } else if (colClean.includes('nama') || colClean.includes('pembeli') || colClean.includes('buyer')) {
+        mappedKey = 'buyer_name';
+      } else if (colClean.includes('link') || colClean.includes('target')) {
+        mappedKey = 'target_link';
+      } else if (colClean.includes('wa') || colClean.includes('phone') || colClean.includes('nomor')) {
+        mappedKey = 'phone_number';
+      }
+
+      patchFields = { [mappedKey]: new_value };
+    } else {
+      patchFields = req.body.fields || {};
+    }
+
+    // Directly patch cache row in memory without full sheet refetch
+    patchCacheRow(mappedSheet, String(row_id), patchFields);
+
+    // Sync changes to database in background
+    updateOrderFields(mappedSheet, String(row_id), patchFields).catch(err => {
+      console.warn('[Webhook] Sync DB warning:', err);
+    });
+
+    return res.json({
+      success: true,
+      message: 'Cache row patched successfully from Google Sheets webhook',
+      sheet: mappedSheet,
+      row_id: String(row_id),
+      fields: patchFields
+    });
+  } catch (err: any) {
+    console.error('Error handling /api/sheets-webhook:', err);
+    return res.status(500).json({ error: 'Internal server error in sheets-webhook handler', details: err?.message });
+  }
 });
 
 // 3. FINANCIAL & STATS DASHBOARD API

@@ -8,6 +8,7 @@ import { Order, Language } from '../types';
 import { dbGetOrders, dbUpdateOrder } from '../lib/supabase';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { toast } from '../utils/toast';
+import { usePolledOrders } from '../hooks/usePolledOrders';
 import { 
   Database, 
   Lock, 
@@ -42,9 +43,11 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Orders and loading states
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Orders and loading states with polled hook
+  const { data: orders, isLoading, error: polledError, refetchNow: refetchOrders, setData: setOrders } = usePolledOrders<Order>('/api/orders', {
+    intervalMs: 3000,
+    enabled: !!currentWorker
+  });
   const [fetchError, setFetchError] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
@@ -56,34 +59,22 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
   // Auto-refresh countdown indicator
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
-  // Function to load orders
+  // Function to manually reload orders
   const loadOrdersData = async (silent = false) => {
-    if (!silent) setIsLoading(true);
     setFetchError('');
     try {
-      const data = await dbGetOrders();
-      setOrders(data);
+      await refetchOrders();
       setLastRefreshed(new Date());
     } catch (err) {
       console.error(err);
       setFetchError(currentLang === 'id' ? 'Gagal memuat data order.' : 'Failed to load order data.');
-    } finally {
-      if (!silent) setIsLoading(false);
     }
   };
 
-  // Initial fetch and setup periodic polling (every 5 seconds)
+  // Initial fetch on login
   useEffect(() => {
     if (currentWorker) {
       loadOrdersData();
-
-      const interval = setInterval(() => {
-        if (!document.hidden) {
-          loadOrdersData(true); // silent refresh
-        }
-      }, 30000);
-
-      return () => clearInterval(interval);
     }
   }, [currentWorker]);
 

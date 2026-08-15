@@ -6,15 +6,22 @@
 export interface SheetsSyncConfig {
   enabled: boolean;
   webhookUrl: string;
+  sharedSecret?: string;
 }
 
 const STORAGE_KEY = 'gmsolution_sheets_sync_config';
+export const DEFAULT_SHARED_SECRET = 'gmsolution_secret_2026';
 
 export function getSheetsSyncConfig(): SheetsSyncConfig {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      return {
+        enabled: !!parsed.enabled,
+        webhookUrl: parsed.webhookUrl || '',
+        sharedSecret: parsed.sharedSecret || DEFAULT_SHARED_SECRET,
+      };
     }
   } catch (err) {
     console.error('Error reading sheets sync config:', err);
@@ -22,6 +29,7 @@ export function getSheetsSyncConfig(): SheetsSyncConfig {
   return {
     enabled: false,
     webhookUrl: '',
+    sharedSecret: DEFAULT_SHARED_SECRET,
   };
 }
 
@@ -31,6 +39,107 @@ export function saveSheetsSyncConfig(config: SheetsSyncConfig): void {
   } catch (err) {
     console.error('Error saving sheets sync config:', err);
   }
+}
+
+/**
+ * Formats a transaction item into a flattened object with multiple alias keys
+ * so that Google Apps Script column headers (in English or Indonesian) will match automatically.
+ */
+function buildRowObject(type: 'order' | 'shopee_order' | 'maps_review', payload: any): Record<string, any> {
+  const now = new Date().toISOString();
+  const rawCreatedAt = payload.created_at || now;
+  const formattedDate = rawCreatedAt.substring(0, 19).replace('T', ' ');
+
+  const reviewerStr = Array.isArray(payload.reviewer_accounts)
+    ? payload.reviewer_accounts.map((r: any) => r.name || String(r)).join(', ')
+    : (payload.reviewer_accounts_str || payload.reviewer_accounts || '');
+
+  const base: Record<string, any> = {
+    id: payload.id || '',
+    row_id: payload.id || '',
+    'ID Pesanan': payload.id || '',
+    'ID Target': payload.id || '',
+    created_at: formattedDate,
+    'Tanggal': formattedDate,
+    updated_at: now,
+    'Terakhir Diubah': now,
+  };
+
+  if (type === 'order') {
+    return {
+      ...base,
+      buyer_name: payload.buyer_name || '',
+      'Nama Pembeli': payload.buyer_name || '',
+      phone_number: payload.phone_number || payload.whatsapp_number || '',
+      whatsapp_number: payload.phone_number || payload.whatsapp_number || '',
+      'No. WhatsApp': payload.phone_number || payload.whatsapp_number || '',
+      product_name: payload.product_name || '',
+      'Nama Produk/Layanan': payload.product_name || '',
+      target_link: payload.target_link || '',
+      'Link Target': payload.target_link || '',
+      target_spam_phone: payload.target_spam_phone || '',
+      'Target Spam': payload.target_spam_phone || '',
+      total_price: Number(payload.total_price || payload.price || 0),
+      price: Number(payload.total_price || payload.price || 0),
+      'Total Harga (Rp)': Number(payload.total_price || payload.price || 0),
+      payment_status: payload.payment_status || payload.status || 'PENDING',
+      payment_method: payload.payment_method || 'QRIS',
+      'Metode Pembayaran': payload.payment_method || 'QRIS',
+      status: payload.payment_status || payload.status || 'PENDING',
+      'Status Pembayaran': payload.payment_status || payload.status || 'PENDING',
+      notes: payload.notes || '',
+      'Catatan': payload.notes || '',
+      created_by: payload.created_by || '',
+    };
+  }
+
+  if (type === 'shopee_order') {
+    return {
+      ...base,
+      store_name: payload.store_name || '',
+      'Nama Toko': payload.store_name || '',
+      buyer_name: payload.buyer_name || '',
+      'Nama Pembeli': payload.buyer_name || '',
+      service_type: payload.service_type || '',
+      'Jenis Layanan': payload.service_type || '',
+      quantity: Number(payload.quantity || 1),
+      'Jumlah': Number(payload.quantity || 1),
+      target_link: payload.target_link || '',
+      'Link Produk': payload.target_link || '',
+      status: payload.status || payload.job_status || 'PENDING',
+      job_status: payload.status || payload.job_status || 'PENDING',
+      'Status Pengerjaan': payload.status || payload.job_status || 'PENDING',
+      worker_assigned: payload.worker_assigned || payload.worker_id || '',
+      'Petugas': payload.worker_assigned || payload.worker_id || '',
+      notes: payload.notes || '',
+      'Catatan': payload.notes || '',
+      created_by: payload.created_by || '',
+    };
+  }
+
+  // maps_review
+  return {
+    ...base,
+    client_name: payload.client_name || '',
+    'Nama Klien': payload.client_name || '',
+    store_name: payload.store_name || '',
+    'Nama Tempat': payload.store_name || '',
+    target_count: Number(payload.target_count || payload.quantity || 0),
+    'Target Review': Number(payload.target_count || payload.quantity || 0),
+    maps_link: payload.maps_link || payload.target_link || '',
+    'Link Maps/Review': payload.maps_link || payload.target_link || '',
+    review_type: payload.review_type || 'G_MAPS',
+    'Tipe Review': payload.review_type || 'G_MAPS',
+    status: payload.status || 'PENDING',
+    'Status': payload.status || 'PENDING',
+    reviewer_accounts_str: reviewerStr,
+    'Akun Reviewer': reviewerStr,
+    proof_link: payload.proof_link || '',
+    'Link Bukti': payload.proof_link || '',
+    notes: payload.notes || '',
+    'Catatan': payload.notes || '',
+    created_by: payload.created_by || '',
+  };
 }
 
 /**
@@ -53,33 +162,51 @@ export async function triggerSheetsSync(
   }
 
   try {
-    // We send payload to the Web App URL
-    const body = {
+    const rowId = String(payload.id || '');
+    const rowObj = buildRowObject(type, payload);
+    const secret = config.sharedSecret || DEFAULT_SHARED_SECRET;
+
+    // Map to standard sheet names
+    let sheetName = 'Web_Orders';
+    if (type === 'shopee_order') {
+      sheetName = 'Shopee_Orders';
+    } else if (type === 'maps_review') {
+      sheetName = 'Review_Orders';
+    }
+
+    // Prepare unified payload compatible with both append/update and legacy endpoints
+    const requestBody = {
+      // Modern Apps Script schema matching user's script
+      secret,
+      sheet: sheetName,
+      action: action === 'insert' ? 'append' : action, // 'append' | 'update' | 'delete'
+      row_id: rowId,
+      row: rowObj,
+      fields: rowObj,
+
+      // Universal / Legacy schema for maximum compatibility
       type,
-      action,
-      id: payload.id,
+      id: rowId,
       timestamp: new Date().toISOString(),
-      payload: {
-        ...payload,
-        // If it contains complex arrays like reviewer_accounts, serialize them to a clean string
-        reviewer_accounts_str: payload.reviewer_accounts
-          ? (payload.reviewer_accounts as any[]).map(r => r.name || String(r)).join(', ')
-          : '',
-      }
+      payload: rowObj,
+      event_type: action,
+      table_type: type,
+      data: rowObj,
     };
 
-    // Use sendBeacon or standard fetch without blocking the thread
-    // We use standard fetch with a timeout/catch to make sure it's robust
-    const response = await fetch(url, {
+    // Use standard fetch with timeout/catch without blocking the UI thread
+    fetch(url, {
       method: 'POST',
-      mode: 'no-cors', // Apps Script web app with redirect requires no-cors if not handling CORS preflight, or we can just send it
+      mode: 'no-cors', // Apps Script requires no-cors when called directly from browser
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestBody),
+    }).catch(err => {
+      console.warn('Sheets sync background fetch notice:', err);
     });
 
-    console.log(`📊 Google Sheets sync triggered: ${type} - ${action} - ID: ${payload.id}`);
+    console.log(`📊 Google Sheets sync dispatched: ${sheetName} [${action}] (ID: ${rowId})`);
     return true;
   } catch (error) {
     console.error('❌ Google Sheets sync failed:', error);
@@ -88,190 +215,265 @@ export async function triggerSheetsSync(
 }
 
 /**
- * Returns a beautifully formatted Google Apps Script code that the user can copy and paste
- * into their Apps Script editor to create the sync backend.
+ * Returns a complete, production-grade Google Apps Script template for two-way synchronization.
  */
-export function getGoogleAppsScriptTemplate(): string {
-  return `/**
- * Google Apps Script untuk Sinkronisasi Real-Time GM Agency
- * 
- * CARA INSTALASI:
- * 1. Buka Google Sheets Anda.
- * 2. Klik "Extensions" -> "Apps Script" (Ekstensi -> Apps Script).
- * 3. Hapus kode bawaan, lalu paste-kan semua kode di bawah ini.
- * 4. Ganti 'YOUR_SPREADSHEET_ID_HERE' dengan ID Spreadsheet Anda jika diperlukan,
- *    atau biarkan kosong agar Apps Script menggunakan Spreadsheet aktif saat ini.
- * 5. Klik tombol "Save" (Simpan).
- * 6. Klik tombol "Deploy" -> "New deployment" (Terapkan -> Penerapan baru).
- * 7. Pilih tipe "Web app" (Aplikasi web) dengan mengklik ikon gear.
- * 8. Ubah pengaturannya:
- *    - Execute as (Jalankan sebagai): "Me" (Saya / Email Anda)
- *    - Who has access (Siapa yang memiliki akses): "Anyone" (Siapa saja)
- * 9. Klik "Deploy" (Terapkan). Otorisasi izin jika diminta oleh Google.
- * 10. Copy "Web app URL" (URL Aplikasi web) yang dihasilkan, lalu paste ke pengaturan GM Agency.
- */
+export function getGoogleAppsScriptTemplate(backendUrl: string = '', secretKey: string = DEFAULT_SHARED_SECRET): string {
+  const effectiveBackendUrl = backendUrl || 'https://YOUR_APP_DOMAIN/api/sheets-webhook';
 
-var SPREADSHEET_ID = ""; // Opsional: Isikan ID Spreadsheet Anda jika dijalankan di luar sheet aktif
+  return `// ════════════════════════════════════════════════════════════════════════
+// GM AGENCY / GM SOLUTION - GOOGLE APPS SCRIPT SYNC REAL-TIME
+// ════════════════════════════════════════════════════════════════════════
+//
+// CARA PEMASANGAN CEPAT:
+// 1. Buka Google Spreadsheet Anda > Extensions (Ekstensi) > Apps Script.
+// 2. Hapus semua isi default, lalu PASTE SEMUA KODE DI BAWAH INI.
+// 3. Simpan (ikon disket 💾).
+// 4. Klik tombol "Deploy" (Terapkan) di pojok kanan atas > "New deployment" (Penerapan baru).
+//    - Pilih tipe: "Web app" (Aplikasi Web) dengan klik ikon gear ⚙️
+//    - Execute as: "Me" (Email Google Anda)
+//    - Who has access: "Anyone" (Siapa saja)  <-- WAJIB PILIH "ANYONE"
+//    - Klik "Deploy" lalu COPY "Web app URL" (akhiran /exec) dan paste ke Admin Panel.
+// 5. (Opsional - Sync 2 Arah saat sheet diedit langsung): Tambahkan Trigger Edit
+//    - Klik ikon Jam (Triggers) di menu kiri Apps Script > "Add Trigger".
+//    - Function: onEditInstallable | Event source: From spreadsheet | Event type: On edit.
+// ════════════════════════════════════════════════════════════════════════
+
+const SHEET_NAMES = ["Web_Orders", "Shopee_Orders", "Review_Orders"];
+const SHARED_SECRET = "${secretKey}";
+const BACKEND_WEBHOOK_URL = "${effectiveBackendUrl}";
+
+// Definisi Header Kolom Baku Otomatis
+const HEADERS_MAP = {
+  "Web_Orders": ["id", "created_at", "buyer_name", "phone_number", "product_name", "target_link", "target_spam_phone", "total_price", "payment_status", "payment_method", "notes", "created_by", "updated_at"],
+  "Shopee_Orders": ["id", "created_at", "store_name", "buyer_name", "service_type", "quantity", "target_link", "status", "worker_assigned", "notes", "created_by", "updated_at"],
+  "Review_Orders": ["id", "created_at", "client_name", "store_name", "target_count", "maps_link", "review_type", "status", "reviewer_accounts_str", "proof_link", "notes", "created_by", "updated_at"]
+};
+
+// ── ARAH 1: Web App -> Google Sheets ─────────────────────────────────────
+
+function doGet(e) {
+  try {
+    const params = (e && e.parameter) ? e.parameter : {};
+    if (params.secret) checkAuth_(params.secret);
+    
+    const sheetName = params.sheet || "Web_Orders";
+    const sheet = getOrCreateSheet_(sheetName);
+    const data = sheetToObjects_(sheet);
+
+    if (params.row_id || params.id) {
+      const searchId = String(params.row_id || params.id);
+      const row = data.find(function(r) { return String(r.id || r.row_id) === searchId; });
+      return jsonOutput_(row || null);
+    }
+    return jsonOutput_(data);
+  } catch (err) {
+    return jsonOutput_({ error: err.message });
+  }
+}
 
 function doPost(e) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000); // Tunggu max 10 detik jika antrian padat
   try {
-    var content = e.postData.contents;
-    var data = JSON.parse(content);
-    
-    var doc = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
-    
-    var type = data.type; // 'order' | 'shopee_order' | 'maps_review'
-    var action = data.action; // 'insert' | 'update' | 'delete'
-    var id = data.id;
-    var payload = data.payload;
-    
-    var sheetName = "";
-    if (type === 'order') {
-      sheetName = "Layanan Umum (General)";
-    } else if (type === 'shopee_order') {
-      sheetName = "Pesanan Shopee";
-    } else if (type === 'maps_review') {
-      sheetName = "Target Maps Reviews";
+    if (!e || !e.postData || !e.postData.contents) {
+      return jsonOutput_({ error: "Empty request body" });
     }
+
+    const body = JSON.parse(e.postData.contents);
     
-    var sheet = doc.getSheetByName(sheetName);
-    if (!sheet) {
-      sheet = doc.insertSheet(sheetName);
-      setupSheetHeaders(sheet, type);
+    // Validasi otentikasi secret jika dikirim
+    if (body.secret) {
+      checkAuth_(body.secret);
     }
-    
-    if (action === 'delete') {
-      deleteRowById(sheet, id);
-    } else {
-      upsertRow(sheet, type, id, payload);
+
+    // Resolusi nama sheet
+    let targetSheetName = body.sheet || body.table_type || body.type || "Web_Orders";
+    if (targetSheetName === "order" || targetSheetName === "orders" || targetSheetName === "Layanan Umum (General)") {
+      targetSheetName = "Web_Orders";
+    } else if (targetSheetName === "shopee_order" || targetSheetName === "shopee" || targetSheetName === "Pesanan Shopee") {
+      targetSheetName = "Shopee_Orders";
+    } else if (targetSheetName === "maps_review" || targetSheetName === "maps_reviews" || targetSheetName === "Target Maps Reviews") {
+      targetSheetName = "Review_Orders";
     }
-    
-    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
-                         .setMimeType(ContentService.MimeType.JSON);
+
+    const sheet = getOrCreateSheet_(targetSheetName);
+    const action = body.action || body.event_type || "append";
+    const rowData = body.row || body.payload || body.data || body.fields || {};
+    const rowId = body.row_id || body.id || (rowData ? rowData.id : "");
+
+    if (action === "append" || action === "insert") {
+      appendRow_(sheet, rowData, targetSheetName);
+      return jsonOutput_({ ok: true, action: "append", id: rowId });
+    }
+
+    if (action === "update") {
+      const result = updateFields_(sheet, rowId, body.fields || rowData, body.expected_updated_at);
+      return jsonOutput_(result);
+    }
+
+    if (action === "delete") {
+      deleteRow_(sheet, rowId);
+      return jsonOutput_({ ok: true, action: "delete", id: rowId });
+    }
+
+    return jsonOutput_({ error: "unknown action: " + action });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
-                         .setMimeType(ContentService.MimeType.JSON);
+    return jsonOutput_({ error: err.message, stale: err.message === "STALE_WRITE" });
+  } finally {
+    lock.releaseLock();
   }
 }
 
-function setupSheetHeaders(sheet, type) {
-  var headers = [];
-  if (type === 'order') {
-    headers = [
-      "ID Pesanan", "Tanggal", "Nama Pembeli", "No WhatsApp", 
-      "Nama Layanan", "Link Target", "Target No HP (Spam)", 
-      "Jumlah (Qty)", "Total Harga", "Status Pembayaran", "Catatan"
-    ];
-  } else if (type === 'shopee_order') {
-    headers = [
-      "ID Pesanan", "Tanggal", "Nama Toko", "Nama Pembeli", 
-      "Tipe Jasa", "Jumlah (Qty)", "Target Link", "Status Kerja", "Catatan"
-    ];
-  } else if (type === 'maps_review') {
-    headers = [
-      "ID Target", "Tanggal", "Nama Client", "Nama Toko", 
-      "Tipe Review", "Target Count", "Maps Link", "Status", 
-      "Reviewers", "Link Bukti", "Catatan"
-    ];
-  }
-  
-  sheet.appendRow(headers);
-  
-  // Format header row (bold & gray background)
-  var range = sheet.getRange(1, 1, 1, headers.length);
-  range.setFontWeight("bold");
-  range.setBackground("#f1f5f9");
-  range.setBorder(true, true, true, true, true, true);
-  sheet.setFrozenRows(1);
-}
+// ── ARAH 2: Google Sheets -> Web App (Live webhook saat sheet diedit) ───
 
-function deleteRowById(sheet, id) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return;
-  
-  var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  for (var i = 0; i < ids.length; i++) {
-    if (String(ids[i][0]) === String(id)) {
-      sheet.deleteRow(i + 2);
-      break;
-    }
-  }
-}
-
-function upsertRow(sheet, type, id, payload) {
-  var lastRow = sheet.getLastRow();
-  var rowIndex = -1;
-  
-  if (lastRow >= 2) {
-    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    for (var i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]) === String(id)) {
-        rowIndex = i + 2;
-        break;
-      }
-    }
-  }
-  
-  var rowValues = [];
-  if (type === 'order') {
-    rowValues = [
-      payload.id,
-      formatDate(payload.created_at),
-      payload.buyer_name || "",
-      payload.phone_number || "",
-      payload.product_name || "",
-      payload.target_link || "",
-      payload.target_spam_phone || "",
-      payload.quantity || 1,
-      payload.total_price || 0,
-      payload.payment_status || "PENDING",
-      payload.notes || ""
-    ];
-  } else if (type === 'shopee_order') {
-    rowValues = [
-      payload.id,
-      formatDate(payload.created_at),
-      payload.store_name || "",
-      payload.buyer_name || "",
-      payload.service_type || "",
-      payload.quantity || 1,
-      payload.target_link || "",
-      payload.job_status || "PENDING",
-      payload.notes || ""
-    ];
-  } else if (type === 'maps_review') {
-    rowValues = [
-      payload.id,
-      formatDate(payload.created_at),
-      payload.client_name || "",
-      payload.store_name || "",
-      payload.review_type || "G_MAPS",
-      payload.target_count || 0,
-      payload.maps_link || "",
-      payload.status || "PENDING",
-      payload.reviewer_accounts_str || "",
-      payload.proof_link || "",
-      payload.notes || ""
-    ];
-  }
-  
-  if (rowIndex > -1) {
-    // Update existing row
-    var range = sheet.getRange(rowIndex, 1, 1, rowValues.length);
-    range.setValues([rowValues]);
-  } else {
-    // Insert new row
-    sheet.appendRow(rowValues);
-  }
-}
-
-function formatDate(isoString) {
-  if (!isoString) return "";
+function onEditInstallable(e) {
   try {
-    var d = new Date(isoString);
-    return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-  } catch (e) {
-    return isoString;
+    if (!e || !e.range) return;
+    const sheet = e.range.getSheet();
+    const sheetName = sheet.getName();
+    if (SHEET_NAMES.indexOf(sheetName) === -1) return;
+    if (e.range.getRow() === 1) return; // Lewati baris header
+
+    const rowId = sheet.getRange(e.range.getRow(), 1).getValue();
+    if (!rowId) return;
+
+    const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const colIndex = e.range.getColumn() - 1;
+    const columnName = header[colIndex] || "";
+    if (!columnName) return;
+
+    UrlFetchApp.fetch(BACKEND_WEBHOOK_URL, {
+      method: "post",
+      contentType: "application/json",
+      headers: { "X-Webhook-Secret": SHARED_SECRET },
+      payload: JSON.stringify({
+        secret: SHARED_SECRET,
+        sheet: sheetName,
+        row_id: String(rowId),
+        column: columnName,
+        new_value: e.value !== undefined ? e.value : ""
+      }),
+      muteHttpExceptions: true
+    });
+  } catch (err) {
+    Logger.log("Webhook sync error: " + err);
+  }
+}
+
+// ── HELPERS & UTILITIES ──────────────────────────────────────────────────
+
+function checkAuth_(secret) {
+  if (secret && SHARED_SECRET && secret !== SHARED_SECRET) {
+    throw new Error("unauthorized: secret does not match");
+  }
+}
+
+function getOrCreateSheet_(name) {
+  const doc = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = doc.getSheetByName(name);
+  if (!sheet) {
+    sheet = doc.insertSheet(name);
+    const headers = HEADERS_MAP[name] || ["id", "created_at", "status", "notes", "updated_at"];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setBackground("#f1f5f9");
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function jsonOutput_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function sheetToObjects_(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return [];
+  
+  const values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const header = values[0];
+  const results = [];
+  
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (!row[0]) continue;
+    var obj = {};
+    for (var j = 0; j < header.length; j++) {
+      obj[header[j]] = row[j];
+    }
+    results.push(obj);
+  }
+  return results;
+}
+
+function findRowNumber_(sheet, rowId) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return -1;
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues().flat();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i]) === String(rowId)) {
+      return i + 2;
+    }
+  }
+  return -1;
+}
+
+function appendRow_(sheet, rowObj, sheetName) {
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  let header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  
+  // Jika baris pertama kosong, inisialisasi header
+  if (!header[0] || header[0] === "") {
+    header = HEADERS_MAP[sheetName] || Object.keys(rowObj);
+    sheet.getRange(1, 1, 1, header.length).setValues([header]).setFontWeight("bold").setBackground("#f1f5f9");
+    sheet.setFrozenRows(1);
+  }
+
+  const now = new Date().toISOString();
+  const values = header.map(function(h) {
+    if (h === "updated_at") return now;
+    if (rowObj[h] !== undefined && rowObj[h] !== null) return rowObj[h];
+    return "";
+  });
+
+  sheet.appendRow(values);
+}
+
+function updateFields_(sheet, rowId, fields, expectedUpdatedAt) {
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const rowNum = findRowNumber_(sheet, rowId);
+  
+  if (rowNum === -1) {
+    // Jika baris belum ada di spreadsheet, otomatis append
+    appendRow_(sheet, fields, sheet.getName());
+    return { ok: true, appended: true };
+  }
+
+  const uaCol = header.indexOf("updated_at") + 1;
+  if (expectedUpdatedAt && uaCol > 0) {
+    const current = sheet.getRange(rowNum, uaCol).getValue();
+    const currentStr = current instanceof Date ? current.toISOString() : String(current);
+    if (currentStr && currentStr !== expectedUpdatedAt) {
+      throw new Error("STALE_WRITE");
+    }
+  }
+
+  Object.keys(fields).forEach(function(key) {
+    const col = header.indexOf(key) + 1;
+    if (col > 0) {
+      sheet.getRange(rowNum, col).setValue(fields[key]);
+    }
+  });
+
+  const now = new Date().toISOString();
+  if (uaCol > 0) sheet.getRange(rowNum, uaCol).setValue(now);
+
+  return { ok: true, updated_at: now };
+}
+
+function deleteRow_(sheet, rowId) {
+  const rowNum = findRowNumber_(sheet, rowId);
+  if (rowNum > 1) {
+    sheet.deleteRow(rowNum);
   }
 }
 `;

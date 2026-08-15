@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
 import { Product, Order, Language, PaymentStatus, DashboardStats, ShopeeOrder, MapsReview } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
+import { usePolledOrders } from '../hooks/usePolledOrders';
 import { 
   dbGetProducts, dbCreateProduct, dbUpdateProduct, dbDeleteProduct,
   dbGetOrders, dbCreateOrder, dbUpdateOrder, dbDeleteOrder, dbGetDashboardStats,
@@ -259,9 +260,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
   // Component States
   const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [shopeeOrders, setShopeeOrders] = useState<ShopeeOrder[]>([]);
-  const [mapsReviews, setMapsReviews] = useState<MapsReview[]>([]);
+  const { data: orders, isLoading: isOrdersLoading, refetchNow: refetchOrders, setData: setOrders } = usePolledOrders<Order>('/api/orders', { intervalMs: 3000 });
+  const { data: shopeeOrders, isLoading: isShopeeLoading, refetchNow: refetchShopeeOrders, setData: setShopeeOrders } = usePolledOrders<ShopeeOrder>('/api/shopee_orders', { intervalMs: 3000 });
+  const { data: mapsReviews, isLoading: isMapsLoading, refetchNow: refetchMapsReviews, setData: setMapsReviews } = usePolledOrders<MapsReview>('/api/maps_reviews', { intervalMs: 3000 });
   const [stats, setStats] = useState<DashboardStats | null>(null);
   
   const [isLoading, setIsLoading] = useState(true);
@@ -572,9 +573,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       setIsOrderModalOpen(false);
       setEditingOrder(null);
       
-      // Reload order states
-      const ordsData = await dbGetOrders();
-      setOrders(ordsData);
+      // Reload order states immediately
+      await refetchOrders();
     } catch (err) {
       console.error(err);
       toast.error(currentLang === 'id' ? 'Gagal memperbarui pesanan' : 'Failed to update order');
@@ -629,9 +629,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       toast.success(currentLang === 'id' ? 'Pesanan Shopee berhasil diperbarui' : 'Shopee order updated successfully');
       setIsShopeeModalOpen(false);
       setEditingShopeeOrder(null);
-      // Reload lists
-      const data = await dbGetShopeeOrders();
-      setShopeeOrders(data);
+      // Reload lists immediately
+      await refetchShopeeOrders();
     } catch (err) {
       console.error(err);
       toast.error('Gagal memperbarui pesanan Shopee');
@@ -668,9 +667,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       toast.success(currentLang === 'id' ? 'Review Maps berhasil diperbarui' : 'Maps review updated successfully');
       setIsMapsModalOpen(false);
       setEditingMapsReview(null);
-      // Reload lists with forceRefresh
-      const data = await dbGetMapsReviews(10000, true);
-      setMapsReviews(data);
+      // Reload lists immediately
+      await refetchMapsReviews();
     } catch (err) {
       console.error(err);
       toast.error('Gagal memperbarui review Maps');
@@ -761,12 +759,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
           if (col.key === 'id') return item.id || '';
           if (col.key === 'created_at') return item.created_at ? item.created_at.substring(0, 16).replace('T', ' ') : '-';
           if (col.key === 'buyer_name') return item.buyer_name || '';
-          if (col.key === 'whatsapp_number') return item.whatsapp_number || '';
+          if (col.key === 'whatsapp_number') return (item as any).whatsapp_number || item.phone_number || '';
           if (col.key === 'product_name') return item.product_name || '';
           if (col.key === 'target_link') return item.target_link || '';
-          if (col.key === 'price') return String(item.price || 0);
-          if (col.key === 'payment_method') return item.payment_method || '';
-          if (col.key === 'status') return item.status || '';
+          if (col.key === 'price') return String((item as any).price || item.total_price || 0);
+          if (col.key === 'payment_method') return (item as any).payment_method || 'QRIS';
+          if (col.key === 'status') return (item as any).status || item.payment_status || '';
           if (col.key === 'notes') return item.notes || '';
           if (col.key === 'created_by') return getSlotIndicatorName(item.created_by || '');
           return '';
@@ -799,8 +797,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
           if (col.key === 'service_type') return item.service_type || '';
           if (col.key === 'quantity') return String(item.quantity || 1);
           if (col.key === 'target_link') return item.target_link || '';
-          if (col.key === 'job_status') return item.job_status || '';
-          if (col.key === 'worker_assigned') return item.worker_assigned ? getSlotIndicatorName(item.worker_assigned) : '-';
+          if (col.key === 'job_status') return (item as any).job_status || item.status || '';
+          if (col.key === 'worker_assigned') return (item as any).worker_assigned || item.worker_id ? getSlotIndicatorName((item as any).worker_assigned || item.worker_id) : '-';
           if (col.key === 'notes') return item.notes || '';
           if (col.key === 'created_by') return getSlotIndicatorName(item.created_by || '');
           return '';
@@ -874,14 +872,11 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       const prodsData = await dbGetProducts();
       setProducts(prodsData);
 
-      const ordsData = await dbGetOrders();
-      setOrders(ordsData);
-
-      const shopeeData = await dbGetShopeeOrders();
-      setShopeeOrders(shopeeData);
-
-      const mapsData = await dbGetMapsReviews();
-      setMapsReviews(mapsData);
+      await Promise.all([
+        refetchOrders(),
+        refetchShopeeOrders(),
+        refetchMapsReviews()
+      ]);
 
       const statsData = await dbGetDashboardStats();
       setStats(statsData);
@@ -895,76 +890,6 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
   useEffect(() => {
     loadDashboardData();
-    const interval = setInterval(() => {
-      if (document.hidden) return;
-      const now = Date.now();
-
-      // Clean old lock entries older than 60s
-      recentLocalStatusUpdates.current.forEach((val, key) => {
-        if (now - val.timestamp > 60000) {
-          recentLocalStatusUpdates.current.delete(key);
-        }
-      });
-
-      dbGetProducts(10000, true).then(prodsData => setProducts(prodsData)).catch(err => console.error(err));
-
-      dbGetOrders(10000, true).then(ordsData => {
-        setOrders(prev => {
-          if (!prev || prev.length === 0) return ordsData;
-          return ordsData.map(newItem => {
-            const lock = recentLocalStatusUpdates.current.get(newItem.id);
-            if (lock && (now - lock.timestamp < 60000)) {
-              return { ...newItem, payment_status: lock.status as PaymentStatus };
-            }
-            return newItem;
-          });
-        });
-      }).catch(err => console.error(err));
-
-      dbGetShopeeOrders(10000, true).then(shopeeData => {
-        setShopeeOrders(prev => {
-          if (!prev || prev.length === 0) return shopeeData;
-          return shopeeData.map(newItem => {
-            const lock = recentLocalStatusUpdates.current.get(newItem.id);
-            if (lock && (now - lock.timestamp < 60000)) {
-              return { ...newItem, status: lock.status as any };
-            }
-            return newItem;
-          });
-        });
-      }).catch(err => console.error(err));
-
-      dbGetMapsReviews(10000, true).then(mapsData => {
-        setMapsReviews(prev => {
-          if (!prev || prev.length === 0) return mapsData;
-          return mapsData.map(newItem => {
-            const existing = prev.find(p => p.id === newItem.id);
-            const lock = recentLocalStatusUpdates.current.get(newItem.id);
-            let finalStatus = newItem.status;
-            if (lock && (now - lock.timestamp < 60000)) {
-              finalStatus = lock.status as any;
-            }
-            if (existing) {
-              const existingAccounts = existing.reviewer_accounts || [];
-              const newAccounts = newItem.reviewer_accounts || [];
-              const mergedAccounts = existingAccounts.length > newAccounts.length ? existingAccounts : newAccounts;
-              return {
-                ...newItem,
-                status: finalStatus,
-                reviewer_accounts: mergedAccounts
-              };
-            }
-            return {
-              ...newItem,
-              status: finalStatus
-            };
-          });
-        });
-      }).catch(err => console.error(err));
-
-      dbGetDashboardStats().then(statsData => setStats(statsData)).catch(err => console.error(err));
-    }, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -1684,11 +1609,11 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
             {(() => {
               // Calculate realtime operational stats (Web + Shopee)
               const onProgressCount = 
-                orders.filter(o => o.status !== 'DONE').length +
+                orders.filter(o => o.worker_status !== 'done').length +
                 shopeeOrders.filter(s => s.status !== 'DONE').length;
 
               const completedCount = 
-                orders.filter(o => o.status === 'DONE').length +
+                orders.filter(o => o.worker_status === 'done').length +
                 shopeeOrders.filter(s => s.status === 'DONE').length;
 
               const totalOpOrders = orders.length + shopeeOrders.length;
@@ -3052,7 +2977,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                               <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                                 review.review_type === 'G_MAPS'
                                   ? 'bg-red-50 text-red-700 border border-red-100'
-                                  : review.review_type === 'TRIPADVISOR' || review.review_type === 'REVIEW_TRIPAD'
+                                  : review.review_type === 'TRIPAD'
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                                   : 'bg-violet-50 text-violet-700 border border-violet-100'
                               }`}>
@@ -4057,6 +3982,42 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                             </p>
                           </div>
 
+                          {/* Shared Secret input */}
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                              <span>Kunci Rahasia (Shared Secret)</span>
+                              <span className="text-[9px] text-emerald-600 font-bold lowercase">samakan dengan di Apps Script</span>
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="gmsolution_secret_2026"
+                              value={sheetsSyncConfig.sharedSecret || ''}
+                              onChange={(e) => setSheetsSyncConfigState(prev => ({ ...prev, sharedSecret: e.target.value }))}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 font-sans"
+                            />
+                          </div>
+
+                          {/* Backend Webhook URL Display */}
+                          <div className="space-y-1 bg-white p-3 rounded-xl border border-slate-100">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">URL Webhook Aplikasi (Arah 2)</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const webhookUrl = `${window.location.origin}/api/sheets-webhook`;
+                                  navigator.clipboard.writeText(webhookUrl);
+                                  toast.success('URL Webhook berhasil disalin!');
+                                }}
+                                className="text-[9px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Copy className="h-3 w-3" /> Salin URL
+                              </button>
+                            </div>
+                            <div className="text-[10px] font-mono text-slate-600 bg-slate-50 p-1.5 rounded border border-slate-200 break-all select-all">
+                              {typeof window !== 'undefined' ? `${window.location.origin}/api/sheets-webhook` : '/api/sheets-webhook'}
+                            </div>
+                          </div>
+
                           {/* Action buttons */}
                           <div className="flex gap-2.5 pt-2">
                             <button
@@ -4086,17 +4047,31 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                     product_name: 'Layanan Tes Google Sheets Sync',
                                     quantity: 1,
                                     total_price: 150000,
+                                    price: 150000,
                                     payment_status: 'PAID',
+                                    status: 'PAID',
                                     created_at: new Date().toISOString(),
                                     notes: 'Tes koneksi real-time spreadsheet'
                                   };
                                   
-                                  // Call API logic directly
+                                  const currentSecret = sheetsSyncConfig.sharedSecret || 'gmsolution_secret_2026';
+
+                                  // Call API logic directly with both modern and fallback payloads
                                   await fetch(sheetsSyncConfig.webhookUrl, {
                                     method: 'POST',
                                     mode: 'no-cors',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
+                                      secret: currentSecret,
+                                      sheet: 'Web_Orders',
+                                      action: 'append',
+                                      row_id: testPayload.id,
+                                      row: testPayload,
+                                      fields: testPayload,
+                                      type: 'order',
+                                      id: testPayload.id,
+                                      timestamp: new Date().toISOString(),
+                                      payload: testPayload,
                                       event_type: 'insert',
                                       table_type: 'order',
                                       data: testPayload
@@ -4129,7 +4104,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                               1
                             </span>
                             <p className="leading-relaxed">
-                              Buat sebuah <strong>Google Spreadsheet</strong> baru untuk menyimpan data pesanan Anda.
+                              Buka <strong>Google Spreadsheet</strong> Anda lalu masuk ke <strong>Ekstensi &gt; Apps Script</strong>.
                             </p>
                           </div>
                           <div className="flex gap-2.5 items-start">
@@ -4137,7 +4112,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                               2
                             </span>
                             <p className="leading-relaxed">
-                              Buka menu <strong>Ekstensi &gt; Apps Script</strong> dari dalam Spreadsheet Anda.
+                              Hapus semua kode bawaan lalu <strong>salin dan tempel</strong> kode Apps Script di bawah ini.
                             </p>
                           </div>
                           <div className="flex gap-2.5 items-start">
@@ -4145,7 +4120,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                               3
                             </span>
                             <p className="leading-relaxed">
-                              Hapus semua kode bawaan lalu <strong>salin dan tempel</strong> kode template di bawah ini.
+                              Klik tombol <strong>Deploy &gt; New deployment</strong>, pilih jenis <strong>Web app</strong>, atur akses <strong>"Anyone" (Siapa saja)</strong> memiliki izin, lalu salin URL yang diberikan ke kolom sebelah kiri.
                             </p>
                           </div>
                           <div className="flex gap-2.5 items-start">
@@ -4153,7 +4128,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                               4
                             </span>
                             <p className="leading-relaxed">
-                              Klik tombol <strong>Terapkan &gt; Penerapan Baru</strong>, pilih jenis <strong>Aplikasi Web</strong>, atur akses "Siapa saja (Anyone)" memiliki izin, lalu salin URL yang diberikan ke kolom sebelah kiri.
+                              (Opsional) Buat Trigger <strong>onEditInstallable</strong> di Apps Script jika ingin editan langsung di Sheets otomatis mengupdate sistem website.
                             </p>
                           </div>
                         </div>
@@ -4164,7 +4139,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                             <button
                               type="button"
                               onClick={() => {
-                                navigator.clipboard.writeText(getGoogleAppsScriptTemplate());
+                                const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/sheets-webhook` : '';
+                                const secret = sheetsSyncConfig.sharedSecret || 'gmsolution_secret_2026';
+                                navigator.clipboard.writeText(getGoogleAppsScriptTemplate(webhookUrl, secret));
                                 setCopiedTemplate(true);
                                 toast.success('Kode Apps Script berhasil disalin!');
                                 setTimeout(() => setCopiedTemplate(false), 2000);
@@ -4176,7 +4153,10 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                             </button>
                           </div>
                           <pre className="text-[10px] font-mono text-slate-300 bg-slate-900 p-4 rounded-xl max-h-[160px] overflow-y-auto border border-slate-800">
-                            {getGoogleAppsScriptTemplate()}
+                            {getGoogleAppsScriptTemplate(
+                              typeof window !== 'undefined' ? `${window.location.origin}/api/sheets-webhook` : '',
+                              sheetsSyncConfig.sharedSecret || 'gmsolution_secret_2026'
+                            )}
                           </pre>
                         </div>
                       </div>

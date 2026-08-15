@@ -35,6 +35,10 @@ export interface Order {
   worker_status?: 'unassigned' | 'taken' | 'done';
   worker_proof_url?: string;
   created_by?: string;
+  whatsapp_number?: string;
+  price?: number;
+  payment_method?: string;
+  status?: string;
 }
 
 export interface DashboardStats {
@@ -63,6 +67,8 @@ export interface ShopeeOrder {
   created_at: string;
   status?: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE';
   created_by?: string;
+  job_status?: string;
+  worker_assigned?: string;
 }
 
 export interface MapsReview {
@@ -76,7 +82,7 @@ export interface MapsReview {
   created_at: string;
   store_name?: string;
   notes?: string;
-  review_type?: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS';
+  review_type?: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' | string;
   created_by?: string;
 }
 
