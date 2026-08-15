@@ -13,7 +13,7 @@ export interface SheetsSyncConfig {
 
 const STORAGE_KEY = 'gmsolution_sheets_sync_config';
 export const DEFAULT_SHARED_SECRET = 'gmsolution_secret_2026';
-export const EMBEDDED_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec';
+export const EMBEDDED_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbymL56u8hvknGlaNK5rJx_u8a2P01hKwdRhSDcI4gwM0Go0DTC24W2d0ggtFgkSbxXtPg/exec';
 
 export function getSheetsSyncConfig(): SheetsSyncConfig {
   try {
@@ -369,75 +369,96 @@ async function pullDirectFromGoogleAppsScript(
   }
 
   const sheetsToFetch = [
-    { key: 'Web_Orders', aliases: ['Web_Orders', 'WEB_ORDERS', 'SHOPEE_ORDERS', 'web_orders', 'Orders', 'orders'] },
-    { key: 'Shopee_Orders', aliases: ['Shopee_Orders', 'SHOPEE_ORDERS', 'shopee_orders', 'Shopee', 'shopee'] },
-    { key: 'Review_Orders', aliases: ['Review_Orders', 'REVIEW_ORDERS', 'review_orders', 'Reviews', 'Maps_Reviews', 'maps_reviews'] }
+    { key: 'Web_Orders', aliases: ['Web_Orders', 'WEB_ORDERS', 'SHOPEE_ORDERS', 'Orders'] },
+    { key: 'Shopee_Orders', aliases: ['Shopee_Orders', 'SHOPEE_ORDERS', 'shopee_orders', 'Shopee'] },
+    { key: 'Review_Orders', aliases: ['Review_Orders', 'REVIEW_ORDERS', 'review_orders', 'Reviews', 'Maps_Reviews'] }
   ];
 
   const results: Record<string, number> = { Web_Orders: 0, Shopee_Orders: 0, Review_Orders: 0 };
   const errors: string[] = [];
 
-  for (const sheetConf of sheetsToFetch) {
-    let rawRows: any[] = [];
+  // Step 1: Try batch fetching all sheets in a single zero-CORS JSONP request
+  let batchDataSuccess = false;
+  try {
+    const allSheetsData = await fetchGoogleScriptJsonp(targetUrl, {
+      action: 'getAll',
+      secret: secret
+    }, 6000);
 
-    for (const alias of sheetConf.aliases) {
-      // 1. Try JSONP with callback (Zero CORS issues in all browsers)
-      try {
-        const jsonpData = await fetchGoogleScriptJsonp(targetUrl, {
-          action: 'getRows',
-          sheet: alias,
-          secret: secret
-        }, 4000);
+    if (allSheetsData && typeof allSheetsData === 'object') {
+      for (const sheetConf of sheetsToFetch) {
+        const rawList = allSheetsData[sheetConf.key] || allSheetsData[sheetConf.key.toLowerCase()] || [];
+        if (Array.isArray(rawList) && rawList.length > 0) {
+          const normalizedRows = rawList
+            .filter((r: any) => r && (r.id || r.row_id || r['ID Pesanan'] || r['ID Target'] || r['Nama Pembeli'] || r.buyer_name || r.client_name || r.store_name || r.PEMBELI || r.STORE || r.KLIEN))
+            .map((r: any) => normalizeClientSheetRow(sheetConf.key, r));
 
-        const rows = Array.isArray(jsonpData) ? jsonpData : (jsonpData?.data || jsonpData?.rows || []);
-        if (Array.isArray(rows) && rows.length > 0) {
-          rawRows = rows;
-          break;
-        }
-      } catch {
-        // Try direct fetch fallback
-      }
+          results[sheetConf.key] = normalizedRows.length;
+          batchDataSuccess = true;
 
-      // 2. Direct fetch fallback
-      if (rawRows.length === 0) {
-        try {
-          const directUrl = `${targetUrl}?action=getRows&sheet=${encodeURIComponent(alias)}&secret=${encodeURIComponent(secret)}`;
-          const directRes = await fetch(directUrl);
-          if (directRes.ok) {
-            const data = await directRes.json();
-            const rows = Array.isArray(data) ? data : (data?.data || data?.rows || []);
-            if (Array.isArray(rows) && rows.length > 0) {
-              rawRows = rows;
-              break;
+          if (isSupabaseConfigured && supabase && normalizedRows.length > 0) {
+            try {
+              const tableName = sheetConf.key === 'Web_Orders' ? 'orders' : (sheetConf.key === 'Shopee_Orders' ? 'shopee_orders' : 'maps_reviews');
+              for (let i = 0; i < normalizedRows.length; i += 100) {
+                const chunk = normalizedRows.slice(i, i + 100);
+                await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+              }
+            } catch (supErr: any) {
+              console.warn(`Supabase upsert error for ${sheetConf.key}:`, supErr?.message);
             }
           }
-        } catch {
-          // Ignore
         }
       }
     }
+  } catch {
+    // Fall back to tab-by-tab JSONP
+  }
 
-    if (Array.isArray(rawRows) && rawRows.length > 0) {
-      const normalizedRows = rawRows
-        .filter((r: any) => r && (r.id || r.row_id || r['ID Pesanan'] || r['ID Target'] || r['Nama Pembeli'] || r.buyer_name || r.client_name || r.store_name || r.PEMBELI || r.STORE || r.KLIEN))
-        .map((r: any) => normalizeClientSheetRow(sheetConf.key, r));
+  // Step 2: Tab-by-tab JSONP if batch didn't return any data
+  if (!batchDataSuccess) {
+    for (const sheetConf of sheetsToFetch) {
+      let rawRows: any[] = [];
 
-      results[sheetConf.key] = normalizedRows.length;
-
-      // Upsert directly to Supabase if connected
-      if (isSupabaseConfigured && supabase && normalizedRows.length > 0) {
+      for (const alias of sheetConf.aliases) {
         try {
-          const tableName = sheetConf.key === 'Web_Orders' ? 'orders' : (sheetConf.key === 'Shopee_Orders' ? 'shopee_orders' : 'maps_reviews');
-          for (let i = 0; i < normalizedRows.length; i += 100) {
-            const chunk = normalizedRows.slice(i, i + 100);
-            await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+          const jsonpData = await fetchGoogleScriptJsonp(targetUrl, {
+            action: 'getRows',
+            sheet: alias,
+            secret: secret
+          }, 4500);
+
+          const rows = Array.isArray(jsonpData) ? jsonpData : (jsonpData?.data || jsonpData?.rows || []);
+          if (Array.isArray(rows) && rows.length > 0) {
+            rawRows = rows;
+            break;
           }
-        } catch (supErr: any) {
-          console.warn(`Supabase upsert error for ${sheetConf.key}:`, supErr?.message);
+        } catch {
+          // Continue to next alias
         }
       }
-    } else {
-      errors.push(`Tab ${sheetConf.key} tidak memiliki baris data`);
+
+      if (Array.isArray(rawRows) && rawRows.length > 0) {
+        const normalizedRows = rawRows
+          .filter((r: any) => r && (r.id || r.row_id || r['ID Pesanan'] || r['ID Target'] || r['Nama Pembeli'] || r.buyer_name || r.client_name || r.store_name || r.PEMBELI || r.STORE || r.KLIEN))
+          .map((r: any) => normalizeClientSheetRow(sheetConf.key, r));
+
+        results[sheetConf.key] = normalizedRows.length;
+
+        // Upsert directly to Supabase if connected
+        if (isSupabaseConfigured && supabase && normalizedRows.length > 0) {
+          try {
+            const tableName = sheetConf.key === 'Web_Orders' ? 'orders' : (sheetConf.key === 'Shopee_Orders' ? 'shopee_orders' : 'maps_reviews');
+            for (let i = 0; i < normalizedRows.length; i += 100) {
+              const chunk = normalizedRows.slice(i, i + 100);
+              await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+            }
+          } catch (supErr: any) {
+            console.warn(`Supabase upsert error for ${sheetConf.key}:`, supErr?.message);
+          }
+        }
+      } else {
+        errors.push(`Tab ${sheetConf.key} tidak memiliki baris data`);
+      }
     }
   }
 
@@ -732,12 +753,20 @@ const HEADERS_MAP = {
 function doGet(e) {
   try {
     const params = (e && e.parameter) ? e.parameter : {};
-    if (params.secret) checkAuth_(params.secret);
+    const callback = params.callback || params.prefix;
+
+    if (params.action === "getAll" || params.action === "getAllSheets") {
+      const allData = {
+        Web_Orders: sheetToObjects_(getOrCreateSheet_("Web_Orders")),
+        Shopee_Orders: sheetToObjects_(getOrCreateSheet_("Shopee_Orders")),
+        Review_Orders: sheetToObjects_(getOrCreateSheet_("Review_Orders"))
+      };
+      return jsonOutput_(allData, callback);
+    }
     
     const sheetName = params.sheet || "Web_Orders";
     const sheet = getOrCreateSheet_(sheetName);
     const data = sheetToObjects_(sheet);
-    const callback = params.callback || params.prefix;
 
     if (params.row_id || params.id) {
       const searchId = String(params.row_id || params.id);

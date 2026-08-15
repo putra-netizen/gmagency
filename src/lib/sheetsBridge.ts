@@ -30,7 +30,7 @@ export function readLocalDatabase(): any {
       if (!parsed.sheets_sync_config || !parsed.sheets_sync_config.webhookUrl) {
         parsed.sheets_sync_config = {
           enabled: true,
-          webhookUrl: 'https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec',
+          webhookUrl: 'https://script.google.com/macros/s/AKfycbymL56u8hvknGlaNK5rJx_u8a2P01hKwdRhSDcI4gwM0Go0DTC24W2d0ggtFgkSbxXtPg/exec',
           sharedSecret: 'gmsolution_secret_2026'
         };
       }
@@ -46,7 +46,7 @@ export function readLocalDatabase(): any {
     maps_reviews: [],
     sheets_sync_config: {
       enabled: true,
-      webhookUrl: 'https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec',
+      webhookUrl: 'https://script.google.com/macros/s/AKfycbymL56u8hvknGlaNK5rJx_u8a2P01hKwdRhSDcI4gwM0Go0DTC24W2d0ggtFgkSbxXtPg/exec',
       sharedSecret: 'gmsolution_secret_2026'
     }
   };

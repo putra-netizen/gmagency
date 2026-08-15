@@ -1090,7 +1090,7 @@ app.post('/api/sheets-webhook', async (req, res) => {
   }
 });
 
-const EMBEDDED_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwlNLUP-fwJa6IdJubBRDPJ7aSfqB23DM7D6amOxXDef69dk3n78sF-4ZR1yE9MQ3XHag/exec';
+const EMBEDDED_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbymL56u8hvknGlaNK5rJx_u8a2P01hKwdRhSDcI4gwM0Go0DTC24W2d0ggtFgkSbxXtPg/exec';
 
 // GET SHEETS SYNC CONFIG
 app.get('/api/sheets-config', (req, res) => {
