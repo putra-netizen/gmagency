@@ -286,10 +286,13 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   const [copiedTemplate, setCopiedTemplate] = useState(false);
   const [isPullingSheets, setIsPullingSheets] = useState(false);
 
-  // Hydrate sheets config from backend on mount
+  // Hydrate sheets config from backend on mount safely
   useEffect(() => {
     fetch('/api/sheets-config')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) return null;
+        return r.json();
+      })
       .then(cfg => {
         if (cfg && cfg.webhookUrl) {
           setSheetsSyncConfigState(prev => ({
@@ -4101,8 +4104,13 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                               <button
                                 type="button"
                                 onClick={async () => {
-                                  if (!sheetsSyncConfig.webhookUrl) {
+                                  const url = (sheetsSyncConfig.webhookUrl || '').trim();
+                                  if (!url) {
                                     toast.error('Harap masukkan URL Web App terlebih dahulu!');
+                                    return;
+                                  }
+                                  if (url.includes('/edit') || url.includes('/u/')) {
+                                    toast.error('URL yang dimasukkan adalah link editor skrip. Pastikan Anda menyalin URL Web App hasil Deploy yang berakhiran /exec.');
                                     return;
                                   }
                                   toast.info('Mengirim data uji sinkronisasi...');
@@ -4122,7 +4130,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                     
                                     const currentSecret = sheetsSyncConfig.sharedSecret || 'gmsolution_secret_2026';
 
-                                    await fetch(sheetsSyncConfig.webhookUrl, {
+                                    await fetch(url, {
                                       method: 'POST',
                                       mode: 'no-cors',
                                       headers: { 'Content-Type': 'application/json' },
@@ -4143,9 +4151,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                       })
                                     });
                                     toast.success('Tes sinkronisasi berhasil dikirim! Silakan periksa spreadsheet Anda.');
-                                  } catch (err) {
+                                  } catch (err: any) {
                                     console.error('Test sync error:', err);
-                                    toast.error('Gagal mengirim tes sinkronisasi. Periksa koneksi Anda.');
+                                    toast.error('Gagal mengirim tes sinkronisasi: ' + (err?.message || 'Periksa URL Web App Google Apps Script'));
                                   }
                                 }}
                                 className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer"

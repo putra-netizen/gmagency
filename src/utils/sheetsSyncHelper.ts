@@ -3,6 +3,8 @@
  * Uses Google Apps Script Web App URL to sync transactions in real-time.
  */
 
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
 export interface SheetsSyncConfig {
   enabled: boolean;
   webhookUrl: string;
@@ -36,15 +38,258 @@ export function getSheetsSyncConfig(): SheetsSyncConfig {
 export async function saveSheetsSyncConfig(config: SheetsSyncConfig): Promise<void> {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-    // Persist to backend server so backend endpoints can also sync with sheets
-    fetch('/api/sheets-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config)
-    }).catch(err => console.warn('Backend sheets config sync notice:', err));
+    // Persist to backend server if available (catch any 405/404 silently on static hosting)
+    try {
+      await fetch('/api/sheets-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+    } catch {
+      // Ignore backend errors in static frontend mode
+    }
   } catch (err) {
     console.error('Error saving sheets sync config:', err);
   }
+}
+
+/**
+ * Normalizes raw sheet row into standard application format client-side.
+ */
+export function normalizeClientSheetRow(sheetName: string, raw: Record<string, any>): Record<string, any> {
+  const lower = (sheetName || '').toLowerCase().trim();
+  let norm: 'Web_Orders' | 'Shopee_Orders' | 'Review_Orders' = 'Web_Orders';
+  if (lower.includes('shopee') || lower === 'shopee_orders' || lower === 'pesanan shopee') {
+    norm = 'Shopee_Orders';
+  } else if (lower.includes('review') || lower.includes('map') || lower === 'review_orders' || lower === 'target maps reviews') {
+    norm = 'Review_Orders';
+  }
+
+  const now = new Date().toISOString();
+
+  const val = (...keys: string[]) => {
+    for (const k of keys) {
+      if (raw[k] !== undefined && raw[k] !== null && String(raw[k]).trim() !== '') {
+        return raw[k];
+      }
+      const lowerK = k.toLowerCase();
+      for (const rawKey of Object.keys(raw)) {
+        if (rawKey.toLowerCase() === lowerK && raw[rawKey] !== undefined && raw[rawKey] !== null && String(raw[rawKey]).trim() !== '') {
+          return raw[rawKey];
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const id = String(val('row_id', 'id', 'ID', 'ID Pesanan', 'ID Target', 'ID Order') || ('imp-' + Math.random().toString(36).substring(2, 8)));
+  const createdAt = String(val('created_at', 'TANGGAL', 'Tanggal', 'Date', 'Waktu', 'Timestamp') || now);
+  const updatedAt = String(val('updated_at', 'Terakhir Diubah', 'Updated') || now);
+  const createdBy = String(val('created_by', 'Created By', 'Dibuat Oleh') || 'Google Spreadsheet');
+
+  if (norm === 'Web_Orders') {
+    const rawPrice = val('total_price', 'price', 'TOTAL HARGA', 'Total Harga (Rp)', 'Total Harga', 'Total', 'Harga');
+    const totalPrice = Number(rawPrice) || 0;
+    const paymentStatus = String(val('payment_status', 'STATUS PEMBAYARAN', 'Status Pembayaran', 'STATUS', 'Status', 'status') || 'PENDING').toUpperCase();
+    const notes = String(val('notes', 'CATATAN', 'Catatan', 'Note', 'Keterangan') || '');
+
+    return {
+      id,
+      row_id: id,
+      product_id: String(val('product_id', 'ID Produk') || ''),
+      product_name: String(val('product_name', 'PRODUK', 'Nama Produk/Layanan', 'Nama Produk', 'Layanan', 'Product') || 'Layanan Web'),
+      buyer_name: String(val('buyer_name', 'PEMBELI', 'Nama Pembeli', 'Pembeli', 'Name', 'Customer') || 'Pelanggan'),
+      phone_number: String(val('phone_number', 'whatsapp_number', 'NO WA', 'No. WhatsApp', 'No WA', 'Nomor WhatsApp', 'Phone') || ''),
+      target_link: String(val('target_link', 'TARGET', 'Link Target', 'Target Link', 'Link') || ''),
+      target_spam_phone: String(val('target_spam_phone', 'TARGET SPAM', 'Target Spam', 'Nomor Target Spam') || ''),
+      quantity: Number(val('quantity', 'SLOT', 'Jumlah', 'Qty')) || 1,
+      total_price: totalPrice,
+      payment_status: paymentStatus,
+      payment_method: String(val('payment_method', 'METODE PEMBAYARAN', 'Metode Pembayaran', 'Payment Method') || 'QRIS'),
+      worker_status: String(val('worker_status', 'Status Pengerjaan', 'Status Worker') || (paymentStatus === 'PAID' ? 'progress' : 'pending')),
+      notes,
+      created_by: createdBy,
+      created_at: createdAt,
+      updated_at: updatedAt
+    };
+  }
+
+  if (norm === 'Shopee_Orders') {
+    const status = String(val('status', 'STATUS', 'job_status', 'Status Pengerjaan', 'Status') || 'PENDING').toUpperCase();
+    const rawNotes = val('notes', 'WORK ORDER', 'Work Order', 'Catatan', 'Note', 'Keterangan');
+    const notes = rawNotes !== undefined && rawNotes !== null ? String(rawNotes) : '';
+
+    return {
+      id,
+      row_id: id,
+      store_name: String(val('store_name', 'STORE', 'Nama Toko', 'Toko', 'Store') || ''),
+      buyer_name: String(val('buyer_name', 'PEMBELI', 'Nama Pembeli', 'Pembeli', 'Customer') || ''),
+      service_type: String(val('service_type', 'JENIS JASA', 'Jenis Jasa', 'Jenis Layanan', 'Layanan', 'Service') || 'Follow Toko'),
+      quantity: Number(val('quantity', 'SLOT', 'Slot', 'Jumlah', 'Qty', 'Target')) || 1,
+      target_link: String(val('target_link', 'TARGET', 'Link Produk', 'Link Toko', 'Link Target', 'Link') || ''),
+      status,
+      job_status: status,
+      worker_assigned: String(val('worker_assigned', 'WORKER', 'Worker', 'worker_id', 'Petugas', 'Admin', 'Dikerjakan Oleh') || ''),
+      notes,
+      created_by: createdBy,
+      created_at: createdAt,
+      updated_at: updatedAt
+    };
+  }
+
+  // Review_Orders
+  const status = String(val('status', 'STATUS', 'Status', 'Status Review') || 'PENDING').toUpperCase();
+  const rawClue = val('notes', 'CLUE', 'Clue', 'Catatan', 'Note', 'Keterangan');
+  const notes = rawClue !== undefined && rawClue !== null ? String(rawClue) : '';
+  
+  const rawAccounts = val('reviewer_accounts_str', 'INPUT PROGRE', 'Input Progre', 'INPUT PROGRESS', 'Akun Reviewer', 'Akun', 'Reviewer');
+  let reviewerAccountsList: string[] = [];
+
+  if (typeof rawAccounts === 'string') {
+    const trimmed = rawAccounts.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          reviewerAccountsList = parsed.map((item: any) => typeof item === 'string' ? item : (item.name || JSON.stringify(item)));
+        }
+      } catch (e) {
+        reviewerAccountsList = trimmed.replace(/^\[|\]$/g, '').replace(/"/g, '').split(',').map(s => s.trim()).filter(Boolean);
+      }
+    } else {
+      reviewerAccountsList = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  } else if (Array.isArray(rawAccounts)) {
+    reviewerAccountsList = rawAccounts.map((a: any) => typeof a === 'string' ? a : (a.name || String(a)));
+  }
+
+  const targetCount = Number(val('target_count', 'SLOT', 'Slot', 'quantity', 'Target Review', 'Jumlah Target', 'Target')) || (reviewerAccountsList.length > 0 ? reviewerAccountsList.length : 1);
+
+  return {
+    id,
+    row_id: id,
+    client_name: String(val('client_name', 'KLIEN', 'Nama Klien', 'Klien', 'Client', 'PEMBELI') || ''),
+    store_name: String(val('store_name', 'STORE', 'Nama Tempat', 'Nama Toko', 'Lokasi', 'Tempat') || ''),
+    target_count: targetCount,
+    maps_link: String(val('maps_link', 'target_link', 'TARGET LINK', 'Link Maps/Review', 'Link Google Maps', 'Link', 'Link Maps') || ''),
+    review_type: String(val('review_type', 'TIPE REVIEW', 'Tipe Review', 'Jenis Review', 'Type') || 'G_MAPS'),
+    status,
+    reviewer_accounts: reviewerAccountsList,
+    reviewer_accounts_str: reviewerAccountsList.join(', '),
+    proof_link: String(val('proof_link', 'LINK BUKTI', 'Link Bukti', 'Bukti', 'Proof') || ''),
+    notes,
+    created_by: createdBy,
+    created_at: createdAt,
+    updated_at: updatedAt
+  };
+}
+
+/**
+ * Direct client-side fetch from Google Apps Script Web App (works on static hosting & Supabase).
+ */
+async function pullDirectFromGoogleAppsScript(
+  targetUrl: string,
+  secret: string
+): Promise<{ success: boolean; message: string; counts?: any; errors?: string[] }> {
+  // Validate URL format
+  if (targetUrl.includes('/edit') || targetUrl.includes('/u/')) {
+    return {
+      success: false,
+      message: 'URL yang dimasukkan adalah link editor skrip, bukan Web App URL. Pastikan Anda menyalin URL hasil "Deploy > New Deployment > Web App" yang berakhiran /exec.'
+    };
+  }
+
+  const sheetsToFetch = [
+    { key: 'Web_Orders', aliases: ['SHOPEE_ORDERS', 'Web_Orders', 'WEB_ORDERS', 'web_orders', 'Orders', 'orders'] },
+    { key: 'Shopee_Orders', aliases: ['SHOPEE_ORDERS', 'Shopee_Orders', 'shopee_orders', 'Shopee', 'shopee'] },
+    { key: 'Review_Orders', aliases: ['REVIEW_ORDERS', 'Review_Orders', 'review_orders', 'Reviews', 'Maps_Reviews', 'maps_reviews'] }
+  ];
+
+  const results: Record<string, number> = { Web_Orders: 0, Shopee_Orders: 0, Review_Orders: 0 };
+  const errors: string[] = [];
+  let had404 = false;
+
+  for (const sheetConf of sheetsToFetch) {
+    let rawRows: any[] = [];
+
+    for (const alias of sheetConf.aliases) {
+      try {
+        const fetchUrl = `${targetUrl}?action=getRows&sheet=${encodeURIComponent(alias)}&secret=${encodeURIComponent(secret)}`;
+        const res = await fetch(fetchUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          redirect: 'follow'
+        });
+
+        if (res.status === 404) {
+          had404 = true;
+          break;
+        }
+
+        if (res.ok) {
+          const text = await res.text();
+          if (text && !text.startsWith('<')) {
+            try {
+              const json = JSON.parse(text);
+              const rows = Array.isArray(json) ? json : (json.data || json.rows || []);
+              if (Array.isArray(rows) && rows.length > 0) {
+                rawRows = rows;
+                break;
+              }
+            } catch {}
+          }
+        }
+      } catch (e) {
+        // Continue to next alias
+      }
+    }
+
+    if (had404) break;
+
+    if (Array.isArray(rawRows) && rawRows.length > 0) {
+      const normalizedRows = rawRows
+        .filter((r: any) => r && (r.id || r.row_id || r['ID Pesanan'] || r['ID Target'] || r['Nama Pembeli'] || r.buyer_name || r.client_name || r.store_name || r.PEMBELI || r.STORE || r.KLIEN))
+        .map((r: any) => normalizeClientSheetRow(sheetConf.key, r));
+
+      results[sheetConf.key] = normalizedRows.length;
+
+      // Upsert directly to Supabase if connected
+      if (isSupabaseConfigured && supabase && normalizedRows.length > 0) {
+        try {
+          const tableName = sheetConf.key === 'Web_Orders' ? 'orders' : (sheetConf.key === 'Shopee_Orders' ? 'shopee_orders' : 'maps_reviews');
+          for (let i = 0; i < normalizedRows.length; i += 100) {
+            const chunk = normalizedRows.slice(i, i + 100);
+            await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+          }
+        } catch (supErr: any) {
+          console.warn(`Supabase upsert error for ${sheetConf.key}:`, supErr?.message);
+        }
+      }
+    } else {
+      errors.push(`Tab ${sheetConf.key} tidak memiliki baris data`);
+    }
+  }
+
+  if (had404) {
+    return {
+      success: false,
+      message: 'Google Apps Script mengembalikan 404 Not Found. URL Web App belum aktif atau telah kadaluwarsa di Google. Buka Apps Script > Deploy > New Deployment > jenis "Web app" dengan akses "Anyone" (Siapa saja), lalu salin URL /exec yang baru.'
+    };
+  }
+
+  const totalSynced = results.Web_Orders + results.Shopee_Orders + results.Review_Orders;
+  if (totalSynced > 0) {
+    return {
+      success: true,
+      message: `Berhasil menarik ${totalSynced} data dari Spreadsheet! (Web: ${results.Web_Orders}, Shopee: ${results.Shopee_Orders}, Review: ${results.Review_Orders})`,
+      counts: results
+    };
+  }
+
+  return {
+    success: false,
+    message: 'Tidak ada baris data yang berhasil ditarik dari Spreadsheet. Pastikan nama tab Web_Orders / Shopee_Orders / Review_Orders sudah terisi data.'
+  };
 }
 
 /**
@@ -62,6 +307,7 @@ export async function pullAllSheetsData(webhookUrl?: string, sharedSecret?: stri
     };
   }
 
+  // 1. Try backend endpoint first
   try {
     const res = await fetch('/api/sheets-sync-pull', {
       method: 'POST',
@@ -69,29 +315,21 @@ export async function pullAllSheetsData(webhookUrl?: string, sharedSecret?: stri
       body: JSON.stringify({ webhookUrl: targetUrl, sharedSecret: secret })
     });
 
-    const text = await res.text();
-    if (!text || text.startsWith('<')) {
-      return {
-        success: false,
-        message: 'Server sedang memproses atau belum siap. Silakan ulangi beberapa saat lagi.'
-      };
+    if (res.ok) {
+      const text = await res.text();
+      if (text && !text.startsWith('<')) {
+        try {
+          const result = JSON.parse(text);
+          return result;
+        } catch {}
+      }
     }
-
-    try {
-      const result = JSON.parse(text);
-      return result;
-    } catch (parseErr) {
-      return {
-        success: false,
-        message: 'Respon dari server tidak dalam format JSON yang valid.'
-      };
-    }
-  } catch (err: any) {
-    return {
-      success: false,
-      message: err?.message || 'Gagal terhubung ke endpoint sinkronisasi backend.'
-    };
+  } catch {
+    // Backend fetch failed, proceed to direct client pull
   }
+
+  // 2. Client-side direct pull fallback (ideal for static hosting & custom domain)
+  return await pullDirectFromGoogleAppsScript(targetUrl, secret);
 }
 
 /**
