@@ -381,13 +381,13 @@ async function pullDirectFromGoogleAppsScript(
     let rawRows: any[] = [];
 
     for (const alias of sheetConf.aliases) {
-      // Try JSONP with callback (Zero CORS issues in all browsers)
+      // 1. Try JSONP with callback (Zero CORS issues in all browsers)
       try {
         const jsonpData = await fetchGoogleScriptJsonp(targetUrl, {
           action: 'getRows',
           sheet: alias,
           secret: secret
-        }, 5000);
+        }, 4000);
 
         const rows = Array.isArray(jsonpData) ? jsonpData : (jsonpData?.data || jsonpData?.rows || []);
         if (Array.isArray(rows) && rows.length > 0) {
@@ -395,7 +395,25 @@ async function pullDirectFromGoogleAppsScript(
           break;
         }
       } catch {
-        // Try next sheet alias
+        // Try direct fetch fallback
+      }
+
+      // 2. Direct fetch fallback
+      if (rawRows.length === 0) {
+        try {
+          const directUrl = `${targetUrl}?action=getRows&sheet=${encodeURIComponent(alias)}&secret=${encodeURIComponent(secret)}`;
+          const directRes = await fetch(directUrl);
+          if (directRes.ok) {
+            const data = await directRes.json();
+            const rows = Array.isArray(data) ? data : (data?.data || data?.rows || []);
+            if (Array.isArray(rows) && rows.length > 0) {
+              rawRows = rows;
+              break;
+            }
+          }
+        } catch {
+          // Ignore
+        }
       }
     }
 
@@ -459,28 +477,7 @@ export async function pullAllSheetsData(webhookUrl?: string, sharedSecret?: stri
     return await pullViaGoogleVisualizationApi(sheetId);
   }
 
-  // 1. Try backend endpoint first
-  try {
-    const res = await fetch('/api/sheets-sync-pull', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhookUrl: targetUrl, sharedSecret: secret })
-    });
-
-    if (res.ok) {
-      const text = await res.text();
-      if (text && !text.startsWith('<')) {
-        try {
-          const result = JSON.parse(text);
-          return result;
-        } catch {}
-      }
-    }
-  } catch {
-    // Backend fetch failed, proceed to direct client pull
-  }
-
-  // 2. Client-side direct pull fallback (ideal for static hosting & custom domain)
+  // 1. Client-side direct pull (works on all environments: static hosting, custom domain, Vercel, etc.)
   return await pullDirectFromGoogleAppsScript(targetUrl, secret);
 }
 
