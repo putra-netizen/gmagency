@@ -20,7 +20,7 @@ export function getSheetsSyncConfig(): SheetsSyncConfig {
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
-        enabled: !!parsed.enabled,
+        enabled: parsed.enabled !== undefined ? !!parsed.enabled : true,
         webhookUrl: parsed.webhookUrl || '',
         sharedSecret: parsed.sharedSecret || DEFAULT_SHARED_SECRET,
       };
@@ -29,7 +29,7 @@ export function getSheetsSyncConfig(): SheetsSyncConfig {
     console.error('Error reading sheets sync config:', err);
   }
   return {
-    enabled: false,
+    enabled: true,
     webhookUrl: '',
     sharedSecret: DEFAULT_SHARED_SECRET,
   };
@@ -37,13 +37,18 @@ export function getSheetsSyncConfig(): SheetsSyncConfig {
 
 export async function saveSheetsSyncConfig(config: SheetsSyncConfig): Promise<void> {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-    // Persist to backend server if available (catch any 405/404 silently on static hosting)
+    const enrichedConfig = {
+      ...config,
+      enabled: config.enabled !== undefined ? config.enabled : true,
+      sharedSecret: config.sharedSecret || DEFAULT_SHARED_SECRET
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(enrichedConfig));
+    // Persist to backend server if available (catch any 405/404 silently on static frontend hosting)
     try {
       await fetch('/api/sheets-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify(enrichedConfig)
       });
     } catch {
       // Ignore backend errors in static frontend mode
@@ -261,43 +266,11 @@ function fetchGoogleScriptJsonp(targetUrl: string, params: Record<string, string
       reject(new Error('jsonp_error'));
     };
 
-    const query = new URLSearchParams({ ...params, callback: callbackName }).toString();
+    const query = new URLSearchParams({ ...params, callback: callbackName, prefix: callbackName }).toString();
     const separator = targetUrl.includes('?') ? '&' : '?';
     script.src = `${targetUrl}${separator}${query}`;
     document.head.appendChild(script);
   });
-}
-
-/**
- * Fetches Google Apps Script via CORS proxy to guarantee 100% CORS-safe client-side reads.
- */
-async function fetchViaCorsProxy(url: string, timeoutMs = 8000): Promise<any> {
-  const proxies = [
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
-  ];
-
-  for (const getProxyUrl of proxies) {
-    try {
-      const proxyUrl = getProxyUrl(url);
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
-      const res = await fetch(proxyUrl, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && !text.startsWith('<')) {
-          try {
-            const json = JSON.parse(text);
-            return json;
-          } catch {}
-        }
-      }
-    } catch {
-      // Continue to next proxy
-    }
-  }
-  return null;
 }
 
 /**
@@ -395,9 +368,9 @@ async function pullDirectFromGoogleAppsScript(
   }
 
   const sheetsToFetch = [
-    { key: 'Web_Orders', aliases: ['SHOPEE_ORDERS', 'Web_Orders', 'WEB_ORDERS', 'web_orders', 'Orders', 'orders'] },
-    { key: 'Shopee_Orders', aliases: ['SHOPEE_ORDERS', 'Shopee_Orders', 'shopee_orders', 'Shopee', 'shopee'] },
-    { key: 'Review_Orders', aliases: ['REVIEW_ORDERS', 'Review_Orders', 'review_orders', 'Reviews', 'Maps_Reviews', 'maps_reviews'] }
+    { key: 'Web_Orders', aliases: ['Web_Orders', 'WEB_ORDERS', 'SHOPEE_ORDERS', 'web_orders', 'Orders', 'orders'] },
+    { key: 'Shopee_Orders', aliases: ['Shopee_Orders', 'SHOPEE_ORDERS', 'shopee_orders', 'Shopee', 'shopee'] },
+    { key: 'Review_Orders', aliases: ['Review_Orders', 'REVIEW_ORDERS', 'review_orders', 'Reviews', 'Maps_Reviews', 'maps_reviews'] }
   ];
 
   const results: Record<string, number> = { Web_Orders: 0, Shopee_Orders: 0, Review_Orders: 0 };
@@ -407,7 +380,7 @@ async function pullDirectFromGoogleAppsScript(
     let rawRows: any[] = [];
 
     for (const alias of sheetConf.aliases) {
-      // 1. Try JSONP first (zero CORS issues in browser)
+      // Try JSONP with callback (Zero CORS issues in all browsers)
       try {
         const jsonpData = await fetchGoogleScriptJsonp(targetUrl, {
           action: 'getRows',
@@ -421,24 +394,7 @@ async function pullDirectFromGoogleAppsScript(
           break;
         }
       } catch {
-        // Fallback to CORS proxy
-      }
-
-      // 2. Try CORS Proxy (Safe and completely avoids browser CORS block errors)
-      if (rawRows.length === 0) {
-        try {
-          const fetchUrl = `${targetUrl}?action=getRows&sheet=${encodeURIComponent(alias)}&secret=${encodeURIComponent(secret)}`;
-          const proxyData = await fetchViaCorsProxy(fetchUrl, 6000);
-          if (proxyData) {
-            const rows = Array.isArray(proxyData) ? proxyData : (proxyData?.data || proxyData?.rows || []);
-            if (Array.isArray(rows) && rows.length > 0) {
-              rawRows = rows;
-              break;
-            }
-          }
-        } catch {
-          // Ignore and continue
-        }
+        // Try next sheet alias
       }
     }
 
@@ -828,16 +784,28 @@ function doPost(e) {
     const rowId = body.row_id || body.id || (rowData ? rowData.id : "");
 
     if (action === "append" || action === "insert") {
-      appendRow_(sheet, rowData, targetSheetName);
-      return jsonOutput_({ ok: true, action: "append", id: rowId });
+      const existingRowNum = findRowNumber_(sheet, rowId);
+      if (existingRowNum > 1) {
+        const result = updateFields_(sheet, rowId, body.fields || rowData, body.expected_updated_at);
+        return jsonOutput_({ ok: true, action: "updated_existing", id: rowId, row: existingRowNum });
+      } else {
+        appendRow_(sheet, rowData, targetSheetName);
+        return jsonOutput_({ ok: true, action: "append", id: rowId });
+      }
     }
 
-    if (action === "update") {
-      const result = updateFields_(sheet, rowId, body.fields || rowData, body.expected_updated_at);
-      return jsonOutput_(result);
+    if (action === "update" || action === "edit") {
+      const existingRowNum = findRowNumber_(sheet, rowId);
+      if (existingRowNum > 1) {
+        const result = updateFields_(sheet, rowId, body.fields || rowData, body.expected_updated_at);
+        return jsonOutput_(result);
+      } else {
+        appendRow_(sheet, rowData, targetSheetName);
+        return jsonOutput_({ ok: true, action: "appended_missing", id: rowId });
+      }
     }
 
-    if (action === "delete") {
+    if (action === "delete" || action === "remove") {
       deleteRow_(sheet, rowId);
       return jsonOutput_({ ok: true, action: "delete", id: rowId });
     }

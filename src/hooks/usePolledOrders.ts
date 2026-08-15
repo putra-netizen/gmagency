@@ -80,7 +80,7 @@ export function usePolledOrders<T = any>(
       }
     } catch (err: any) {
       if (isMountedRef.current) {
-        console.error(`[usePolledOrders] Error polling ${endpoint}:`, err);
+        // Suppress noisy network console errors in client preview/static hosting
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     } finally {
