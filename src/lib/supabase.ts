@@ -201,7 +201,7 @@ export function blacklistClientMapsReview(id: string) {
   }
 }
 
-// Helpers for mapping status values like 'READY' or 'SUDAH DIREKAP' to/from Supabase to avoid CHECK constraints
+// Helpers for mapping status values like 'READY' or 'SUDAH DIREKAP' to/from Supabase to satisfy the PostgreSQL CHECK constraint ('PENDING', 'PROGRESS', 'DONE')
 export function serializeStatusAndNotes(notes: string | undefined, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' | undefined): { status: 'PENDING' | 'PROGRESS' | 'DONE'; notes: string } {
   let cleanNotes = (notes || '').trim();
   // Strip any existing metadata tags
@@ -1302,7 +1302,18 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
     } catch {}
   }
 
-  const finalData = { ...orderData };
+  const finalData: any = {};
+  if (orderData.store_name !== undefined) finalData.store_name = orderData.store_name;
+  if (orderData.buyer_name !== undefined) finalData.buyer_name = orderData.buyer_name;
+  if (orderData.service_type !== undefined) finalData.service_type = orderData.service_type;
+  if (orderData.quantity !== undefined) finalData.quantity = Number(orderData.quantity);
+  if (orderData.target_link !== undefined) finalData.target_link = orderData.target_link;
+  if (orderData.formatted_text !== undefined) finalData.formatted_text = orderData.formatted_text;
+  if (orderData.worker_id !== undefined) finalData.worker_id = orderData.worker_id;
+  if (orderData.work_order !== undefined) finalData.work_order = orderData.work_order;
+  if (orderData.order_type !== undefined) finalData.order_type = orderData.order_type;
+  if (orderData.created_by !== undefined) finalData.created_by = orderData.created_by;
+
   if (orderData.status !== undefined || orderData.notes !== undefined) {
     const notesToUse = orderData.notes !== undefined ? orderData.notes : (currentItem?.notes || '');
     const statusToUse = orderData.status !== undefined ? orderData.status : (currentItem?.status || 'PENDING');
@@ -1346,8 +1357,8 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        updateLocalStorageShopeeOrder(data);
         const result = deserializeStatusAndNotes(data as ShopeeOrder);
+        updateLocalStorageShopeeOrder(result);
         triggerSheetsSync('shopee_order', 'update', result);
         return result;
       }
@@ -1357,14 +1368,13 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
   }
 
   if (ex) {
-    const updated = {
+    const updated = deserializeStatusAndNotes({
       ...ex,
       ...finalData
-    } as ShopeeOrder;
+    } as ShopeeOrder);
     updateLocalStorageShopeeOrder(updated);
-    const result = deserializeStatusAndNotes(updated);
-    triggerSheetsSync('shopee_order', 'update', result);
-    return result;
+    triggerSheetsSync('shopee_order', 'update', updated);
+    return updated;
   }
   throw new Error('Shopee order not found in local storage fallback');
 }
@@ -1545,7 +1555,15 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
     } catch {}
   }
 
-  const finalData: any = { ...reviewData };
+  const finalData: any = {};
+  if (reviewData.client_name !== undefined) finalData.client_name = reviewData.client_name;
+  if (reviewData.maps_link !== undefined) finalData.maps_link = reviewData.maps_link;
+  if (reviewData.store_name !== undefined) finalData.store_name = reviewData.store_name;
+  if (reviewData.target_count !== undefined) finalData.target_count = Number(reviewData.target_count);
+  if (reviewData.proof_link !== undefined) finalData.proof_link = reviewData.proof_link;
+  if (reviewData.review_type !== undefined) finalData.review_type = reviewData.review_type;
+  if (reviewData.created_by !== undefined) finalData.created_by = reviewData.created_by;
+
   if (reviewData.status !== undefined || reviewData.notes !== undefined) {
     const notesToUse = reviewData.notes !== undefined ? reviewData.notes : (currentItem?.notes || '');
     const statusToUse = reviewData.status !== undefined ? reviewData.status : (currentItem?.status || 'PENDING');

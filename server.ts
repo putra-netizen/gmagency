@@ -209,6 +209,30 @@ async function fetchAllSupabaseRows<T = any>(
   return allRows;
 }
 
+function serializeServerStatusAndNotes(notes: string | undefined, status: string | undefined): { status: string; notes: string } {
+  let cleanNotes = (notes || '').trim();
+  cleanNotes = cleanNotes.replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
+
+  let dbStatus = 'PENDING';
+  if (status === 'READY') {
+    dbStatus = 'PROGRESS';
+    cleanNotes = cleanNotes ? `${cleanNotes}\n[STATUS:READY]` : '[STATUS:READY]';
+  } else if (status === 'SUDAH DIREKAP') {
+    dbStatus = 'PROGRESS';
+    cleanNotes = cleanNotes ? `${cleanNotes}\n[STATUS:SUDAH DIREKAP]` : '[STATUS:SUDAH DIREKAP]';
+  } else if (status === 'PROGRESS') {
+    dbStatus = 'PROGRESS';
+  } else if (status === 'DONE') {
+    dbStatus = 'DONE';
+  } else if (status === 'PENDING') {
+    dbStatus = 'PENDING';
+  } else if (status) {
+    dbStatus = status;
+  }
+
+  return { status: dbStatus, notes: cleanNotes };
+}
+
 // --- API ROUTES ---
 
 // 1. PRODUCTS API
@@ -629,9 +653,15 @@ app.post('/api/shopee_orders', async (req, res) => {
 
   if (supabase) {
     try {
+      const { status: dbStatus, notes: dbNotes } = serializeServerStatusAndNotes(newOrder.notes, newOrder.status);
+      const supabasePayload = {
+        ...newOrder,
+        status: dbStatus,
+        notes: dbNotes
+      };
       const { data, error } = await supabase
         .from('shopee_orders')
-        .insert([newOrder])
+        .insert([supabasePayload])
         .select()
         .single();
       if (!error && data) {
@@ -656,9 +686,15 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
 
   if (supabase) {
     try {
+      const updatePayload = { ...req.body };
+      if (req.body.status !== undefined || req.body.notes !== undefined) {
+        const { status: dbStatus, notes: dbNotes } = serializeServerStatusAndNotes(req.body.notes, req.body.status);
+        updatePayload.status = dbStatus;
+        updatePayload.notes = dbNotes;
+      }
       const { data, error } = await supabase
         .from('shopee_orders')
-        .update(req.body)
+        .update(updatePayload)
         .eq('id', id)
         .select()
         .single();
@@ -802,9 +838,15 @@ app.post('/api/maps_reviews', async (req, res) => {
 
   if (supabase) {
     try {
+      const { status: dbStatus, notes: dbNotes } = serializeServerStatusAndNotes(newReview.notes, newReview.status);
+      const supabasePayload = {
+        ...newReview,
+        status: dbStatus,
+        notes: dbNotes
+      };
       const { data, error } = await supabase
         .from('maps_reviews')
-        .insert([newReview])
+        .insert([supabasePayload])
         .select()
         .single();
       if (!error && data) {
@@ -837,9 +879,15 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
 
   if (supabase) {
     try {
+      const supabasePayload = { ...updatePayload };
+      if (updatePayload.status !== undefined || updatePayload.notes !== undefined) {
+        const { status: dbStatus, notes: dbNotes } = serializeServerStatusAndNotes(updatePayload.notes, updatePayload.status);
+        supabasePayload.status = dbStatus;
+        supabasePayload.notes = dbNotes;
+      }
       const { data, error } = await supabase
         .from('maps_reviews')
-        .update(updatePayload)
+        .update(supabasePayload)
         .eq('id', id)
         .select()
         .single();
