@@ -1136,65 +1136,115 @@ app.post('/api/sheets-sync-pull', async (req, res) => {
     };
     writeLocalDatabase(db);
 
-    const sheetsToFetch = ['Web_Orders', 'Shopee_Orders', 'Review_Orders'] as const;
+    const sheetsToFetch = [
+      { key: 'Web_Orders', aliases: ['SHOPEE_ORDERS', 'Web_Orders', 'WEB_ORDERS', 'web_orders', 'Orders', 'orders'] },
+      { key: 'Shopee_Orders', aliases: ['SHOPEE_ORDERS', 'Shopee_Orders', 'shopee_orders', 'Shopee', 'shopee'] },
+      { key: 'Review_Orders', aliases: ['REVIEW_ORDERS', 'Review_Orders', 'review_orders', 'Reviews', 'Maps_Reviews', 'maps_reviews'] }
+    ] as const;
+
     const results: Record<string, number> = { Web_Orders: 0, Shopee_Orders: 0, Review_Orders: 0 };
     const errors: string[] = [];
 
-    for (const sheetName of sheetsToFetch) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-        const fetchUrl = `${webhookUrl}?action=getRows&sheet=${encodeURIComponent(sheetName)}&secret=${encodeURIComponent(secret)}`;
-        const fetchRes = await fetch(fetchUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
+    for (const sheetConfig of sheetsToFetch) {
+      const standardName = sheetConfig.key;
+      let rawRows: any[] = [];
 
-        if (!fetchRes.ok) {
-          errors.push(`Gagal membaca ${sheetName}: HTTP ${fetchRes.status}`);
-          continue;
-        }
+      // Try aliases in order until rows are found
+      for (const sheetAlias of sheetConfig.aliases) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          const fetchUrl = `${webhookUrl}?action=getRows&sheet=${encodeURIComponent(sheetAlias)}&secret=${encodeURIComponent(secret)}`;
+          const fetchRes = await fetch(fetchUrl, {
+            signal: controller.signal,
+            headers: { 'Accept': 'application/json' },
+            redirect: 'follow'
+          });
+          clearTimeout(timeoutId);
 
-        const json = await fetchRes.json();
-        const rawRows = Array.isArray(json) ? json : (json.data || json.rows || []);
-
-        if (Array.isArray(rawRows)) {
-          const normalizedRows = rawRows
-            .filter((r: any) => r && (r.id || r.row_id || r['ID Pesanan'] || r['ID Target'] || r['Nama Pembeli'] || r.buyer_name || r.client_name || r.store_name))
-            .map((r: any) => normalizeSheetRow(sheetName, r));
-
-          results[sheetName] = normalizedRows.length;
-
-          // 1. Sync to Supabase if connected
-          if (supabase && normalizedRows.length > 0) {
-            try {
-              const tableName = sheetName === 'Web_Orders' ? 'orders' : (sheetName === 'Shopee_Orders' ? 'shopee_orders' : 'maps_reviews');
-              // Batch upsert in chunks of 200
-              for (let i = 0; i < normalizedRows.length; i += 200) {
-                const chunk = normalizedRows.slice(i, i + 200);
-                await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
-              }
-            } catch (supErr: any) {
-              console.warn(`[sheets-sync-pull] Supabase upsert error for ${sheetName}:`, supErr?.message);
+          if (fetchRes.ok) {
+            const text = await fetchRes.text();
+            if (text && !text.startsWith('<')) {
+              try {
+                const json = JSON.parse(text);
+                const rows = Array.isArray(json) ? json : (json.data || json.rows || []);
+                if (Array.isArray(rows) && rows.length > 0) {
+                  rawRows = rows;
+                  break; // Found data with this alias!
+                }
+              } catch (e) {}
             }
           }
+        } catch (aliasErr) {
+          // Continue to next alias
+        }
+      }
 
-          // 2. Sync to local db.json
-          if (sheetName === 'Web_Orders') {
-            const existingMap = new Map<string, any>((db.orders || []).map((o: any) => [String(o.id), o]));
-            normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
-            db.orders = Array.from(existingMap.values());
-          } else if (sheetName === 'Shopee_Orders') {
-            const existingMap = new Map<string, any>((db.shopee_orders || []).map((o: any) => [String(o.id), o]));
-            normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
-            db.shopee_orders = Array.from(existingMap.values());
-          } else if (sheetName === 'Review_Orders') {
-            const existingMap = new Map<string, any>((db.maps_reviews || []).map((o: any) => [String(o.id), o]));
-            normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
-            db.maps_reviews = Array.from(existingMap.values());
+      // If still empty and secret was provided, try without secret parameter
+      if (rawRows.length === 0 && secret) {
+        for (const sheetAlias of sheetConfig.aliases) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const fetchUrl = `${webhookUrl}?action=getRows&sheet=${encodeURIComponent(sheetAlias)}`;
+            const fetchRes = await fetch(fetchUrl, {
+              signal: controller.signal,
+              headers: { 'Accept': 'application/json' },
+              redirect: 'follow'
+            });
+            clearTimeout(timeoutId);
+
+            if (fetchRes.ok) {
+              const text = await fetchRes.text();
+              if (text && !text.startsWith('<')) {
+                const json = JSON.parse(text);
+                const rows = Array.isArray(json) ? json : (json.data || json.rows || []);
+                if (Array.isArray(rows) && rows.length > 0) {
+                  rawRows = rows;
+                  break;
+                }
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (Array.isArray(rawRows) && rawRows.length > 0) {
+        const normalizedRows = rawRows
+          .filter((r: any) => r && (r.id || r.row_id || r['ID Pesanan'] || r['ID Target'] || r['Nama Pembeli'] || r.buyer_name || r.client_name || r.store_name || r.PEMBELI || r.STORE || r.KLIEN))
+          .map((r: any) => normalizeSheetRow(standardName, r));
+
+        results[standardName] = normalizedRows.length;
+
+        // 1. Sync to Supabase if connected
+        if (supabase && normalizedRows.length > 0) {
+          try {
+            const tableName = standardName === 'Web_Orders' ? 'orders' : (standardName === 'Shopee_Orders' ? 'shopee_orders' : 'maps_reviews');
+            for (let i = 0; i < normalizedRows.length; i += 200) {
+              const chunk = normalizedRows.slice(i, i + 200);
+              await supabase.from(tableName).upsert(chunk, { onConflict: 'id' });
+            }
+          } catch (supErr: any) {
+            console.warn(`[sheets-sync-pull] Supabase upsert error for ${standardName}:`, supErr?.message);
           }
         }
-      } catch (err: any) {
-        console.error(`[sheets-sync-pull] Error processing ${sheetName}:`, err);
-        errors.push(`Error ${sheetName}: ${err.message}`);
+
+        // 2. Sync to local db.json
+        if (standardName === 'Web_Orders') {
+          const existingMap = new Map<string, any>((db.orders || []).map((o: any) => [String(o.id), o]));
+          normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
+          db.orders = Array.from(existingMap.values());
+        } else if (standardName === 'Shopee_Orders') {
+          const existingMap = new Map<string, any>((db.shopee_orders || []).map((o: any) => [String(o.id), o]));
+          normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
+          db.shopee_orders = Array.from(existingMap.values());
+        } else if (standardName === 'Review_Orders') {
+          const existingMap = new Map<string, any>((db.maps_reviews || []).map((o: any) => [String(o.id), o]));
+          normalizedRows.forEach((row: any) => existingMap.set(String(row.id), row));
+          db.maps_reviews = Array.from(existingMap.values());
+        }
+      } else {
+        errors.push(`Tidak ada baris data ditemukan di tab ${standardName}`);
       }
     }
 

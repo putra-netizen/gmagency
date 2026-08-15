@@ -49,7 +49,24 @@ export function usePolledOrders<T = any>(
         throw new Error(`Failed to fetch orders from ${endpoint}: ${res.statusText}`);
       }
 
-      const json = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        // Dev server or proxy returned HTML fallback during restart/transition, ignore silently
+        return;
+      }
+
+      const text = await res.text();
+      if (!text || text.startsWith('<')) {
+        return;
+      }
+
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch (parseErr) {
+        return;
+      }
+
       const items: T[] = Array.isArray(json) ? json : (json.data || json.rows || []);
       const newJsonString = JSON.stringify(items);
 

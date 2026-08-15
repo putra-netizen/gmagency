@@ -55,13 +55,43 @@ export async function pullAllSheetsData(webhookUrl?: string, sharedSecret?: stri
   const targetUrl = (webhookUrl || config.webhookUrl || '').trim();
   const secret = (sharedSecret || config.sharedSecret || DEFAULT_SHARED_SECRET).trim();
 
-  const res = await fetch('/api/sheets-sync-pull', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ webhookUrl: targetUrl, sharedSecret: secret })
-  });
+  if (!targetUrl || !targetUrl.startsWith('http')) {
+    return {
+      success: false,
+      message: 'URL Google Apps Script Web App belum diisi atau formatnya tidak valid.'
+    };
+  }
 
-  return await res.json();
+  try {
+    const res = await fetch('/api/sheets-sync-pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl: targetUrl, sharedSecret: secret })
+    });
+
+    const text = await res.text();
+    if (!text || text.startsWith('<')) {
+      return {
+        success: false,
+        message: 'Server sedang memproses atau belum siap. Silakan ulangi beberapa saat lagi.'
+      };
+    }
+
+    try {
+      const result = JSON.parse(text);
+      return result;
+    } catch (parseErr) {
+      return {
+        success: false,
+        message: 'Respon dari server tidak dalam format JSON yang valid.'
+      };
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err?.message || 'Gagal terhubung ke endpoint sinkronisasi backend.'
+    };
+  }
 }
 
 /**
