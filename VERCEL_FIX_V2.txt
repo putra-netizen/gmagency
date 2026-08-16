@@ -1,0 +1,18 @@
+DEPLOYMENT FIX V2
+
+IMPORTANT:
+- This version fixes the Vercel 500 caused by api/[...path].ts importing ../server.js.
+- The Vercel function now keeps the Express backend inside api/server.ts and imports it as ./server.
+- Do NOT add api/index.js, api/index.ts, api/server.js, or api-server-source.ts.
+- Root server.ts is kept only for the local development command.
+
+Expected API routes:
+  /api/health
+  /api/orders
+  /api/shopee_orders
+  /api/maps_reviews
+
+First test /api/health. Expected:
+  {"ok":true,"service":"gm-agency-api"}
+
+Then test /api/orders.
