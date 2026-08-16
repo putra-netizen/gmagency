@@ -58,6 +58,16 @@ const PORT = 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// Deployment diagnostic endpoint. It does not touch any database.
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    service: 'gm-agency-api',
+    spreadsheetOnly: true
+  });
+});
+
+
 // Disable HTTP caching on all API routes to ensure real-time accuracy
 app.use('/api', (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
