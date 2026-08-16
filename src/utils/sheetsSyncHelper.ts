@@ -148,7 +148,7 @@ export function normalizeClientSheetRow(sheetName: string, raw: Record<string, a
   const rawClue = val('notes', 'CLUE', 'Clue', 'Catatan', 'Note', 'Keterangan');
   const notes = rawClue !== undefined && rawClue !== null ? String(rawClue) : '';
   
-  const rawAccounts = val('reviewer_accounts_str', 'INPUT PROGRE', 'Input Progre', 'INPUT PROGRESS', 'Akun Reviewer', 'Akun', 'Reviewer');
+  const rawAccounts = val('reviewer_accounts_str', 'INPUT PROGRES AKUN', 'INPUT PROGRE', 'Input Progre', 'INPUT PROGRESS', 'Akun Reviewer', 'Akun', 'Reviewer');
   let reviewerAccountsList: string[] = [];
 
   if (typeof rawAccounts === 'string') {
@@ -169,7 +169,7 @@ export function normalizeClientSheetRow(sheetName: string, raw: Record<string, a
     reviewerAccountsList = rawAccounts.map((a: any) => typeof a === 'string' ? a : (a.name || String(a)));
   }
 
-  const targetCount = Number(val('target_count', 'SLOT', 'Slot', 'quantity', 'Target Review', 'Jumlah Target', 'Target')) || (reviewerAccountsList.length > 0 ? reviewerAccountsList.length : 1);
+  const targetCount = Number(val('target_count', 'TARGET AKUN', 'SLOT', 'Slot', 'quantity', 'Target Review', 'Jumlah Target', 'Target')) || (reviewerAccountsList.length > 0 ? reviewerAccountsList.length : 1);
 
   return {
     id,
@@ -606,6 +606,7 @@ function buildRowObject(type: 'order' | 'shopee_order' | 'maps_review', payload:
 
   // maps_review
   const rawStatus = (payload.status || 'PENDING').toUpperCase();
+  const targetCount = Number(payload.target_count || payload.quantity || 0);
   return {
     ...base,
     client_name: payload.client_name || '',
@@ -614,9 +615,10 @@ function buildRowObject(type: 'order' | 'shopee_order' | 'maps_review', payload:
     store_name: payload.store_name || '',
     'Nama Tempat': payload.store_name || '',
     'STORE': payload.store_name || '',
-    target_count: Number(payload.target_count || payload.quantity || 0),
-    'Target Review': Number(payload.target_count || payload.quantity || 0),
-    'SLOT': Number(payload.target_count || payload.quantity || 0),
+    target_count: targetCount,
+    'TARGET AKUN': targetCount,
+    'Target Review': targetCount,
+    'SLOT': targetCount,
     maps_link: payload.maps_link || payload.target_link || '',
     'Link Maps/Review': payload.maps_link || payload.target_link || '',
     'TARGET LINK': payload.maps_link || payload.target_link || '',
@@ -628,6 +630,7 @@ function buildRowObject(type: 'order' | 'shopee_order' | 'maps_review', payload:
     'STATUS': rawStatus,
     reviewer_accounts_str: reviewerStr,
     'Akun Reviewer': reviewerStr,
+    'INPUT PROGRES AKUN': reviewerJson,
     'INPUT PROGRE': reviewerJson,
     proof_link: payload.proof_link || '',
     'Link Bukti': payload.proof_link || '',

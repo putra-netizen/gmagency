@@ -158,8 +158,8 @@ export function normalizeSheetRow(sheetName: string, raw: Record<string, any>): 
   const rawClue = val('notes', 'CLUE', 'Clue', 'Catatan', 'Note', 'Keterangan');
   const notes = rawClue !== undefined && rawClue !== null ? String(rawClue) : '';
   
-  // Parse INPUT PROGRE / reviewer accounts
-  const rawAccounts = val('reviewer_accounts_str', 'INPUT PROGRE', 'Input Progre', 'INPUT PROGRESS', 'Akun Reviewer', 'Akun', 'Reviewer');
+  // Parse INPUT PROGRES AKUN / reviewer accounts
+  const rawAccounts = val('reviewer_accounts_str', 'INPUT PROGRES AKUN', 'INPUT PROGRE', 'Input Progre', 'INPUT PROGRESS', 'Akun Reviewer', 'Akun', 'Reviewer');
   let reviewerAccountsStr = '';
   let reviewerAccountsList: { name: string }[] = [];
 
@@ -185,7 +185,7 @@ export function normalizeSheetRow(sheetName: string, raw: Record<string, any>): 
     reviewerAccountsStr = reviewerAccountsList.map(a => a.name).join(', ');
   }
 
-  const targetCount = Number(val('target_count', 'SLOT', 'Slot', 'quantity', 'Target Review', 'Jumlah Target', 'Target')) || (reviewerAccountsList.length > 0 ? reviewerAccountsList.length : 1);
+  const targetCount = Number(val('target_count', 'TARGET AKUN', 'SLOT', 'Slot', 'quantity', 'Target Review', 'Jumlah Target', 'Target')) || (reviewerAccountsList.length > 0 ? reviewerAccountsList.length : 1);
 
   return {
     id,
@@ -305,6 +305,212 @@ export async function getRows(sheetName: string): Promise<Row[]> {
 }
 
 /**
+ * Transforms internal application field keys to actual Google Sheets column header names.
+ */
+export function denormalizeToSheetFields(sheetName: string, internalFields: Record<string, any>): Record<string, any> {
+  const norm = normalizeSheetName(sheetName);
+  const out: Record<string, any> = { ...internalFields };
+
+  if (norm === 'Web_Orders') {
+    if (internalFields.buyer_name !== undefined) out['PEMBELI'] = internalFields.buyer_name;
+    if (internalFields.product_name !== undefined) out['LAYANAN'] = internalFields.product_name;
+    if (internalFields.target_link !== undefined || internalFields.target_spam_phone !== undefined) {
+      out['TARGET DETAIL'] = internalFields.target_link || internalFields.target_spam_phone || '';
+    }
+    if (internalFields.total_price !== undefined || internalFields.price !== undefined) {
+      out['TOTAL HARGA'] = Number(internalFields.total_price !== undefined ? internalFields.total_price : internalFields.price);
+    }
+    if (internalFields.payment_status !== undefined || internalFields.status !== undefined) {
+      out['STATUS'] = internalFields.payment_status || internalFields.status;
+    }
+    if (internalFields.created_at !== undefined) out['TANGGAL'] = internalFields.created_at;
+    if (internalFields.notes !== undefined) out['CATATAN'] = internalFields.notes;
+    if (internalFields.phone_number !== undefined || internalFields.whatsapp_number !== undefined) {
+      out['NO WA'] = internalFields.phone_number || internalFields.whatsapp_number;
+    }
+  } else if (norm === 'Shopee_Orders') {
+    if (internalFields.store_name !== undefined) out['STORE'] = internalFields.store_name;
+    if (internalFields.buyer_name !== undefined) out['PEMBELI'] = internalFields.buyer_name;
+    if (internalFields.service_type !== undefined) out['JENIS JASA'] = internalFields.service_type;
+    if (internalFields.quantity !== undefined) out['SLOT'] = Number(internalFields.quantity);
+    if (internalFields.target_link !== undefined) out['TARGET'] = internalFields.target_link;
+    if (internalFields.notes !== undefined) out['WORK ORDER'] = internalFields.notes;
+    if (internalFields.status !== undefined || internalFields.job_status !== undefined) {
+      out['STATUS'] = (internalFields.status || internalFields.job_status || 'PENDING').toUpperCase();
+    }
+    if (internalFields.worker_assigned !== undefined || internalFields.worker_id !== undefined) {
+      out['WORKER'] = internalFields.worker_assigned || internalFields.worker_id;
+    }
+    if (internalFields.created_at !== undefined) out['TANGGAL'] = internalFields.created_at;
+  } else if (norm === 'Review_Orders') {
+    if (internalFields.client_name !== undefined) out['KLIEN'] = internalFields.client_name;
+    if (internalFields.store_name !== undefined) out['STORE'] = internalFields.store_name;
+    if (internalFields.target_count !== undefined || internalFields.quantity !== undefined) {
+      const tc = Number(internalFields.target_count !== undefined ? internalFields.target_count : internalFields.quantity);
+      out['TARGET AKUN'] = tc;
+      out['SLOT'] = tc;
+    }
+    if (internalFields.review_type !== undefined) out['TIPE REVIEW'] = internalFields.review_type;
+    if (internalFields.maps_link !== undefined || internalFields.target_link !== undefined) {
+      out['TARGET LINK'] = internalFields.maps_link || internalFields.target_link;
+    }
+    if (internalFields.notes !== undefined) out['CLUE'] = internalFields.notes;
+    if (internalFields.proof_link !== undefined) out['LINK BUKTI'] = internalFields.proof_link;
+    if (internalFields.status !== undefined) out['STATUS'] = String(internalFields.status).toUpperCase();
+    if (internalFields.created_at !== undefined) out['TANGGAL'] = internalFields.created_at;
+
+    // Reviewer accounts handling: format as JSON string array of names (e.g. '["dewa","shelia"]')
+    if (internalFields.reviewer_accounts !== undefined || internalFields.reviewer_accounts_str !== undefined) {
+      let accountsArr: string[] = [];
+      const raw = internalFields.reviewer_accounts !== undefined ? internalFields.reviewer_accounts : internalFields.reviewer_accounts_str;
+
+      if (Array.isArray(raw)) {
+        accountsArr = raw
+          .map((a: any) => typeof a === 'string' ? a.trim() : (a?.name || a?.account || String(a)).trim())
+          .filter(Boolean);
+      } else if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+              accountsArr = parsed
+                .map((a: any) => typeof a === 'string' ? a.trim() : (a?.name || a?.account || String(a)).trim())
+                .filter(Boolean);
+            }
+          } catch {
+            accountsArr = trimmed.replace(/^\[|\]$/g, '').split(',').map(s => s.replace(/"/g, '').trim()).filter(Boolean);
+          }
+        } else if (trimmed) {
+          accountsArr = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+
+      const jsonStr = JSON.stringify(accountsArr);
+      out['INPUT PROGRES AKUN'] = jsonStr;
+      out['INPUT PROGRE'] = jsonStr;
+      out['INPUT PROGRESS'] = jsonStr;
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Appends a new order row to Google Sheets via webhook.
+ */
+export async function appendOrderRow(sheetName: string, order: Row): Promise<any> {
+  const norm = normalizeSheetName(sheetName);
+  const db = readLocalDatabase();
+  const webhookUrl = db.sheets_sync_config?.webhookUrl || 
+    process.env.GOOGLE_SHEETS_WEBHOOK_URL || 
+    process.env.SHEETS_WEBHOOK_URL || 
+    process.env.APPS_SCRIPT_URL;
+  const secret = db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026';
+
+  if (!webhookUrl || typeof webhookUrl !== 'string' || !webhookUrl.startsWith('http')) {
+    return { skipped: true, reason: 'No valid webhook URL' };
+  }
+
+  let mappedRow: Record<string, any> = {};
+
+  if (norm === 'Web_Orders') {
+    mappedRow = {
+      row_id: order.id,
+      TANGGAL: order.created_at || new Date().toISOString(),
+      PEMBELI: order.buyer_name || '',
+      LAYANAN: order.product_name || '',
+      "TARGET DETAIL": order.target_link || order.target_spam_phone || '',
+      "TOTAL HARGA": order.total_price || 0,
+      STATUS: order.payment_status || 'PENDING'
+    };
+  } else if (norm === 'Shopee_Orders') {
+    mappedRow = {
+      row_id: order.id,
+      TANGGAL: order.created_at || new Date().toISOString(),
+      STORE: order.store_name || '',
+      PEMBELI: order.buyer_name || '',
+      "JENIS JASA": order.service_type || '',
+      SLOT: order.quantity || 1,
+      TARGET: order.target_link || '',
+      "WORK ORDER": order.notes || '',
+      STATUS: order.status || 'PENDING',
+      WORKER: order.worker_assigned || ''
+    };
+  } else if (norm === 'Review_Orders') {
+    let accountsArr: string[] = [];
+    const raw = order.reviewer_accounts !== undefined ? order.reviewer_accounts : order.reviewer_accounts_str;
+    if (Array.isArray(raw)) {
+      accountsArr = raw
+        .map((a: any) => (typeof a === 'string' ? a.trim() : (a?.name || a?.account || JSON.stringify(a)).trim()))
+        .filter(Boolean);
+    } else if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            accountsArr = parsed.map((a: any) => (typeof a === 'string' ? a.trim() : (a?.name || String(a)).trim())).filter(Boolean);
+          }
+        } catch {
+          accountsArr = trimmed.replace(/^\[|\]$/g, '').split(',').map(s => s.replace(/"/g, '').trim()).filter(Boolean);
+        }
+      } else if (trimmed) {
+        accountsArr = trimmed.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+
+    const reviewerJson = JSON.stringify(accountsArr);
+    const targetCount = Number(order.target_count || order.quantity || (accountsArr.length > 0 ? accountsArr.length : 1));
+
+    mappedRow = {
+      row_id: order.id,
+      TANGGAL: order.created_at || new Date().toISOString(),
+      KLIEN: order.client_name || '',
+      STORE: order.store_name || '',
+      "TARGET AKUN": targetCount,
+      SLOT: targetCount,
+      "TIPE REVIEW": order.review_type || 'G_MAPS',
+      "TARGET LINK": order.maps_link || '',
+      "INPUT PROGRES AKUN": reviewerJson,
+      "INPUT PROGRE": reviewerJson,
+      CLUE: order.notes || '',
+      "LINK BUKTI": order.proof_link || '',
+      STATUS: order.status || 'PENDING'
+    };
+  }
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret,
+        action: 'append',
+        sheet: norm,
+        row: mappedRow
+      })
+    });
+
+    if (!res.ok) {
+      console.error(`[sheetsBridge] Error appending row to ${norm}: HTTP status ${res.status}`);
+      return { ok: false, status: res.status };
+    }
+
+    const json = await res.json().catch(() => null);
+    if (json && json.error) {
+      console.error(`[sheetsBridge] Apps Script returned error appending row to ${norm}:`, json.error);
+      return { ok: false, error: json.error };
+    }
+
+    return { ok: true, data: json };
+  } catch (err: any) {
+    console.error(`[sheetsBridge] Exception appending row to ${norm}:`, err?.message || err);
+    return { ok: false, error: err?.message };
+  }
+}
+
+/**
  * Updates order fields in Google Sheets and syncs with Supabase / local DB.
  */
 export async function updateOrderFields(sheetName: string, rowId: string, fields: Row): Promise<any> {
@@ -316,9 +522,10 @@ export async function updateOrderFields(sheetName: string, rowId: string, fields
     process.env.APPS_SCRIPT_URL;
   const secret = db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026';
 
-  // 1. Sync to Google Apps Script if configured
+  // 1. Sync to Google Apps Script if configured (denormalize to sheet header column names)
   if (webhookUrl && typeof webhookUrl === 'string' && webhookUrl.startsWith('http')) {
     try {
+      const sheetFields = denormalizeToSheetFields(norm, fields);
       fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -327,7 +534,7 @@ export async function updateOrderFields(sheetName: string, rowId: string, fields
           action: 'update',
           sheet: norm,
           row_id: rowId,
-          fields
+          fields: sheetFields
         })
       }).catch(err => console.warn('[sheetsBridge] Webhook sync error:', err));
     } catch (err) {
@@ -379,6 +586,8 @@ export async function updateOrderFields(sheetName: string, rowId: string, fields
  */
 export const ordersSheetService = {
   getOrders: (sheetName: string = 'Web_Orders') => getRows(sheetName),
-  updateOrderFields
+  updateOrderFields,
+  appendOrderRow,
+  denormalizeToSheetFields
 };
 

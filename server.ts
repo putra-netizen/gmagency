@@ -24,7 +24,7 @@ import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus } from './src/types';
 import { createClient } from '@supabase/supabase-js';
 import { getCachedRows, patchCacheRow, upsertCacheRow, invalidateCache } from './src/lib/sheetCache';
-import { updateOrderFields, normalizeSheetName, normalizeSheetRow, ordersSheetService, readLocalDatabase, writeLocalDatabase } from './src/lib/sheetsBridge';
+import { updateOrderFields, appendOrderRow, normalizeSheetName, normalizeSheetRow, ordersSheetService, readLocalDatabase, writeLocalDatabase } from './src/lib/sheetsBridge';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -501,6 +501,11 @@ app.post('/api/orders', async (req, res) => {
       if (!error && data) {
         clearServerSupabaseCache('orders');
         upsertCacheRow('Web_Orders', orderId, data);
+        try {
+          await appendOrderRow('Web_Orders', data);
+        } catch (sheetErr) {
+          console.error('[server] Error syncing new order to Google Sheets:', sheetErr);
+        }
         return res.status(201).json(data);
       }
       console.error('Supabase error inserting order:', error);
@@ -513,6 +518,11 @@ app.post('/api/orders', async (req, res) => {
   db.orders.push(newOrder);
   writeDatabase(db);
   upsertCacheRow('Web_Orders', orderId, newOrder);
+  try {
+    await appendOrderRow('Web_Orders', newOrder);
+  } catch (sheetErr) {
+    console.error('[server] Error syncing new order to Google Sheets:', sheetErr);
+  }
   res.status(201).json(newOrder);
 });
 
@@ -678,6 +688,11 @@ app.post('/api/shopee_orders', async (req, res) => {
       if (!error && data) {
         clearServerSupabaseCache('shopee_orders');
         upsertCacheRow('Shopee_Orders', newOrder.id, data);
+        try {
+          await appendOrderRow('Shopee_Orders', data);
+        } catch (sheetErr) {
+          console.error('[server] Error syncing new shopee_order to Google Sheets:', sheetErr);
+        }
         return res.status(201).json(data);
       }
       console.error('Supabase error inserting shopee_order:', error);
@@ -691,6 +706,11 @@ app.post('/api/shopee_orders', async (req, res) => {
   db.shopee_orders.push(newOrder);
   writeDatabase(db);
   upsertCacheRow('Shopee_Orders', newOrder.id, newOrder);
+  try {
+    await appendOrderRow('Shopee_Orders', newOrder);
+  } catch (sheetErr) {
+    console.error('[server] Error syncing new shopee_order to Google Sheets:', sheetErr);
+  }
   res.status(201).json(newOrder);
 });
 
@@ -882,6 +902,11 @@ app.post('/api/maps_reviews', async (req, res) => {
           reviewer_accounts: cleanAccounts
         };
         upsertCacheRow('Review_Orders', newReview.id, responseData);
+        try {
+          await appendOrderRow('Review_Orders', responseData);
+        } catch (sheetErr) {
+          console.error('[server] Error syncing new maps_review to Google Sheets:', sheetErr);
+        }
         return res.status(201).json(responseData);
       }
       console.error('Supabase error inserting maps_review:', error);
@@ -895,6 +920,11 @@ app.post('/api/maps_reviews', async (req, res) => {
   db.maps_reviews.push(newReview);
   writeDatabase(db);
   upsertCacheRow('Review_Orders', newReview.id, newReview);
+  try {
+    await appendOrderRow('Review_Orders', newReview);
+  } catch (sheetErr) {
+    console.error('[server] Error syncing new maps_review to Google Sheets:', sheetErr);
+  }
   res.status(201).json(newReview);
 });
 
@@ -975,6 +1005,9 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
 app.patch('/api/maps_reviews/:id', async (req, res) => {
   const { id } = req.params;
   const updatePayload = { ...req.body };
+  if (req.body.reviewer_accounts !== undefined) {
+    updatePayload.reviewer_accounts = parseServerReviewerAccounts(req.body.reviewer_accounts);
+  }
 
   await updateOrderFields('Review_Orders', id, updatePayload);
   upsertCacheRow('Review_Orders', id, updatePayload);
@@ -1458,4 +1491,10 @@ async function startServer() {
   });
 }
 
-startServer();
+// Only start the standalone HTTP listener if not running as a Vercel Serverless Function
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
+export { app };
