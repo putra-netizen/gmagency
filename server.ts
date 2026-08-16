@@ -9,8 +9,8 @@ import path from 'path';
 if (!process.env.VERCEL && !fs.existsSync('.env')) {
   try {
     let envContent = '';
-    if (process.env.VITE_SUPABASE_URL) envContent += `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL}\n`;
-    if (process.env.VITE_SUPABASE_ANON_KEY) envContent += `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY}\n`;
+    if (process.env.VITE_SUPABASE_URL) envContent += `https://reonysrsoaepzykwwfzw.supabase.co=${process.env.VITE_SUPABASE_URL}\n`;
+    if (process.env.VITE_SUPABASE_ANON_KEY) envContent += `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM=${process.env.VITE_SUPABASE_ANON_KEY}\n`;
     if (process.env.GEMINI_API_KEY) envContent += `GEMINI_API_KEY=${process.env.GEMINI_API_KEY}\n`;
     if (process.env.APP_URL) envContent += `APP_URL=${process.env.APP_URL}\n`;
 
