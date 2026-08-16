@@ -18,3 +18,6 @@ View your app in AI Studio: https://ai.studio/apps/ae4d8ac1-0cc5-44a6-8235-1ffdd
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Vercel API deployment
+The Vercel build generates `api/server.js` from `api/server.ts` with esbuild before the Serverless Function is packaged. Do not remove `esbuild` from devDependencies or change `build:vercel` to only `vite build`.
