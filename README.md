@@ -1,23 +1,60 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# GM Agency — Google Spreadsheet backend
 
-# Run and deploy your AI Studio app
+The app uses Google Spreadsheet as the primary data source for orders, Shopee orders, and Maps reviews.
 
-This contains everything you need to run your app locally.
+## Local development
 
-View your app in AI Studio: https://ai.studio/apps/ae4d8ac1-0cc5-44a6-8235-1ffddd62a9f4
+```bash
+npm install
+npm run dev
+```
 
-## Run Locally
+## Vercel
 
-**Prerequisites:**  Node.js
+The Vercel API is a single catch-all Function:
 
+```text
+api/[...path].ts
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+It imports the Express app from the root `server.ts`, so these routes are handled by the same function:
 
-## Vercel API deployment
-The Vercel build generates `api/server.js` from `api/server.ts` with esbuild before the Serverless Function is packaged. Do not remove `esbuild` from devDependencies or change `build:vercel` to only `vite build`.
+```text
+/api/orders
+/api/shopee_orders
+/api/maps_reviews
+/api/products
+/api/dashboard/stats
+/api/sheets-webhook
+/api/sheets-config
+/api/sheets-sync-pull
+```
+
+The frontend SPA rewrite excludes `/api/*`, so API requests are never rewritten to `index.html`.
+
+### Environment variables
+
+```text
+GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/XXXX/exec
+SHEETS_WEBHOOK_SECRET=your-shared-secret
+```
+
+Apps Script must use the same `SHARED_SECRET` and the same spreadsheet ID in `Code.gs`.
+
+### Important repository rule
+
+Do not add these old API entrypoints back:
+
+```text
+api/index.js
+api/index.ts
+api/server.js
+api/server.ts
+api-server-source.ts
+```
+
+The only file inside `api/` should be:
+
+```text
+api/[...path].ts
+```

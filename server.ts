@@ -32,10 +32,11 @@ import { createClient } from '@supabase/supabase-js';
 import { getCachedRows, patchCacheRow, upsertCacheRow, invalidateCache } from './src/lib/sheetCache';
 import { updateOrderFields, appendOrderRow, normalizeSheetName, normalizeSheetRow, ordersSheetService, readLocalDatabase, writeLocalDatabase, getSheetsSyncConfig } from './src/lib/sheetsBridge';
 
+const SPREADSHEET_ONLY_MODE = true;
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
 
-const isSupabaseConfigured = !!(
+const isSupabaseConfigured = !SPREADSHEET_ONLY_MODE && !!(
   supabaseUrl && 
   supabaseAnonKey && 
   supabaseUrl !== 'YOUR_SUPABASE_URL' && 
