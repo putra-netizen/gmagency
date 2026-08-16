@@ -26,7 +26,6 @@ if (!process.env.VERCEL && !fs.existsSync('.env')) {
 dotenv.config();
 
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus } from './src/types';
 import { createClient } from '@supabase/supabase-js';
@@ -1504,6 +1503,7 @@ ${text}`,
 // --- VITE DEV / PRODUCTION INTERACTION ---
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa'
