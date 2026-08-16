@@ -2,17 +2,24 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-// Self-healing: if the user deletes the .env file, recreate it from process.env variables so Vite can build with correct variables
-if (!fs.existsSync('.env')) {
-  let envContent = '';
-  if (process.env.VITE_SUPABASE_URL) envContent += `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL}\n`;
-  if (process.env.VITE_SUPABASE_ANON_KEY) envContent += `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY}\n`;
-  if (process.env.GEMINI_API_KEY) envContent += `GEMINI_API_KEY=${process.env.GEMINI_API_KEY}\n`;
-  if (process.env.APP_URL) envContent += `APP_URL=${process.env.APP_URL}\n`;
-  
-  if (envContent) {
-    fs.writeFileSync('.env', envContent);
-    console.log('✨ Recreated .env from process.env variables');
+// Self-healing: if the user deletes the .env file, recreate it from process.env variables so Vite can build with correct variables.
+// SKIP on Vercel — serverless functions have a READ-ONLY filesystem, so writeFileSync here
+// would throw and crash the entire function on every single request. Vercel already injects
+// Environment Variables directly into process.env, so this recreation isn't needed there anyway.
+if (!process.env.VERCEL && !fs.existsSync('.env')) {
+  try {
+    let envContent = '';
+    if (process.env.VITE_SUPABASE_URL) envContent += `VITE_SUPABASE_URL=${process.env.VITE_SUPABASE_URL}\n`;
+    if (process.env.VITE_SUPABASE_ANON_KEY) envContent += `VITE_SUPABASE_ANON_KEY=${process.env.VITE_SUPABASE_ANON_KEY}\n`;
+    if (process.env.GEMINI_API_KEY) envContent += `GEMINI_API_KEY=${process.env.GEMINI_API_KEY}\n`;
+    if (process.env.APP_URL) envContent += `APP_URL=${process.env.APP_URL}\n`;
+
+    if (envContent) {
+      fs.writeFileSync('.env', envContent);
+      console.log('✨ Recreated .env from process.env variables');
+    }
+  } catch (err) {
+    console.warn('Could not recreate .env (non-fatal, continuing):', err);
   }
 }
 
@@ -74,20 +81,27 @@ function isDummyOrder(o: any): boolean {
 
 // Ensure database file exists
 function initDatabase() {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-  }
+  try {
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+    }
 
-  if (!fs.existsSync(DB_PATH)) {
-    const dbContent = {
-      products: INITIAL_PRODUCTS,
-      orders: [],
-      shopee_orders: [],
-      maps_reviews: []
-    };
+    if (!fs.existsSync(DB_PATH)) {
+      const dbContent = {
+        products: INITIAL_PRODUCTS,
+        orders: [],
+        shopee_orders: [],
+        maps_reviews: []
+      };
 
-    fs.writeFileSync(DB_PATH, JSON.stringify(dbContent, null, 2), 'utf-8');
-    console.log('Database initialized successfully in src/data/db.json');
+      fs.writeFileSync(DB_PATH, JSON.stringify(dbContent, null, 2), 'utf-8');
+      console.log('Database initialized successfully in src/data/db.json');
+    }
+  } catch (err) {
+    // Non-fatal: Vercel serverless functions have a read-only filesystem, so this
+    // can fail if db.json wasn't already bundled at this path. readDatabase() below
+    // already has its own fallback to an empty in-memory default if the file is missing.
+    console.warn('initDatabase: could not create db.json (non-fatal, continuing):', err);
   }
 }
 
