@@ -86,7 +86,7 @@
   "maps_reviews": [],
   "sheets_sync_config": {
     "enabled": true,
-    "webhookUrl": "https://script.google.com/macros/s/AKfycbymL56u8hvknGlaNK5rJx_u8a2P01hKwdRhSDcI4gwM0Go0DTC24W2d0ggtFgkSbxXtPg/exec",
-    "sharedSecret": "gmsolution_secret_2026"
+    "webhookUrl": "",
+    "sharedSecret": ""
   }
 }

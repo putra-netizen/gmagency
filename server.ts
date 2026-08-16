@@ -24,7 +24,7 @@ import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus } from './src/types';
 import { createClient } from '@supabase/supabase-js';
 import { getCachedRows, patchCacheRow, upsertCacheRow, invalidateCache } from './src/lib/sheetCache';
-import { updateOrderFields, appendOrderRow, normalizeSheetName, normalizeSheetRow, ordersSheetService, readLocalDatabase, writeLocalDatabase } from './src/lib/sheetsBridge';
+import { updateOrderFields, appendOrderRow, normalizeSheetName, normalizeSheetRow, ordersSheetService, readLocalDatabase, writeLocalDatabase, getSheetsSyncConfig } from './src/lib/sheetsBridge';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -1123,30 +1123,48 @@ app.post('/api/sheets-webhook', async (req, res) => {
   }
 });
 
-const EMBEDDED_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbymL56u8hvknGlaNK5rJx_u8a2P01hKwdRhSDcI4gwM0Go0DTC24W2d0ggtFgkSbxXtPg/exec';
-
 // GET SHEETS SYNC CONFIG
+// Menampilkan config yang BENERAN dipakai (env var diprioritaskan di atas db.json,
+// karena db.json tidak reliable persist di Vercel serverless).
 app.get('/api/sheets-config', (req, res) => {
-  const db = readLocalDatabase();
-  res.json(db.sheets_sync_config || { enabled: true, webhookUrl: EMBEDDED_SHEETS_URL, sharedSecret: 'gmsolution_secret_2026' });
+  const { webhookUrl, secret } = getSheetsSyncConfig();
+  const envConfigured = !!(process.env.GOOGLE_SHEETS_WEBHOOK_URL || process.env.SHEETS_WEBHOOK_URL || process.env.APPS_SCRIPT_URL);
+  res.json({
+    enabled: !!webhookUrl,
+    webhookUrl,
+    sharedSecret: secret,
+    source: envConfigured ? 'environment_variable' : (webhookUrl ? 'db.json (local dev only, may not persist on Vercel)' : 'not_configured')
+  });
 });
 
 // SAVE SHEETS SYNC CONFIG
+// CATATAN: di Vercel, penyimpanan ke db.json TIDAK RELIABLE (filesystem serverless
+// bersifat ephemeral). Untuk production, pasang GOOGLE_SHEETS_WEBHOOK_URL dan
+// SHEETS_WEBHOOK_SECRET sebagai Environment Variables di dashboard Vercel — itu
+// yang akan benar-benar dipakai (lihat getSheetsSyncConfig di sheetsBridge.ts).
+// Endpoint ini tetap berguna untuk development lokal.
 app.post('/api/sheets-config', (req, res) => {
   try {
     const { enabled, webhookUrl, sharedSecret } = req.body;
     const db = readLocalDatabase();
     db.sheets_sync_config = {
       enabled: enabled !== undefined ? !!enabled : true,
-      webhookUrl: (webhookUrl && webhookUrl.trim()) || EMBEDDED_SHEETS_URL,
-      sharedSecret: (sharedSecret || 'gmsolution_secret_2026').trim()
+      webhookUrl: (webhookUrl && webhookUrl.trim()) || '',
+      sharedSecret: (sharedSecret || '').trim()
     };
     writeLocalDatabase(db);
     invalidateCache('Web_Orders');
     invalidateCache('Shopee_Orders');
     invalidateCache('Review_Orders');
     clearServerSupabaseCache();
-    return res.json({ success: true, config: db.sheets_sync_config });
+    const envConfigured = !!(process.env.GOOGLE_SHEETS_WEBHOOK_URL || process.env.SHEETS_WEBHOOK_URL || process.env.APPS_SCRIPT_URL);
+    return res.json({
+      success: true,
+      config: db.sheets_sync_config,
+      warning: envConfigured
+        ? 'Environment variable GOOGLE_SHEETS_WEBHOOK_URL terdeteksi di server ini — nilai ENV VAR akan tetap dipakai (diprioritaskan), bukan yang barusan disimpan di sini.'
+        : undefined
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1156,8 +1174,9 @@ app.post('/api/sheets-config', (req, res) => {
 app.post('/api/sheets-sync-pull', async (req, res) => {
   try {
     const db = readLocalDatabase();
-    const webhookUrl = (req.body?.webhookUrl || db.sheets_sync_config?.webhookUrl || process.env.SHEETS_WEBHOOK_URL || EMBEDDED_SHEETS_URL).trim();
-    const secret = (req.body?.sharedSecret || db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026').trim();
+    const resolved = getSheetsSyncConfig();
+    const webhookUrl = (req.body?.webhookUrl || resolved.webhookUrl || '').trim();
+    const secret = (req.body?.sharedSecret || resolved.secret || '').trim();
 
     if (!webhookUrl || !webhookUrl.startsWith('http')) {
       return res.status(400).json({ error: 'URL Google Apps Script Web App atau Link Spreadsheet belum diisi dengan benar.' });

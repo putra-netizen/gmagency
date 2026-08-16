@@ -27,12 +27,8 @@ export function readLocalDatabase(): any {
       if (!parsed.orders) parsed.orders = [];
       if (!parsed.shopee_orders) parsed.shopee_orders = [];
       if (!parsed.maps_reviews) parsed.maps_reviews = [];
-      if (!parsed.sheets_sync_config || !parsed.sheets_sync_config.webhookUrl) {
-        parsed.sheets_sync_config = {
-          enabled: true,
-          webhookUrl: 'https://script.google.com/macros/s/AKfycbymL56u8hvknGlaNK5rJx_u8a2P01hKwdRhSDcI4gwM0Go0DTC24W2d0ggtFgkSbxXtPg/exec',
-          sharedSecret: 'gmsolution_secret_2026'
-        };
+      if (!parsed.sheets_sync_config) {
+        parsed.sheets_sync_config = { enabled: true, webhookUrl: '', sharedSecret: '' };
       }
       return parsed;
     }
@@ -46,8 +42,8 @@ export function readLocalDatabase(): any {
     maps_reviews: [],
     sheets_sync_config: {
       enabled: true,
-      webhookUrl: 'https://script.google.com/macros/s/AKfycbymL56u8hvknGlaNK5rJx_u8a2P01hKwdRhSDcI4gwM0Go0DTC24W2d0ggtFgkSbxXtPg/exec',
-      sharedSecret: 'gmsolution_secret_2026'
+      webhookUrl: '',
+      sharedSecret: ''
     }
   };
 }
@@ -58,6 +54,29 @@ export function writeLocalDatabase(data: any) {
   } catch (err) {
     console.error('Error writing db.json in sheetsBridge:', err);
   }
+}
+
+/**
+ * Resolve webhook URL + secret. ENV VARS ARE THE PRIMARY SOURCE because
+ * Vercel serverless functions have a read-only/ephemeral filesystem —
+ * writes to db.json (via Admin Panel "Simpan Konfigurasi") do NOT reliably
+ * persist across invocations/cold starts on Vercel. db.json is only used
+ * as a fallback for local development.
+ */
+export function getSheetsSyncConfig(): { webhookUrl: string; secret: string } {
+  const db = readLocalDatabase();
+  const webhookUrl =
+    process.env.GOOGLE_SHEETS_WEBHOOK_URL ||
+    process.env.SHEETS_WEBHOOK_URL ||
+    process.env.APPS_SCRIPT_URL ||
+    db.sheets_sync_config?.webhookUrl ||
+    '';
+  const secret =
+    process.env.SHEETS_WEBHOOK_SECRET ||
+    process.env.SHEETS_SHARED_SECRET ||
+    db.sheets_sync_config?.sharedSecret ||
+    '';
+  return { webhookUrl, secret };
 }
 
 /**
@@ -213,12 +232,7 @@ export async function getRows(sheetName: string): Promise<Row[]> {
   const norm = normalizeSheetName(sheetName);
   const db = readLocalDatabase();
   
-  const webhookUrl = db.sheets_sync_config?.webhookUrl || 
-    process.env.GOOGLE_SHEETS_WEBHOOK_URL || 
-    process.env.SHEETS_WEBHOOK_URL || 
-    process.env.APPS_SCRIPT_URL;
-    
-  const secret = db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026';
+  const { webhookUrl, secret } = getSheetsSyncConfig();
 
   // 1. Try Google Apps Script if configured
   if (webhookUrl && typeof webhookUrl === 'string' && webhookUrl.startsWith('http')) {
@@ -401,12 +415,7 @@ export function denormalizeToSheetFields(sheetName: string, internalFields: Reco
  */
 export async function appendOrderRow(sheetName: string, order: Row): Promise<any> {
   const norm = normalizeSheetName(sheetName);
-  const db = readLocalDatabase();
-  const webhookUrl = db.sheets_sync_config?.webhookUrl || 
-    process.env.GOOGLE_SHEETS_WEBHOOK_URL || 
-    process.env.SHEETS_WEBHOOK_URL || 
-    process.env.APPS_SCRIPT_URL;
-  const secret = db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026';
+  const { webhookUrl, secret } = getSheetsSyncConfig();
 
   if (!webhookUrl || typeof webhookUrl !== 'string' || !webhookUrl.startsWith('http')) {
     return { skipped: true, reason: 'No valid webhook URL' };
@@ -516,11 +525,7 @@ export async function appendOrderRow(sheetName: string, order: Row): Promise<any
 export async function updateOrderFields(sheetName: string, rowId: string, fields: Row): Promise<any> {
   const norm = normalizeSheetName(sheetName);
   const db = readLocalDatabase();
-  const webhookUrl = db.sheets_sync_config?.webhookUrl || 
-    process.env.GOOGLE_SHEETS_WEBHOOK_URL || 
-    process.env.SHEETS_WEBHOOK_URL || 
-    process.env.APPS_SCRIPT_URL;
-  const secret = db.sheets_sync_config?.sharedSecret || 'gmsolution_secret_2026';
+  const { webhookUrl, secret } = getSheetsSyncConfig();
 
   // 1. Sync to Google Apps Script if configured (denormalize to sheet header column names)
   if (webhookUrl && typeof webhookUrl === 'string' && webhookUrl.startsWith('http')) {
