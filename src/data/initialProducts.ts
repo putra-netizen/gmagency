@@ -1,0 +1,84 @@
+import { Product } from '../types';
+
+export const INITIAL_PRODUCTS: Product[] = [
+  {
+    id: 'gmaps-review',
+    name: 'Review Management Google Maps',
+    name_en: 'Google Maps Review Management',
+    description: 'Membantu bisnis mengelola reputasi Google Maps, mengajak pelanggan asli memberikan ulasan, dan menangani ulasan bermasalah sesuai kebijakan platform secara legal.',
+    description_en: 'Helps businesses manage Google Maps reputation, encourage genuine customers to leave feedback, and handle problematic reviews in full compliance with platform guidelines.',
+    price: 15000,
+    image_url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80',
+    whatsapp_number: '+6285921095666'
+  },
+  {
+    id: 'tripadvisor-review',
+    name: 'Review Management Tripadvisor',
+    name_en: 'Tripadvisor Review Management',
+    description: 'Membantu bisnis meningkatkan kepercayaan pelanggan melalui pengelolaan profil dan ulasan asli dari pelanggan di sektor hospitality.',
+    description_en: 'Helps hospitality businesses build customer trust through systematic profile management and genuine guest review collection.',
+    price: 20000,
+    image_url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80',
+    whatsapp_number: '+6285921095666'
+  },
+  {
+    id: 'appstore-review',
+    name: 'Review Management Play Store & App Store',
+    name_en: 'App Store & Play Store Review Management',
+    description: 'Membantu pengelolaan rating aplikasi, analisis feedback pengguna, serta strategi peningkatan reputasi aplikasi secara organik.',
+    description_en: 'Assists with app store ratings management, user feedback analysis, and organic strategies to enhance application reputational growth.',
+    price: 18000,
+    image_url: 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?auto=format&fit=crop&w=600&q=80',
+    whatsapp_number: '+6285921095666'
+  },
+  {
+    id: 'socmed-report',
+    name: 'Jasa Report Konten Sosial Media',
+    name_en: 'Social Media Content Reporting Service',
+    description: 'Bantuan pelaporan terhadap konten yang melanggar kebijakan platform sosial media secara legal dan sesuai regulasi platform.',
+    description_en: 'Professional and systematic reporting of policy-violating social media content, strictly within platform regulations.',
+    price: 25000,
+    image_url: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=600&q=80',
+    whatsapp_number: '+6285921095666'
+  },
+  {
+    id: 'digital-voting',
+    name: 'Voting / Polling Digital',
+    name_en: 'Digital Voting & Polling Support',
+    description: 'Layanan bantuan teknis dan optimasi untuk membuat campaign voting atau polling digital yang transparan dan aman.',
+    description_en: 'Technical and structural support services to establish secure, transparent, and authentic digital voting campaigns.',
+    price: 5000,
+    image_url: 'https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?auto=format&fit=crop&w=600&q=80',
+    whatsapp_number: '+6285921095666'
+  },
+  {
+    id: 'gmaps-creation',
+    name: 'Pembuatan Titik Google Maps',
+    name_en: 'Google Maps Location Creation',
+    description: 'Pembuatan titik lokasi baru, verifikasi, dan optimasi profil bisnis di Google Maps agar bisnis Anda lebih mudah ditemukan.',
+    description_en: 'Creation, official verification setup, and local SEO optimization for business listings on Google Maps.',
+    price: 150000,
+    image_url: 'https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?auto=format&fit=crop&w=600&q=80',
+    whatsapp_number: '+6285921095666'
+  },
+  {
+    id: 'gmaps-negative-appeal',
+    name: 'Pengajuan Penghapusan Ulasan Negatif Google Maps',
+    name_en: 'Google Maps Negative Review Removal Appeal',
+    description: 'Pendampingan hukum dan administratif untuk mengajukan banding penghapusan ulasan negatif yang melanggar Pedoman Konten Google (Spam/Palsu/Fitnah).',
+    description_en: 'Administrative and legal policy assistance to appeal the removal of unfair negative reviews that violate Google Guidelines.',
+    price: 100000,
+    image_url: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=600&q=80',
+    whatsapp_number: '+6285921095666'
+  },
+  {
+    id: 'socmed-comment',
+    name: 'Manajemen Komentar Sosial Media',
+    name_en: 'Social Media Comment Management',
+    description: 'Membantu meningkatkan engagement profil Anda melalui interaksi pelanggan organik, moderasi komentar, dan pembangunan komunitas digital.',
+    description_en: 'Enhance your brand engagement through natural public interactions, strategic moderations, and responsive customer relations.',
+    price: 10000,
+    image_url: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=600&q=80',
+    whatsapp_number: '+6285921095666'
+  }
+];
