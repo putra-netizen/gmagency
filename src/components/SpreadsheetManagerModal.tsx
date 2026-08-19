@@ -84,20 +84,50 @@ export function SpreadsheetManagerModal({
 
   // Handle live pull from Google Spreadsheet URL
   const handleSyncFromSheets = async () => {
+    const rawUrl = (sheetUrlInput || '').trim();
+    if (!rawUrl) {
+      setSyncResult({
+        success: false,
+        message: 'Mohon masukkan link Google Spreadsheet terlebih dahulu.'
+      });
+      return;
+    }
+
+    const match = rawUrl.match(/\/d\/([a-zA-Z0-9-_]+)/) || rawUrl.match(/id=([a-zA-Z0-9-_]+)/) || rawUrl.match(/key=([a-zA-Z0-9-_]+)/);
+    if (!match || !match[1]) {
+      setSyncResult({
+        success: false,
+        message: 'Format link Google Spreadsheet tidak valid. Link harus berisi https://docs.google.com/spreadsheets/d/...'
+      });
+      return;
+    }
+
     setIsSyncing(true);
     setSyncResult(null);
+
     try {
       // Save sheet URL first
-      const updated = saveSpreadsheetConfig({ sheetUrl: sheetUrlInput, lastSyncedAt: new Date().toISOString() });
+      const updated = saveSpreadsheetConfig({ sheetUrl: rawUrl, lastSyncedAt: new Date().toISOString() });
       setConfig(updated);
 
       const res = await fetch('/api/sheets/sync-from-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheetUrl: sheetUrlInput })
+        body: JSON.stringify({ sheetUrl: rawUrl })
       });
 
-      const data = await res.json();
+      const resText = await res.text();
+      let data: any = {};
+      try {
+        data = resText ? JSON.parse(resText) : {};
+      } catch (e) {
+        console.warn('Non-JSON server response:', resText);
+        if (resText.includes('<!DOCTYPE') || resText.includes('<html') || resText.includes('accounts.google.com')) {
+          throw new Error('Spreadsheet belum disetel ke akses publik. Buka Google Spreadsheet -> klik Bagikan (Share) -> ubah Akses Umum menjadi "Siapa saja yang memiliki link" sebagai Pelihat (Viewer)!');
+        }
+        throw new Error('Gagal membaca respon server. Pastikan link Google Spreadsheet benar dan memiliki akses publik.');
+      }
+
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Gagal sinkronisasi data dari Google Spreadsheet');
       }
@@ -314,6 +344,11 @@ export function SpreadsheetManagerModal({
                       className="w-full pl-10 pr-4 py-2.5 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 text-slate-800 dark:text-slate-200"
                     />
                   </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0"></span>
+                  <span><strong>Syarat Akses:</strong> Buka Spreadsheet → klik <strong>Bagikan (Share)</strong> → Ubah Akses Umum menjadi <strong>"Siapa saja yang memiliki link"</strong> sebagai <strong>Pelihat (Viewer)</strong>.</span>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">

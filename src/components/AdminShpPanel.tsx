@@ -1015,8 +1015,12 @@ Format Chat : ${data.notes || '-'}`;
     const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
     const updatedAccounts = [...currentAccounts, ...namesToAdd];
 
-    // Optimistically update UI immediately
-    setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
+    // Optimistically update UI immediately so count & progress bar increment in real-time
+    setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
+      ...r,
+      reviewer_accounts: updatedAccounts,
+      status: (r.status === 'PENDING' && updatedAccounts.length > 0) ? 'PROGRESS' : r.status
+    } : r));
     setTempAccountInput(prev => ({ ...prev, [reviewId]: '' }));
 
     try {

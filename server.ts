@@ -1211,126 +1211,299 @@ app.get('/api/sheets/export-csv', async (req, res) => {
   }
 });
 
+// Helper to parse CSV string into array of objects on server
+function parseServerCsvToRecords(csvText: string): Record<string, string>[] {
+  const lines: string[] = [];
+  let currentLine = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentLine += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+        currentLine += '"';
+      }
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (currentLine.trim()) lines.push(currentLine);
+      currentLine = '';
+      if (char === '\r' && nextChar === '\n') i++;
+    } else {
+      currentLine += char;
+    }
+  }
+  if (currentLine.trim()) lines.push(currentLine);
+  if (lines.length < 2) return [];
+
+  const parseRow = (rowStr: string): string[] => {
+    const cells: string[] = [];
+    let cell = '';
+    let inQ = false;
+    for (let i = 0; i < rowStr.length; i++) {
+      const c = rowStr[i];
+      const nc = rowStr[i + 1];
+      if (c === '"') {
+        if (inQ && nc === '"') {
+          cell += '"';
+          i++;
+        } else {
+          inQ = !inQ;
+        }
+      } else if (c === ',' && !inQ) {
+        cells.push(cell.trim());
+        cell = '';
+      } else {
+        cell += c;
+      }
+    }
+    cells.push(cell.trim());
+    return cells;
+  };
+
+  const headers = parseRow(lines[0]).map(h => h.trim().toLowerCase());
+  const results: Record<string, string>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const rowValues = parseRow(lines[i]);
+    const obj: Record<string, string> = {};
+    headers.forEach((header, idx) => {
+      obj[header] = rowValues[idx] || '';
+    });
+    results.push(obj);
+  }
+  return results;
+}
+
 // 5.2 SYNC & IMPORT LANGSUNG DARI GOOGLE SPREADSHEET URL (PULL)
 app.post('/api/sheets/sync-from-url', async (req, res) => {
   try {
-    const rawUrl = req.body.sheetUrl || 'https://docs.google.com/spreadsheets/d/1OQ38cPjGPNcc6G2lQuQLwDlXTQMIqoUvNN0jaWCZwHI/edit';
+    const rawUrl = (req.body.sheetUrl || '').trim() || 'https://docs.google.com/spreadsheets/d/1OQ38cPjGPNcc6G2lQuQLwDlXTQMIqoUvNN0jaWCZwHI/edit';
     
-    // Extract sheet ID
-    const match = rawUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    // Extract sheet ID & GID
+    const match = rawUrl.match(/\/d\/([a-zA-Z0-9-_]+)/) || rawUrl.match(/id=([a-zA-Z0-9-_]+)/) || rawUrl.match(/key=([a-zA-Z0-9-_]+)/);
     if (!match || !match[1]) {
-      return res.status(400).json({ error: 'Format link Google Spreadsheet tidak valid.' });
+      return res.status(400).json({ error: 'Format link Google Spreadsheet tidak valid. Pastikan link berisi https://docs.google.com/spreadsheets/d/...' });
     }
     const sheetId = match[1];
+    const gidMatch = rawUrl.match(/[#?&]gid=([0-9]+)/);
+    const gid = gidMatch ? gidMatch[1] : '0';
 
-    // Fetch as JSON GViz
-    const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
-    const response = await fetch(gvizUrl);
-    if (!response.ok) {
-      return res.status(400).json({ error: `Gagal mengakses Google Spreadsheet (HTTP ${response.status}). Pastikan hak akses disetel ke "Siapa saja yang memiliki link (Anyone with the link)"!` });
+    let processedReviews: MapsReview[] = [];
+    let rowsCount = 0;
+    let syncMethod = '';
+
+    // Method 1: Fetch via Google Spreadsheet CSV Export
+    try {
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+      const csvRes = await fetch(csvUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      if (csvRes.ok) {
+        const csvText = await csvRes.text();
+        if (csvText && !csvText.includes('<!DOCTYPE') && !csvText.includes('<html') && !csvText.includes('accounts.google.com')) {
+          const csvRecords = parseServerCsvToRecords(csvText);
+          if (csvRecords.length > 0) {
+            syncMethod = 'CSV Export';
+            rowsCount = csvRecords.length;
+
+            for (const r of csvRecords) {
+              const findKey = (keys: string[]) => {
+                for (const k of keys) {
+                  for (const rk of Object.keys(r)) {
+                    if (rk.toLowerCase().includes(k)) return r[rk];
+                  }
+                }
+                return '';
+              };
+
+              const rawId = findKey(['row_id', 'id']).trim();
+              const rawClient = findKey(['klien', 'client', 'nama klien', 'pembeli']).trim();
+              const rawMapsLink = findKey(['target link', 'maps', 'link maps', 'target_link']).trim();
+              const rawStore = findKey(['store', 'toko', 'nama toko', 'store_name']).trim();
+              const rawType = findKey(['tipe review', 'tipe', 'type', 'review_type']).trim();
+              const rawAccounts = findKey(['input progres akun', 'progres', 'akun', 'reviewer_accounts', 'reviewer']).trim();
+              const rawClue = findKey(['clue', 'catatan', 'notes']).trim();
+              const rawProof = findKey(['link bukti', 'bukti', 'proof', 'proof_link']).trim();
+              const rawStatus = findKey(['status']).trim().toUpperCase();
+              const rawTargetCount = findKey(['target akun', 'target_count', 'target', 'qty']).trim();
+              const rawCreatedAt = findKey(['tanggal', 'created_at', 'date']).trim();
+
+              if (!rawId && !rawClient && !rawMapsLink && !rawStore) continue;
+
+              const id = rawId || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
+              const client_name = rawClient || 'Pelanggan Google Maps';
+              const store_name = rawStore || 'MP';
+              const review_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' = (rawType.toUpperCase() === 'TRIPAD' || rawType.toUpperCase() === 'REVIEW_APPS') ? (rawType.toUpperCase() as 'TRIPAD' | 'REVIEW_APPS') : 'G_MAPS';
+              const maps_link = rawMapsLink || 'https://maps.google.com';
+              const reviewer_accounts = parseServerReviewerAccounts(rawAccounts);
+              const notes = rawClue || '';
+              const proof_link = rawProof || '';
+
+              let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PENDING';
+              if (rawStatus.includes('DONE')) status = 'DONE';
+              else if (rawStatus.includes('PROGRESS') || rawStatus.includes('PROGRES')) status = 'PROGRESS';
+              else if (rawStatus.includes('READY')) status = 'READY';
+              else if (rawStatus.includes('REKAP')) status = 'SUDAH DIREKAP';
+
+              const parsedTarget = Number(rawTargetCount);
+              const target_count = (!isNaN(parsedTarget) && parsedTarget > 0) ? parsedTarget : Math.max(1, reviewer_accounts.length || 10);
+              const created_at = rawCreatedAt || new Date().toISOString();
+
+              processedReviews.push({
+                id,
+                client_name,
+                maps_link,
+                target_count,
+                reviewer_accounts,
+                proof_link,
+                status,
+                created_at,
+                store_name,
+                notes,
+                review_type
+              });
+            }
+          }
+        }
+      }
+    } catch (csvErr) {
+      console.warn('CSV export fetch fallback to GViz:', csvErr);
     }
 
-    const text = await response.text();
-    const jsonStart = text.indexOf('{');
-    const jsonEnd = text.lastIndexOf('}');
-    if (jsonStart === -1 || jsonEnd === -1) {
-      return res.status(400).json({ error: 'Data Google Spreadsheet tidak dapat di-parse.' });
+    // Method 2: GViz JSON fallback
+    if (processedReviews.length === 0) {
+      const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${gid}`;
+      const response = await fetch(gvizUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+
+      const text = await response.text();
+
+      if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('accounts.google.com') || text.includes('Sign in')) {
+        return res.status(400).json({
+          error: 'Spreadsheet belum disetel ke publik. Buka Google Spreadsheet -> Klik tombol "Bagikan" (Share) di pojok kanan atas -> Ubah Akses Umum menjadi "Siapa saja yang memiliki link" (Anyone with the link) sebagai "Pelihat" (Viewer)!'
+        });
+      }
+
+      const jsonStart = text.indexOf('{');
+      const jsonEnd = text.lastIndexOf('}');
+      if (jsonStart === -1 || jsonEnd === -1) {
+        return res.status(400).json({ 
+          error: 'Data Google Spreadsheet tidak dapat diakses atau di-parse. Pastikan hak akses Spreadsheet disetel ke "Siapa saja yang memiliki link" (Anyone with the link).' 
+        });
+      }
+
+      const parsedGviz = JSON.parse(text.substring(jsonStart, jsonEnd + 1));
+      if (parsedGviz.status === 'error') {
+        return res.status(400).json({
+          error: `Google Sheets Error: ${parsedGviz.errors?.[0]?.message || 'Akses ditolak. Pastikan akses disetel ke Siapa saja yang memiliki link.'}`
+        });
+      }
+
+      syncMethod = 'GViz JSON';
+      const cols = (parsedGviz.table?.cols || []).map((c: any) => (c.label || c.id || '').trim());
+      const rows = parsedGviz.table?.rows || [];
+      rowsCount = rows.length;
+
+      let colIdxMap: Record<string, number> = {};
+      cols.forEach((colName: string, idx: number) => {
+        const lower = colName.toLowerCase();
+        if (lower.includes('row_id') || lower.includes('id') || lower === 'a') colIdxMap['id'] = idx;
+        if (lower.includes('tanggal') || lower.includes('date') || lower === 'b') colIdxMap['created_at'] = idx;
+        if (lower.includes('klien') || lower.includes('client') || lower === 'c') colIdxMap['client_name'] = idx;
+        if (lower.includes('store') || lower.includes('toko') || lower === 'd') colIdxMap['store_name'] = idx;
+        if (lower.includes('tipe review') || lower.includes('type') || lower === 'e') colIdxMap['review_type'] = idx;
+        if (lower.includes('target link') || lower.includes('maps') || lower === 'f') colIdxMap['maps_link'] = idx;
+        if (lower.includes('input progres') || lower.includes('akun') || lower === 'g') colIdxMap['reviewer_accounts'] = idx;
+        if (lower.includes('clue') || lower.includes('catatan') || lower === 'h') colIdxMap['notes'] = idx;
+        if (lower.includes('link bukti') || lower.includes('bukti') || lower === 'i') colIdxMap['proof_link'] = idx;
+        if (lower.includes('status') || lower === 'j') colIdxMap['status'] = idx;
+        if (lower.includes('updated_at') || lower === 'k') colIdxMap['updated_at'] = idx;
+        if (lower.includes('target akun') || lower.includes('target_count') || lower === 'l') colIdxMap['target_count'] = idx;
+      });
+
+      if (colIdxMap['id'] === undefined) colIdxMap['id'] = 0;
+      if (colIdxMap['created_at'] === undefined) colIdxMap['created_at'] = 1;
+      if (colIdxMap['client_name'] === undefined) colIdxMap['client_name'] = 2;
+      if (colIdxMap['store_name'] === undefined) colIdxMap['store_name'] = 3;
+      if (colIdxMap['review_type'] === undefined) colIdxMap['review_type'] = 4;
+      if (colIdxMap['maps_link'] === undefined) colIdxMap['maps_link'] = 5;
+      if (colIdxMap['reviewer_accounts'] === undefined) colIdxMap['reviewer_accounts'] = 6;
+      if (colIdxMap['notes'] === undefined) colIdxMap['notes'] = 7;
+      if (colIdxMap['proof_link'] === undefined) colIdxMap['proof_link'] = 8;
+      if (colIdxMap['status'] === undefined) colIdxMap['status'] = 9;
+      if (colIdxMap['updated_at'] === undefined) colIdxMap['updated_at'] = 10;
+      if (colIdxMap['target_count'] === undefined) colIdxMap['target_count'] = 11;
+
+      for (const r of rows) {
+        const cells = r.c || [];
+        const getVal = (idx: number) => {
+          if (!cells[idx]) return '';
+          return cells[idx].v !== null && cells[idx].v !== undefined ? cells[idx].v : '';
+        };
+
+        const rawId = String(getVal(colIdxMap['id'])).trim();
+        const rawClient = String(getVal(colIdxMap['client_name'])).trim();
+        const rawMapsLink = String(getVal(colIdxMap['maps_link'])).trim();
+
+        if (!rawId && !rawClient && !rawMapsLink) continue;
+
+        const id = rawId || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100));
+        const client_name = rawClient || 'Pelanggan Google Maps';
+        const store_name = String(getVal(colIdxMap['store_name'])).trim() || 'MP';
+        const review_type_raw = String(getVal(colIdxMap['review_type'])).trim().toUpperCase();
+        const review_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' = (review_type_raw === 'TRIPAD' || review_type_raw === 'REVIEW_APPS') ? (review_type_raw as 'TRIPAD' | 'REVIEW_APPS') : 'G_MAPS';
+        const maps_link = rawMapsLink || 'https://maps.google.com';
+        const reviewer_accounts = parseServerReviewerAccounts(getVal(colIdxMap['reviewer_accounts']));
+        const notes = String(getVal(colIdxMap['notes'])).trim();
+        const proof_link = String(getVal(colIdxMap['proof_link'])).trim();
+        
+        let statusRaw = String(getVal(colIdxMap['status'])).trim().toUpperCase();
+        if (!statusRaw || statusRaw === 'NULL') statusRaw = 'PENDING';
+        let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PENDING';
+        if (statusRaw.includes('DONE')) status = 'DONE';
+        else if (statusRaw.includes('PROGRESS') || statusRaw.includes('PROGRES')) status = 'PROGRESS';
+        else if (statusRaw.includes('READY')) status = 'READY';
+        else if (statusRaw.includes('REKAP')) status = 'SUDAH DIREKAP';
+
+        const targetCountNum = Number(getVal(colIdxMap['target_count']));
+        const target_count = (!isNaN(targetCountNum) && targetCountNum > 0) ? targetCountNum : Math.max(1, reviewer_accounts.length || 10);
+        const created_at = String(getVal(colIdxMap['created_at'])).trim() || new Date().toISOString();
+
+        processedReviews.push({
+          id,
+          client_name,
+          maps_link,
+          target_count,
+          reviewer_accounts,
+          proof_link,
+          status,
+          created_at,
+          store_name,
+          notes,
+          review_type
+        });
+      }
     }
 
-    const parsedGviz = JSON.parse(text.substring(jsonStart, jsonEnd + 1));
-    const cols = (parsedGviz.table?.cols || []).map((c: any) => (c.label || c.id || '').trim());
-    const rows = parsedGviz.table?.rows || [];
-
-    // Identify column indices
-    let colIdxMap: Record<string, number> = {};
-    cols.forEach((colName: string, idx: number) => {
-      const lower = colName.toLowerCase();
-      if (lower.includes('row_id') || lower.includes('id') || lower === 'a') colIdxMap['id'] = idx;
-      if (lower.includes('tanggal') || lower.includes('date') || lower === 'b') colIdxMap['created_at'] = idx;
-      if (lower.includes('klien') || lower.includes('client') || lower === 'c') colIdxMap['client_name'] = idx;
-      if (lower.includes('store') || lower.includes('toko') || lower === 'd') colIdxMap['store_name'] = idx;
-      if (lower.includes('tipe review') || lower.includes('type') || lower === 'e') colIdxMap['review_type'] = idx;
-      if (lower.includes('target link') || lower.includes('maps') || lower === 'f') colIdxMap['maps_link'] = idx;
-      if (lower.includes('input progres') || lower.includes('akun') || lower === 'g') colIdxMap['reviewer_accounts'] = idx;
-      if (lower.includes('clue') || lower.includes('catatan') || lower === 'h') colIdxMap['notes'] = idx;
-      if (lower.includes('link bukti') || lower.includes('bukti') || lower === 'i') colIdxMap['proof_link'] = idx;
-      if (lower.includes('status') || lower === 'j') colIdxMap['status'] = idx;
-      if (lower.includes('updated_at') || lower === 'k') colIdxMap['updated_at'] = idx;
-      if (lower.includes('target akun') || lower.includes('target_count') || lower === 'l') colIdxMap['target_count'] = idx;
-    });
-
-    // Default indices if headers were generic A, B, C...
-    if (colIdxMap['id'] === undefined) colIdxMap['id'] = 0;
-    if (colIdxMap['created_at'] === undefined) colIdxMap['created_at'] = 1;
-    if (colIdxMap['client_name'] === undefined) colIdxMap['client_name'] = 2;
-    if (colIdxMap['store_name'] === undefined) colIdxMap['store_name'] = 3;
-    if (colIdxMap['review_type'] === undefined) colIdxMap['review_type'] = 4;
-    if (colIdxMap['maps_link'] === undefined) colIdxMap['maps_link'] = 5;
-    if (colIdxMap['reviewer_accounts'] === undefined) colIdxMap['reviewer_accounts'] = 6;
-    if (colIdxMap['notes'] === undefined) colIdxMap['notes'] = 7;
-    if (colIdxMap['proof_link'] === undefined) colIdxMap['proof_link'] = 8;
-    if (colIdxMap['status'] === undefined) colIdxMap['status'] = 9;
-    if (colIdxMap['updated_at'] === undefined) colIdxMap['updated_at'] = 10;
-    if (colIdxMap['target_count'] === undefined) colIdxMap['target_count'] = 11;
+    if (processedReviews.length === 0) {
+      return res.status(400).json({
+        error: 'Tidak ada baris data review yang ditemukan di Google Spreadsheet tersebut.'
+      });
+    }
 
     let upsertedCount = 0;
     const db = readDatabase();
     if (!db.maps_reviews) db.maps_reviews = [];
-
-    const processedReviews: MapsReview[] = [];
-
-    for (const r of rows) {
-      const cells = r.c || [];
-      const getVal = (idx: number) => {
-        if (!cells[idx]) return '';
-        return cells[idx].v !== null && cells[idx].v !== undefined ? cells[idx].v : '';
-      };
-
-      const rawId = String(getVal(colIdxMap['id'])).trim();
-      const rawClient = String(getVal(colIdxMap['client_name'])).trim();
-      const rawMapsLink = String(getVal(colIdxMap['maps_link'])).trim();
-
-      // Skip empty row
-      if (!rawId && !rawClient && !rawMapsLink) continue;
-
-      const id = rawId || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100));
-      const client_name = rawClient || 'Pelanggan Google Maps';
-      const store_name = String(getVal(colIdxMap['store_name'])).trim() || 'MP';
-      const review_type_raw = String(getVal(colIdxMap['review_type'])).trim().toUpperCase();
-      const review_type = (review_type_raw === 'TRIPAD' || review_type_raw === 'REVIEW_APPS') ? review_type_raw : 'G_MAPS';
-      const maps_link = rawMapsLink || 'https://maps.google.com';
-      const reviewer_accounts = parseServerReviewerAccounts(getVal(colIdxMap['reviewer_accounts']));
-      const notes = String(getVal(colIdxMap['notes'])).trim();
-      const proof_link = String(getVal(colIdxMap['proof_link'])).trim();
-      
-      let statusRaw = String(getVal(colIdxMap['status'])).trim().toUpperCase();
-      if (!statusRaw || statusRaw === 'NULL') statusRaw = 'PENDING';
-      let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PENDING';
-      if (statusRaw.includes('DONE')) status = 'DONE';
-      else if (statusRaw.includes('PROGRESS') || statusRaw.includes('PROGRES')) status = 'PROGRESS';
-      else if (statusRaw.includes('READY')) status = 'READY';
-      else if (statusRaw.includes('REKAP')) status = 'SUDAH DIREKAP';
-
-      const targetCountNum = Number(getVal(colIdxMap['target_count']));
-      const target_count = (!isNaN(targetCountNum) && targetCountNum > 0) ? targetCountNum : Math.max(1, reviewer_accounts.length || 10);
-      const created_at = String(getVal(colIdxMap['created_at'])).trim() || new Date().toISOString();
-
-      const reviewItem: MapsReview = {
-        id,
-        client_name,
-        maps_link,
-        target_count,
-        reviewer_accounts,
-        proof_link,
-        status,
-        created_at,
-        store_name,
-        notes,
-        review_type
-      };
-
-      processedReviews.push(reviewItem);
-    }
 
     // Upsert into Supabase in chunks
     if (supabase && processedReviews.length > 0) {
@@ -1358,15 +1531,15 @@ app.post('/api/sheets/sync-from-url', async (req, res) => {
     }
     writeDatabase(db);
 
-    res.json({
+    return res.json({
       success: true,
-      message: `Berhasil menyinkronkan ${upsertedCount} baris data dari Google Spreadsheet!`,
+      message: `Berhasil menyinkronkan ${upsertedCount} baris data dari Google Spreadsheet! (${syncMethod})`,
       totalSynced: upsertedCount,
-      totalRowsInSheet: rows.length
+      totalRowsInSheet: rowsCount
     });
   } catch (err: any) {
     console.error('Sync from URL error:', err);
-    res.status(500).json({ error: 'Gagal menyinkronkan dari Google Spreadsheet: ' + err.message });
+    return res.status(500).json({ error: 'Gagal menyinkronkan dari Google Spreadsheet: ' + err.message });
   }
 });
 

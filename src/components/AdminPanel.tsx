@@ -1139,8 +1139,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
     const updatedAccounts = [...currentAccounts, ...namesToAdd];
 
-    // Optimistically update UI immediately
-    setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
+    // Optimistically update UI immediately so count & progress bar increment in real-time
+    setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
+      ...r,
+      reviewer_accounts: updatedAccounts,
+      status: (r.status === 'PENDING' && updatedAccounts.length > 0) ? 'PROGRESS' : r.status
+    } : r));
     setTempAccountInput(prev => ({ ...prev, [reviewId]: '' }));
 
     try {
@@ -3133,26 +3137,52 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                       />
                                     </div>
 
-                                    <div className="flex gap-1">
+                                    <div className="flex gap-1.5 items-center">
                                       <input
                                         type="text"
                                         placeholder="Nama Akun Reviewer"
                                         value={tempAccountInput[review.id] || ''}
-                                        onChange={e => setTempAccountInput(prev => ({ ...prev, [review.id]: e.target.value }))}
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          if (val.endsWith(',') || val.endsWith('\n')) {
+                                            const cleanNames = val.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+                                            if (cleanNames.length > 0) {
+                                              const targetReview = mapsReviews.find(r => r.id === review.id);
+                                              if (targetReview) {
+                                                const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
+                                                const updatedAccounts = [...currentAccounts, ...cleanNames];
+                                                setMapsReviews(prev => prev.map(r => r.id === review.id ? { 
+                                                  ...r, 
+                                                  reviewer_accounts: updatedAccounts,
+                                                  status: (r.status === 'PENDING' && updatedAccounts.length > 0) ? 'PROGRESS' : r.status
+                                                } : r));
+                                                setTempAccountInput(prev => ({ ...prev, [review.id]: '' }));
+                                                dbUpdateMapsReview(review.id, { reviewer_accounts: updatedAccounts }).catch(console.error);
+                                                return;
+                                              }
+                                            }
+                                          }
+                                          setTempAccountInput(prev => ({ ...prev, [review.id]: val }));
+                                        }}
                                         onKeyDown={e => {
                                           if (e.key === 'Enter') {
                                             e.preventDefault();
                                             handleAddReviewerAccount(review.id);
                                           }
                                         }}
-                                        className="rounded border border-slate-200 px-2 py-1 text-[10px] outline-none focus:border-blue-500 flex-grow font-sans bg-white min-w-0"
+                                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 flex-grow font-sans bg-white min-w-0"
                                       />
                                       <button
                                         type="button"
+                                        onPointerDown={(e) => {
+                                          e.preventDefault();
+                                          handleAddReviewerAccount(review.id);
+                                        }}
                                         onClick={() => handleAddReviewerAccount(review.id)}
-                                        className="bg-blue-600 text-white rounded p-1 hover:bg-blue-700 transition-colors shrink-0 cursor-pointer flex items-center justify-center"
+                                        className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg px-2.5 py-1.5 transition-all shrink-0 cursor-pointer flex items-center justify-center min-w-[34px] min-h-[30px] shadow-sm font-bold"
+                                        title="Tambah Akun (Progres +1)"
                                       >
-                                        <Plus className="h-3 w-3" />
+                                        <Plus className="h-4 w-4 stroke-[2.5]" />
                                       </button>
                                     </div>
 

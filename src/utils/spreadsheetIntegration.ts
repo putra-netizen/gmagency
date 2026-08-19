@@ -214,14 +214,14 @@ export const generateOrdersCsv = (orders: Order[]): string => {
       escapeCsv(row.id),
       escapeCsv(row.created_at ? row.created_at.substring(0, 19).replace('T', ' ') : ''),
       escapeCsv(row.buyer_name || ''),
-      escapeCsv((row as any).whatsapp_number || (row as any).phone_number || ''),
+      escapeCsv((row as any).whatsapp_number || row.phone_number || ''),
       escapeCsv(row.product_name || ''),
-      escapeCsv(row.target_link || (row as any).target_spam_phone || ''),
-      escapeCsv(row.price || (row as any).total_price || 0),
+      escapeCsv(row.target_link || row.target_spam_phone || ''),
+      escapeCsv((row as any).price || row.total_price || 0),
       escapeCsv((row as any).payment_method || 'QRIS'),
-      escapeCsv(row.status || (row as any).payment_status || 'PENDING'),
+      escapeCsv((row as any).status || row.payment_status || 'PENDING'),
       escapeCsv(row.notes || ''),
-      escapeCsv((row as any).created_by || '')
+      escapeCsv(row.created_by || '')
     ];
     rows.push(values.join(','));
   }
