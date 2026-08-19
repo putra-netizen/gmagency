@@ -24,6 +24,8 @@ import {
   getSpreadsheetConfig, 
   saveSpreadsheetConfig, 
   generateMapsReviewsCsv, 
+  generateShopeeOrdersCsv,
+  generateOrdersCsv,
   downloadCsvFile, 
   generateGoogleAppsScript,
   parseCsvText,
@@ -121,11 +123,16 @@ export function SpreadsheetManagerModal({
 
   // Handle CSV Export
   const handleExport = (type: 'maps_reviews' | 'shopee_orders' | 'orders') => {
+    const today = new Date().toISOString().slice(0, 10);
     if (type === 'maps_reviews') {
       const csv = generateMapsReviewsCsv(mapsReviews);
-      downloadCsvFile(`GM_Agency_Maps_Reviews_${new Date().toISOString().slice(0, 10)}.csv`, csv);
-    } else {
-      window.location.href = `/api/sheets/export-csv?type=${type}`;
+      downloadCsvFile(`GM_Agency_Maps_Reviews_${today}.csv`, csv);
+    } else if (type === 'shopee_orders') {
+      const csv = generateShopeeOrdersCsv(shopeeOrders);
+      downloadCsvFile(`GM_Agency_Shopee_Orders_${today}.csv`, csv);
+    } else if (type === 'orders') {
+      const csv = generateOrdersCsv(orders);
+      downloadCsvFile(`GM_Agency_Orders_${today}.csv`, csv);
     }
   };
 

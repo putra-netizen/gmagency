@@ -45,8 +45,15 @@ import {
   Search,
   Database,
   Users,
+  Download,
+  FileSpreadsheet,
   X
 } from 'lucide-react';
+import { 
+  generateShopeeOrdersCsv, 
+  generateMapsReviewsCsv, 
+  downloadCsvFile 
+} from '../utils/spreadsheetIntegration';
 
 interface AdminShpPanelProps {
   currentLang: 'id' | 'en';

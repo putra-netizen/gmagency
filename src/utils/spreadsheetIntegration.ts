@@ -136,6 +136,100 @@ export const generateMapsReviewsCsv = (reviews: MapsReview[]): string => {
 };
 
 /**
+ * Generate CSV text for Shopee Orders matching standardized table columns
+ */
+export const generateShopeeOrdersCsv = (orders: ShopeeOrder[]): string => {
+  const headers = [
+    'row_id',
+    'TANGGAL',
+    'NAMA TOKO',
+    'PEMBELI',
+    'TIPE JASA',
+    'QTY',
+    'TARGET LINK',
+    'STATUS KERJA',
+    'WORKER',
+    'WORK ORDER',
+    'CATATAN',
+    'ADMIN BY'
+  ];
+
+  const escapeCsv = (val: any) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val);
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  const rows = [headers.join(',')];
+
+  for (const row of orders) {
+    const values = [
+      escapeCsv(row.id),
+      escapeCsv(row.created_at ? row.created_at.substring(0, 19).replace('T', ' ') : ''),
+      escapeCsv(row.store_name || ''),
+      escapeCsv(row.buyer_name || ''),
+      escapeCsv(row.service_type || ''),
+      escapeCsv(row.quantity || 1),
+      escapeCsv(row.target_link || ''),
+      escapeCsv(row.status || 'PENDING'),
+      escapeCsv(row.worker_id || ''),
+      escapeCsv(row.work_order || ''),
+      escapeCsv(row.notes || ''),
+      escapeCsv(row.created_by || '')
+    ];
+    rows.push(values.join(','));
+  }
+
+  return rows.join('\r\n');
+};
+
+/**
+ * Generate CSV text for General Web Orders
+ */
+export const generateOrdersCsv = (orders: Order[]): string => {
+  const headers = [
+    'row_id',
+    'TANGGAL',
+    'PEMBELI',
+    'NO WHATSAPP',
+    'LAYANAN',
+    'LINK TARGET',
+    'HARGA',
+    'METODE BAYAR',
+    'STATUS BAYAR',
+    'CATATAN',
+    'ADMIN BY'
+  ];
+
+  const escapeCsv = (val: any) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val);
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  const rows = [headers.join(',')];
+
+  for (const row of orders) {
+    const values = [
+      escapeCsv(row.id),
+      escapeCsv(row.created_at ? row.created_at.substring(0, 19).replace('T', ' ') : ''),
+      escapeCsv(row.buyer_name || ''),
+      escapeCsv((row as any).whatsapp_number || (row as any).phone_number || ''),
+      escapeCsv(row.product_name || ''),
+      escapeCsv(row.target_link || (row as any).target_spam_phone || ''),
+      escapeCsv(row.price || (row as any).total_price || 0),
+      escapeCsv((row as any).payment_method || 'QRIS'),
+      escapeCsv(row.status || (row as any).payment_status || 'PENDING'),
+      escapeCsv(row.notes || ''),
+      escapeCsv((row as any).created_by || '')
+    ];
+    rows.push(values.join(','));
+  }
+
+  return rows.join('\r\n');
+};
+
+/**
  * Trigger file download directly in browser
  */
 export const downloadCsvFile = (filename: string, csvContent: string) => {
