@@ -23,7 +23,7 @@ import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { FinanceView } from './FinanceView';
 import { SpreadsheetManagerModal } from './SpreadsheetManagerModal';
-import { DEFAULT_SPREADSHEET_URL, generateAppsScriptCode } from '../utils/spreadsheetIntegration';
+import { DEFAULT_SPREADSHEET_URL, generateAppsScriptCode, parseAccountsList } from '../utils/spreadsheetIntegration';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
@@ -705,6 +705,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     client_name: true,
     review_type: true,
     maps_link: true,
+    progress: true,
+    done_count: true,
     target_count: true,
     reviewer_accounts: true,
     worker: true,
@@ -814,10 +816,17 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       fileName = `target_maps_reviews_${new Date().toISOString().substring(0, 10)}.csv`;
       const colDefs = [
         { key: 'worker', label: 'Worker' },
+        { key: 'created_at', label: 'Tanggal Input' },
         { key: 'client_name', label: 'NAMA KLIEN' },
         { key: 'store_name', label: 'Nama Toko' },
-        { key: 'target_count', label: 'Target' },
+        { key: 'review_type', label: 'Tipe Review' },
         { key: 'maps_link', label: 'Link MAPS' },
+        { key: 'progress', label: 'PROGRES (Selesai/Target)' },
+        { key: 'done_count', label: 'Jumlah Selesai' },
+        { key: 'target_count', label: 'Target Akun' },
+        { key: 'reviewer_accounts', label: 'Daftar Akun Reviewer' },
+        { key: 'notes', label: 'Clue / Catatan' },
+        { key: 'status', label: 'Status' },
         { key: 'created_by', label: 'ADMIN BY' },
         { key: 'proof_link', label: 'Link Bukti' },
       ];
@@ -825,12 +834,28 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       headers = activeCols.map(c => c.label);
 
       rows = filteredMapsExport.map(item => {
+        const accounts = Array.isArray(item.reviewer_accounts)
+          ? item.reviewer_accounts
+          : (typeof item.reviewer_accounts === 'string' && item.reviewer_accounts
+            ? item.reviewer_accounts.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+            : []);
+        const doneCount = accounts.length;
+        const targetCount = item.target_count || 1;
+        const progressFormatted = `${doneCount}/${targetCount}`;
+
         return activeCols.map(col => {
           if (col.key === 'worker') return 'prima';
+          if (col.key === 'created_at') return item.created_at ? item.created_at.substring(0, 19).replace('T', ' ') : '';
           if (col.key === 'client_name') return item.client_name || '';
           if (col.key === 'store_name') return item.store_name || '';
-          if (col.key === 'target_count') return String(item.target_count || 0);
+          if (col.key === 'review_type') return item.review_type || 'G_MAPS';
           if (col.key === 'maps_link') return item.maps_link || '';
+          if (col.key === 'progress') return progressFormatted;
+          if (col.key === 'done_count') return String(doneCount);
+          if (col.key === 'target_count') return String(targetCount);
+          if (col.key === 'reviewer_accounts') return accounts.join(', ');
+          if (col.key === 'notes') return item.notes || '';
+          if (col.key === 'status') return item.status || 'PENDING';
           if (col.key === 'created_by') return getSlotIndicatorName(item.created_by || '');
           if (col.key === 'proof_link') return item.proof_link || '';
           return '';
@@ -1102,14 +1127,17 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
   // Add Reviewer Account Name to specific Maps Review item
   const handleAddReviewerAccount = async (reviewId: string) => {
-    const nameToAdd = tempAccountInput[reviewId]?.trim();
-    if (!nameToAdd) return;
+    const rawInput = tempAccountInput[reviewId]?.trim();
+    if (!rawInput) return;
 
     const targetReview = mapsReviews.find(r => r.id === reviewId);
     if (!targetReview) return;
 
+    const parsedNames = parseAccountsList(rawInput);
+    const namesToAdd = parsedNames.length > 0 ? parsedNames : [rawInput];
+
     const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
-    const updatedAccounts = [...currentAccounts, nameToAdd];
+    const updatedAccounts = [...currentAccounts, ...namesToAdd];
 
     // Optimistically update UI immediately
     setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
@@ -1129,7 +1157,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
           reviewer_accounts: finalAccounts
         } : r));
       }
-      logAdminShpAction('Main Admin', 'Tambah Reviewer', `Menambahkan akun reviewer "${nameToAdd}" ke review store "${targetReview.store_name}"`);
+      logAdminShpAction('Main Admin', 'Tambah Reviewer', `Menambahkan ${namesToAdd.length} akun reviewer ("${namesToAdd.join(', ')}") ke review store "${targetReview.store_name}"`);
     } catch (err) {
       console.error(err);
       // Revert optimistic update on failure

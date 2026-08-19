@@ -737,22 +737,22 @@ function parseServerReviewerAccounts(input: any): string[] {
   }
   if (typeof input === 'string') {
     const trimmed = input.trim();
-    if (!trimmed) return [];
+    if (!trimmed || trimmed === '[]' || trimmed === '{}') return [];
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) return parseServerReviewerAccounts(parsed);
       if (typeof parsed === 'string') return parseServerReviewerAccounts(parsed);
     } catch {}
-    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
       const inner = trimmed.slice(1, -1).trim();
       if (!inner) return [];
       const items = inner.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
       return items.filter(s => s.length > 0);
     }
-    if (trimmed.includes(',')) {
-      return trimmed.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    if (trimmed.includes(',') || trimmed.includes('\n')) {
+      return trimmed.split(/[\n,]+/).map(s => s.trim().replace(/^["']|["']$/g, '')).filter(s => s.length > 0);
     }
-    return [trimmed];
+    return [trimmed.replace(/^["']|["']$/g, '')];
   }
   return [];
 }

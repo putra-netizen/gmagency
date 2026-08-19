@@ -52,7 +52,8 @@ import {
 import { 
   generateShopeeOrdersCsv, 
   generateMapsReviewsCsv, 
-  downloadCsvFile 
+  downloadCsvFile,
+  parseAccountsList
 } from '../utils/spreadsheetIntegration';
 
 interface AdminShpPanelProps {
@@ -1002,14 +1003,17 @@ Format Chat : ${data.notes || '-'}`;
 
   // Add Reviewer Account Name to specific Maps Review item
   const handleAddReviewerAccount = async (reviewId: string) => {
-    const nameToAdd = tempAccountInput[reviewId]?.trim();
-    if (!nameToAdd) return;
+    const rawInput = tempAccountInput[reviewId]?.trim();
+    if (!rawInput) return;
 
     const targetReview = mapsReviews.find(r => r.id === reviewId);
     if (!targetReview) return;
 
+    const parsedNames = parseAccountsList(rawInput);
+    const namesToAdd = parsedNames.length > 0 ? parsedNames : [rawInput];
+
     const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
-    const updatedAccounts = [...currentAccounts, nameToAdd];
+    const updatedAccounts = [...currentAccounts, ...namesToAdd];
 
     // Optimistically update UI immediately
     setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
@@ -1030,7 +1034,7 @@ Format Chat : ${data.notes || '-'}`;
         } : r));
       }
       if (currentAdminUser) {
-        logAdminShpAction(currentAdminUser, 'Tambah Reviewer', `Menambahkan akun reviewer "${nameToAdd}" ke review store "${targetReview.store_name}"`);
+        logAdminShpAction(currentAdminUser, 'Tambah Reviewer', `Menambahkan ${namesToAdd.length} akun reviewer ("${namesToAdd.join(', ')}") ke review store "${targetReview.store_name}"`);
       }
     } catch (err) {
       console.error(err);
