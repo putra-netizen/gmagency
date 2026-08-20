@@ -1210,7 +1210,20 @@ export async function dbGetShopeeOrders(limit: number = 10000, forceRefresh: boo
   }
 
   const filtered = list.filter(o => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
-  return filtered.map(deserializeStatusAndNotes);
+  const deserialized = filtered.map(deserializeStatusAndNotes);
+  return deserialized.map(order => {
+    const dt = new Date(order.created_at || Date.now());
+    const m = dt.getMonth() + 1;
+    if ((m === 6 || m === 7) && order.status !== 'DONE') {
+      const updated = { ...order, status: 'DONE' as const };
+      updateLocalStorageShopeeOrder(updated);
+      if (isSupabaseConfigured && supabase && !supabaseFailed) {
+        supabase.from('shopee_orders').update({ status: 'DONE' }).eq('id', order.id).catch(() => {});
+      }
+      return updated;
+    }
+    return order;
+  });
 }
 
 export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
@@ -1367,6 +1380,57 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
     return result;
   }
   throw new Error('Shopee order not found in local storage fallback');
+}
+
+export async function dbBulkSetShopeeOrdersDone(params: {
+  targetPeriod?: 'june_july';
+  specificIds?: string[];
+  year?: number;
+}): Promise<{ success: boolean; updatedCount: number; updatedIds: string[] }> {
+  clearSupabaseCache('shopee_orders');
+
+  try {
+    const res = await fetch('/api/shopee_orders/bulk_done', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (err) {
+    console.warn('Failed to call /api/shopee_orders/bulk_done:', err);
+  }
+
+  // Client-side fallback for Supabase + LocalStorage
+  let count = 0;
+  const updatedIds: string[] = [];
+  const localList = getLocalShopeeOrders();
+
+  for (const item of localList) {
+    let match = false;
+    if (params.specificIds && params.specificIds.includes(item.id)) {
+      match = true;
+    } else if (params.targetPeriod === 'june_july') {
+      const dt = new Date(item.created_at || Date.now());
+      const month = dt.getMonth() + 1;
+      if (month === 6 || month === 7) {
+        match = true;
+      }
+    }
+
+    if (match) {
+      count++;
+      updatedIds.push(item.id);
+      updateLocalStorageShopeeOrder({ ...item, status: 'DONE' });
+      if (isSupabaseConfigured && supabase && !supabaseFailed) {
+        supabase.from('shopee_orders').update({ status: 'DONE' }).eq('id', item.id).catch(console.error);
+      }
+    }
+  }
+
+  return { success: true, updatedCount: count, updatedIds };
 }
 
 export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
