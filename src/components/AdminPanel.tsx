@@ -10,7 +10,7 @@ import { TRANSLATIONS } from '../lib/translations';
 import { 
   dbGetProducts, dbCreateProduct, dbUpdateProduct, dbDeleteProduct,
   dbGetOrders, dbCreateOrder, dbUpdateOrder, dbDeleteOrder, dbGetDashboardStats,
-  dbGetShopeeOrders, dbCreateShopeeOrder, dbUpdateShopeeOrder, dbDeleteShopeeOrder, dbBulkSetShopeeOrdersDone,
+  dbGetShopeeOrders, dbCreateShopeeOrder, dbUpdateShopeeOrder, dbDeleteShopeeOrder,
   dbGetMapsReviews, dbCreateMapsReview, dbGetMapsReviews as dbGetMapsReviewsOriginal, dbUpdateMapsReview, dbDeleteMapsReview,
   dbUploadProductImage
 } from '../lib/supabase';

@@ -6,7 +6,6 @@ import {
   dbCreateShopeeOrder, 
   dbUpdateShopeeOrder, 
   dbDeleteShopeeOrder, 
-  dbBulkSetShopeeOrdersDone,
   dbGetMapsReviews, 
   dbCreateMapsReview, 
   dbUpdateMapsReview, 
@@ -918,25 +917,6 @@ Format Chat : ${data.notes || '-'}`;
     } catch (err) {
       console.error(err);
       toast.error('Gagal memperbarui worker.');
-    }
-  };
-
-  const handleUpdateShopeeStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE') => {
-    // Optimistic update
-    setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
-
-    try {
-      const updated = await dbUpdateShopeeOrder(id, { status });
-      if (updated) {
-        setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, ...updated, status: updated.status || status } : o));
-      }
-      toast.success(currentLang === 'id' ? `Status Shopee diubah ke ${status}` : `Shopee status updated to ${status}`);
-      if (currentAdminUser) {
-        logAdminShpAction(currentAdminUser, 'Update Status Shopee', `Mengubah status order ${id} menjadi ${status}`);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Gagal memperbarui status Shopee');
     }
   };
 
@@ -1910,7 +1890,7 @@ Format Chat : ${data.notes || '-'}`;
                                 />
                               </td>
 
-                              {/* Assign Worker Select, Status & Delete Action */}
+                              {/* Assign Worker Select & Delete Action */}
                               <td className="px-4 py-3 text-center space-y-2">
                                 <select
                                   value={order.worker_id || ''}
@@ -1926,29 +1906,6 @@ Format Chat : ${data.notes || '-'}`;
                                   {WORKERS.map(w => (
                                     <option key={w} value={w}>{w.toUpperCase()}</option>
                                   ))}
-                                </select>
-
-                                <select
-                                  value={order.status || 'PENDING'}
-                                  onChange={(e) => handleUpdateShopeeStatus(order.id, e.target.value as any)}
-                                  disabled={order.created_by !== undefined && order.created_by !== currentAdminUser}
-                                  className={`w-full rounded-lg border px-2 py-1 text-[10px] font-bold outline-none cursor-pointer ${
-                                    order.status === 'DONE'
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : order.status === 'PROGRESS'
-                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
-                                      : order.status === 'READY'
-                                      ? 'bg-white text-slate-700 border-slate-300'
-                                      : order.status === 'SUDAH DIREKAP'
-                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                      : 'bg-sky-50 text-sky-700 border-sky-200'
-                                  }`}
-                                >
-                                  <option value="PENDING">PENDING</option>
-                                  <option value="PROGRESS">PROGRESS</option>
-                                  <option value="READY">READY</option>
-                                  <option value="SUDAH DIREKAP">SUDAH DIREKAP</option>
-                                  <option value="DONE">DONE</option>
                                 </select>
 
                                 <div className="flex items-center justify-between gap-1.5 px-0.5">

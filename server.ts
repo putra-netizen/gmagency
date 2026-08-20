@@ -598,51 +598,6 @@ app.delete('/api/orders/:id', async (req, res) => {
   res.json({ success: true, message: 'Order deleted and blacklisted' });
 });
 
-// Helper function to auto-update June & July Shopee orders to DONE in Supabase & db.json
-async function autoUpdateJuneJulyShopeeOrders() {
-  try {
-    if (supabase) {
-      const allShopee = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, 10000, true);
-      const toUpdate = allShopee.filter((item: any) => {
-        const dt = new Date(item.created_at || item.createdAt || Date.now());
-        const month = dt.getMonth() + 1; // 6 = June, 7 = July
-        return (month === 6 || month === 7) && item.status !== 'DONE';
-      });
-
-      for (const item of toUpdate) {
-        await supabase
-          .from('shopee_orders')
-          .update({ status: 'DONE' })
-          .eq('id', item.id);
-      }
-      if (toUpdate.length > 0) {
-        clearServerSupabaseCache('shopee_orders');
-        console.log(`Auto-updated ${toUpdate.length} June/July Shopee orders to DONE in Supabase.`);
-      }
-    }
-
-    const db = readDatabase();
-    if (Array.isArray(db.shopee_orders)) {
-      let localUpdated = 0;
-      db.shopee_orders = db.shopee_orders.map((item: any) => {
-        const dt = new Date(item.created_at || item.createdAt || Date.now());
-        const month = dt.getMonth() + 1;
-        if ((month === 6 || month === 7) && item.status !== 'DONE') {
-          localUpdated++;
-          return { ...item, status: 'DONE' };
-        }
-        return item;
-      });
-      if (localUpdated > 0) {
-        writeDatabase(db);
-        console.log(`Auto-updated ${localUpdated} June/July Shopee orders to DONE in local DB.`);
-      }
-    }
-  } catch (err) {
-    console.error('Error auto-updating June/July Shopee orders:', err);
-  }
-}
-
 // --- SHOPEE ORDERS API ---
 app.get('/api/shopee_orders', async (req, res) => {
   const limit = Number(req.query.limit) || 10000;
@@ -653,16 +608,7 @@ app.get('/api/shopee_orders', async (req, res) => {
     try {
       const data = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, limit);
       if (data) {
-        const filtered = data
-          .filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id))
-          .map((o: any) => {
-            const dt = new Date(o.created_at || o.createdAt || Date.now());
-            const m = dt.getMonth() + 1;
-            if (m === 6 || m === 7) {
-              return { ...o, status: 'DONE' };
-            }
-            return o;
-          });
+        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
         return res.json(filtered);
       }
     } catch (err) {
@@ -670,16 +616,7 @@ app.get('/api/shopee_orders', async (req, res) => {
     }
   }
 
-  const filteredLocal = (db.shopee_orders || [])
-    .filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id))
-    .map((o: any) => {
-      const dt = new Date(o.created_at || o.createdAt || Date.now());
-      const m = dt.getMonth() + 1;
-      if (m === 6 || m === 7) {
-        return { ...o, status: 'DONE' };
-      }
-      return o;
-    });
+  const filteredLocal = (db.shopee_orders || []).filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
   res.json(filteredLocal);
 });
 
@@ -788,86 +725,6 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
   writeDatabase(db);
 
   res.json({ success: true, message: 'Shopee order deleted and blacklisted' });
-});
-
-app.post('/api/shopee_orders/bulk_done', async (req, res) => {
-  try {
-    const { targetPeriod, specificIds, year } = req.body;
-    let updatedCount = 0;
-    const updatedIds: string[] = [];
-
-    if (supabase) {
-      try {
-        const allShopee = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, 10000, true);
-        const toUpdate: any[] = [];
-
-        for (const item of allShopee) {
-          if (specificIds && Array.isArray(specificIds) && specificIds.length > 0) {
-            if (specificIds.includes(item.id)) {
-              toUpdate.push(item);
-            }
-          } else if (targetPeriod === 'june_july') {
-            const dt = new Date(item.created_at || item.createdAt || Date.now());
-            const month = dt.getMonth() + 1; // 6 = June, 7 = July
-            const itemYear = dt.getFullYear();
-            if ((month === 6 || month === 7) && (!year || itemYear === Number(year))) {
-              toUpdate.push(item);
-            }
-          }
-        }
-
-        for (const item of toUpdate) {
-          const { error } = await supabase
-            .from('shopee_orders')
-            .update({ status: 'DONE' })
-            .eq('id', item.id);
-          if (!error) {
-            updatedCount++;
-            updatedIds.push(item.id);
-          }
-        }
-        clearServerSupabaseCache('shopee_orders');
-      } catch (err) {
-        console.error('Supabase bulk done exception:', err);
-      }
-    }
-
-    const db = readDatabase();
-    if (Array.isArray(db.shopee_orders)) {
-      db.shopee_orders = db.shopee_orders.map((item: any) => {
-        let match = false;
-        if (specificIds && Array.isArray(specificIds) && specificIds.length > 0) {
-          match = specificIds.includes(item.id);
-        } else if (targetPeriod === 'june_july') {
-          const dt = new Date(item.created_at || item.createdAt || Date.now());
-          const month = dt.getMonth() + 1;
-          const itemYear = dt.getFullYear();
-          if ((month === 6 || month === 7) && (!year || itemYear === Number(year))) {
-            match = true;
-          }
-        }
-        if (match) {
-          if (!updatedIds.includes(item.id)) {
-            updatedCount++;
-            updatedIds.push(item.id);
-          }
-          return { ...item, status: 'DONE' };
-        }
-        return item;
-      });
-      writeDatabase(db);
-    }
-
-    res.json({
-      success: true,
-      updatedCount,
-      updatedIds,
-      message: `Berhasil mengubah ${updatedCount} pesanan Shopee menjadi status DONE.`
-    });
-  } catch (error) {
-    console.error('Error in bulk_done:', error);
-    res.status(500).json({ error: String(error) });
-  }
 });
 
 // Helper for robust reviewer_accounts parsing in server
@@ -1750,7 +1607,6 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`GM AGENCY Server listening on http://0.0.0.0:${PORT}`);
-    autoUpdateJuneJulyShopeeOrders();
   });
 }
 
