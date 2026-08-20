@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from '../utils/toast';
 
-export const FINANCE_WEB_URL = 'https://laporanfinancegm.vercel.app/';
+export const FINANCE_WEB_URL = 'https://pay.gmsolution.store';
 
 /**
  * Authentication check helper for Finance Access
