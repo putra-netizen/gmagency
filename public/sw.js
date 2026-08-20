@@ -1,19 +1,7 @@
-// Simple Service Worker for GM AGENCY PWA
-const CACHE_NAME = 'gm-agency-v1';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json'
-];
+// Service Worker for GM AGENCY PWA
+const CACHE_NAME = 'gm-agency-v2';
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS).catch((err) => {
-        console.warn('Pre-cache error:', err);
-      });
-    })
-  );
   self.skipWaiting();
 });
 
@@ -33,10 +21,30 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Let the browser fetch naturally but fall back to cache if offline
+  const url = new URL(e.request.url);
+
+  // Do not intercept non-GET, API calls, Vite dev tools, or cross-origin requests
+  if (
+    e.request.method !== 'GET' ||
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src') ||
+    url.pathname.startsWith('/node_modules') ||
+    url.origin !== self.location.origin
+  ) {
+    return;
+  }
+
+  // Network-first strategy with safe fallback
   e.respondWith(
-    fetch(e.request).catch(() => {
-      return caches.match(e.request);
+    fetch(e.request).catch(async () => {
+      const cached = await caches.match(e.request);
+      if (cached) return cached;
+      if (e.request.mode === 'navigate') {
+        const fallback = await caches.match('/');
+        if (fallback) return fallback;
+      }
+      return new Response('Network error occurred', { status: 503, statusText: 'Service Unavailable' });
     })
   );
 });

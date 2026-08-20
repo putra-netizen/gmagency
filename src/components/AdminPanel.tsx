@@ -767,12 +767,12 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
           if (col.key === 'id') return item.id || '';
           if (col.key === 'created_at') return item.created_at ? item.created_at.substring(0, 16).replace('T', ' ') : '-';
           if (col.key === 'buyer_name') return item.buyer_name || '';
-          if (col.key === 'whatsapp_number') return item.whatsapp_number || '';
+          if (col.key === 'whatsapp_number') return item.phone_number || '';
           if (col.key === 'product_name') return item.product_name || '';
-          if (col.key === 'target_link') return item.target_link || '';
-          if (col.key === 'price') return String(item.price || 0);
-          if (col.key === 'payment_method') return item.payment_method || '';
-          if (col.key === 'status') return item.status || '';
+          if (col.key === 'target_link') return item.target_link || item.target_spam_phone || '';
+          if (col.key === 'price') return String(item.total_price || 0);
+          if (col.key === 'payment_method') return item.payment_status || '';
+          if (col.key === 'status') return item.worker_status || item.payment_status || '';
           if (col.key === 'notes') return item.notes || '';
           if (col.key === 'created_by') return getSlotIndicatorName(item.created_by || '');
           return '';
@@ -805,8 +805,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
           if (col.key === 'service_type') return item.service_type || '';
           if (col.key === 'quantity') return String(item.quantity || 1);
           if (col.key === 'target_link') return item.target_link || '';
-          if (col.key === 'job_status') return item.job_status || '';
-          if (col.key === 'worker_assigned') return item.worker_assigned ? getSlotIndicatorName(item.worker_assigned) : '-';
+          if (col.key === 'job_status') return item.status || '';
+          if (col.key === 'worker_assigned') return item.worker_id ? getSlotIndicatorName(item.worker_id) : '-';
           if (col.key === 'notes') return item.notes || '';
           if (col.key === 'created_by') return getSlotIndicatorName(item.created_by || '');
           return '';
@@ -834,10 +834,11 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       headers = activeCols.map(c => c.label);
 
       rows = filteredMapsExport.map(item => {
-        const accounts = Array.isArray(item.reviewer_accounts)
-          ? item.reviewer_accounts
-          : (typeof item.reviewer_accounts === 'string' && item.reviewer_accounts
-            ? item.reviewer_accounts.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+        const rawAccounts: any = item.reviewer_accounts;
+        const accounts: string[] = Array.isArray(rawAccounts)
+          ? rawAccounts
+          : (typeof rawAccounts === 'string' && rawAccounts
+            ? rawAccounts.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean)
             : []);
         const doneCount = accounts.length;
         const targetCount = item.target_count || 1;
@@ -1720,11 +1721,11 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
             {(() => {
               // Calculate realtime operational stats (Web + Shopee)
               const onProgressCount = 
-                orders.filter(o => o.status !== 'DONE').length +
+                orders.filter(o => o.payment_status !== 'PAID' && o.worker_status !== 'done').length +
                 shopeeOrders.filter(s => s.status !== 'DONE').length;
 
               const completedCount = 
-                orders.filter(o => o.status === 'DONE').length +
+                orders.filter(o => o.payment_status === 'PAID' || o.worker_status === 'done').length +
                 shopeeOrders.filter(s => s.status === 'DONE').length;
 
               const totalOpOrders = orders.length + shopeeOrders.length;
@@ -3088,7 +3089,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                               <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                                 review.review_type === 'G_MAPS'
                                   ? 'bg-red-50 text-red-700 border border-red-100'
-                                  : review.review_type === 'TRIPADVISOR' || review.review_type === 'REVIEW_TRIPAD'
+                                  : (review.review_type === 'TRIPAD' || (review.review_type as string) === 'TRIPADVISOR' || (review.review_type as string) === 'REVIEW_TRIPAD')
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                                   : 'bg-violet-50 text-violet-700 border border-violet-100'
                               }`}>

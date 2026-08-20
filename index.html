@@ -11,11 +11,14 @@
     <link rel="icon" type="image/png" href="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png" />
     <title>GmAgency</title>
     <script>
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && window.self === window.top) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
-            .then((reg) => console.log('Service Worker registered with scope:', reg.scope))
-            .catch((err) => console.warn('Service Worker registration failed:', err));
+            .then((reg) => {
+              // Ensure update
+              reg.update().catch(() => {});
+            })
+            .catch((err) => console.warn('Service Worker registration skipped:', err));
         });
       }
     </script>
