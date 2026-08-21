@@ -49,11 +49,17 @@ const PORT = 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Disable HTTP caching on all API routes to ensure real-time accuracy
+// Enable CORS and disable caching on all API routes to ensure cross-origin real-time sync with G Management
 app.use('/api', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
   next();
 });
 
@@ -786,6 +792,83 @@ app.get('/api/maps_reviews', async (req, res) => {
       reviewer_accounts: parseServerReviewerAccounts(o.reviewer_accounts)
     }));
   res.json(filteredLocal);
+});
+
+// Dedicated Real-time Endpoint for G Management Payroll Integration
+app.get('/api/worker_payroll_stats', async (req, res) => {
+  const monthFilter = req.query.month as string; // Optional: e.g. '2026-08'
+  const ratePerSlot = Number(req.query.rate) || 220;
+  const db = readDatabase();
+  const deletedMaps = db.deleted_maps_reviews || [];
+  let allMaps: any[] = [];
+
+  if (supabase) {
+    try {
+      const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, 10000);
+      if (data) {
+        allMaps = data
+          .map((item: any) => ({
+            ...item,
+            reviewer_accounts: parseServerReviewerAccounts(item.reviewer_accounts)
+          }))
+          .filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
+      }
+    } catch (err) {
+      console.error('Supabase payroll stats fetch error:', err);
+    }
+  }
+
+  if (allMaps.length === 0) {
+    allMaps = (db.maps_reviews || [])
+      .filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id))
+      .map((o: any) => ({
+        ...o,
+        reviewer_accounts: parseServerReviewerAccounts(o.reviewer_accounts)
+      }));
+  }
+
+  // Filter by month if specified
+  const filteredOrders = monthFilter
+    ? allMaps.filter((item: any) => {
+        const dateStr = item.created_at || '';
+        return dateStr.startsWith(monthFilter);
+      })
+    : allMaps;
+
+  // Calculate pure progressed slots (the front number in "4 / 25", i.e. reviewer_accounts.length)
+  let totalSlotHandled = 0;
+  const orderDetails = filteredOrders.map((item: any) => {
+    const accounts = Array.isArray(item.reviewer_accounts) ? item.reviewer_accounts : [];
+    const progressCount = accounts.length;
+    const targetCount = Number(item.target_count) || Number(item.target_review) || 0;
+    totalSlotHandled += progressCount;
+
+    return {
+      id: item.id,
+      client_name: item.client_name || item.store_name || 'Tanpa Nama',
+      target_count: targetCount,
+      progress_count: progressCount,
+      subtotal_nominal: progressCount * ratePerSlot,
+      created_at: item.created_at || ''
+    };
+  });
+
+  const totalNominal = totalSlotHandled * ratePerSlot;
+
+  res.json({
+    status: 'success',
+    timestamp: new Date().toISOString(),
+    filter_month: monthFilter || 'ALL',
+    rate_per_slot: ratePerSlot,
+    total_slot_handled: totalSlotHandled,
+    total_nominal: totalNominal,
+    workers: [
+      { name: 'jincu', slot_handled: totalSlotHandled, nominal: totalNominal },
+      { name: 'era', slot_handled: totalSlotHandled, nominal: totalNominal }
+    ],
+    orders_count: filteredOrders.length,
+    orders: orderDetails
+  });
 });
 
 app.post('/api/maps_reviews', async (req, res) => {
