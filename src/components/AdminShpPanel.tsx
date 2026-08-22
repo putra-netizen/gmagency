@@ -55,6 +55,7 @@ import {
   downloadCsvFile,
   parseAccountsList
 } from '../utils/spreadsheetIntegration';
+import { triggerBatchMapsReviewsSync } from '../utils/sheetsSyncHelper';
 
 interface AdminShpPanelProps {
   currentLang: 'id' | 'en';
@@ -395,6 +396,7 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [shopeeOrders, setShopeeOrders] = useState<ShopeeOrder[]>([]);
   const [mapsReviews, setMapsReviews] = useState<MapsReview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncingAllSheets, setIsSyncingAllSheets] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'maps_review' } | null>(null);
   const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
@@ -1134,6 +1136,27 @@ Format Chat : ${data.notes || '-'}`;
     } catch (err) {
       console.error(err);
       toast.error('Gagal menghapus data.');
+    }
+  };
+
+  const handleSyncAllMapsReviewsToSheets = async () => {
+    if (mapsReviews.length === 0) {
+      toast.error('Tidak ada data Maps Review untuk disinkronkan.');
+      return;
+    }
+    setIsSyncingAllSheets(true);
+    try {
+      const success = await triggerBatchMapsReviewsSync(mapsReviews);
+      if (success) {
+        toast.success(`Berhasil menyinkronkan ${mapsReviews.length} data ke Spreadsheet!`);
+      } else {
+        toast.error('Gagal menyinkronkan. Pastikan URL Webhook aktif.');
+      }
+    } catch (err) {
+      console.error('Error syncing all to sheets:', err);
+      toast.error('Terjadi kendala saat sinkronisasi.');
+    } finally {
+      setIsSyncingAllSheets(false);
     }
   };
 
@@ -2149,16 +2172,28 @@ Format Chat : ${data.notes || '-'}`;
                  {/* TABLE PROGRESS & LIST (8 columns) */}
                  <div ref={mapsQueueRef} className="lg:col-span-8 space-y-4 scroll-mt-24">
                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                     <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                     <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                        <div className="flex items-center gap-2.5">
                          <span className="h-2 w-2 rounded-full bg-blue-500" />
                          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
                            Progres Target Review (G Maps, Tripadvisor & Review Apps)
                          </h3>
                        </div>
-                       <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                         {filteredMapsReviews.length} / {mapsReviews.length} Data
-                       </span>
+                       <div className="flex items-center gap-2">
+                         <button
+                           type="button"
+                           onClick={handleSyncAllMapsReviewsToSheets}
+                           disabled={isSyncingAllSheets}
+                           title="Kirim ulang / Sinkronkan seluruh data Maps Review saat ini ke Google Spreadsheet"
+                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold border border-emerald-200 transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                         >
+                           <RefreshCw className={`h-3.5 w-3.5 text-emerald-600 ${isSyncingAllSheets ? 'animate-spin' : ''}`} />
+                           <span>{isSyncingAllSheets ? 'Menyinkronkan...' : 'Sinkronkan Semua ke Sheet'}</span>
+                         </button>
+                         <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                           {filteredMapsReviews.length} / {mapsReviews.length} Data
+                         </span>
+                       </div>
                      </div>
  
                      {/* Search & Sort Bar for Maps Reviews */}
