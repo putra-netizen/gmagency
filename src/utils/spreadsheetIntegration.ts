@@ -319,7 +319,7 @@ export const parseCsvText = (csvText: string): Record<string, string>[] => {
 };
 
 /**
- * Generate Google Apps Script code for 2-way real-time syncing and Dropdown Status
+ * Generate Google Apps Script code for 2-way real-time syncing and Dropdown Status (Optional Webhook method)
  */
 export const generateGoogleAppsScript = (webhookUrl: string): string => {
   return `/**
@@ -334,7 +334,7 @@ export const generateGoogleAppsScript = (webhookUrl: string): string => {
  * 5. Selesai! Setiap Anda mengedit status atau akun di Spreadsheet, data di web otomatis terupdate!
  */
 
-var WEBHOOK_URL = "${webhookUrl || 'https://' + window.location.host + '/api/sheets/webhook'}";
+var WEBHOOK_URL = "${webhookUrl || 'https://' + (typeof window !== 'undefined' ? window.location.host : '') + '/api/sheets/webhook'}";
 
 /**
  * 1. TRIGGER OTOMATIS: Dijalankan setiap kali ada sel yang diedit di Google Sheet
@@ -403,7 +403,7 @@ function setupSheetAutomation() {
   ];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length)
-    .setBackground('#1e293b')
+    .setBackground('#0f172a')
     .setFontColor('#ffffff')
     .setFontWeight('bold');
 
@@ -423,6 +423,196 @@ function setupSheetAutomation() {
 };
 
 export const generateAppsScriptCode = generateGoogleAppsScript;
+
+/**
+ * ALTERNATIF 1 (TANPA WEBHOOK):
+ * Generate Kode Google Apps Script (.gs) Mandiri yang langsung berisi data lengkap.
+ * Pengguna hanya perlu Paste kode ini di Apps Script dan klik "Jalankan" (Run).
+ * Data langsung terisi 100% tanpa deploy Web App, tanpa webhook, tanpa URL eksternal!
+ */
+export const generateDirectDataAppsScript = (reviews: MapsReview[]): string => {
+  const headers = [
+    "row_id", "TANGGAL", "KLIEN", "STORE", "TIPE REVIEW", 
+    "TARGET LINK", "INPUT PROGRES AKUN", "CLUE", "LINK BUKTI", 
+    "STATUS", "updated_at", "TARGET AKUN"
+  ];
+
+  const rows = reviews.map(r => {
+    const acc = r.reviewer_accounts 
+      ? (Array.isArray(r.reviewer_accounts) ? JSON.stringify(r.reviewer_accounts) : String(r.reviewer_accounts)) 
+      : '[]';
+    return [
+      r.id,
+      r.created_at || new Date().toISOString(),
+      r.client_name || '',
+      r.store_name || 'MP',
+      r.review_type || 'G_MAPS',
+      r.maps_link || '',
+      acc,
+      r.notes || '',
+      r.proof_link || '',
+      r.status || 'PROGRESS',
+      r.updated_at || r.created_at || new Date().toISOString(),
+      Number(r.target_count || (r as any).target_review || 1)
+    ];
+  });
+
+  return `/**
+ * ==============================================================================
+ * GM AGENCY - SCRIPT PENGISI SPREADSHEET INSTAN (100% TANPA WEBHOOK)
+ * ==============================================================================
+ * Total Data: ${reviews.length} Maps Reviews
+ * Dibuat pada: ${new Date().toLocaleString('id-ID')}
+ * 
+ * 🚀 CARA PAKAI (SANGAT MUDAH):
+ * 1. Di Google Spreadsheet Anda, buka menu "Ekstensi" (Extensions) -> "Apps Script".
+ * 2. Hapus semua teks yang ada, lalu TEMPEL (PASTE) seluruh script ini.
+ * 3. Klik tombol "Simpan" (Ctrl+S / Ikon Disket).
+ * 4. Di bagian atas, pilih fungsi "isiDataSpreadsheetOtomatis", lalu klik "Jalankan" (Run).
+ * 
+ * ✨ KELEBIHAN:
+ * - 100% Tanpa Deploy Web App
+ * - Bebas error doPost / CORS / Timeout
+ * - Otomatis membuat Dropdown Status & Header rapi
+ */
+
+function isiDataSpreadsheetOtomatis() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  var headers = ${JSON.stringify(headers)};
+  
+  var rowsData = ${JSON.stringify(rows, null, 2)};
+  
+  var allData = [headers].concat(rowsData);
+  
+  // Bersihkan data lama dan tulis seluruh data baru
+  sheet.clearContents();
+  sheet.getRange(1, 1, allData.length, headers.length).setValues(allData);
+  
+  // Format Header (Navy Elegan & Teks Putih)
+  var headerRange = sheet.getRange(1, 1, 1, headers.length);
+  headerRange.setBackground('#0f172a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setHorizontalAlignment('center');
+  
+  // Freeze baris header pertama
+  sheet.setFrozenRows(1);
+  
+  // Dropdown Status di Kolom J (STATUS)
+  if (rowsData.length > 0) {
+    var statusRange = sheet.getRange(2, 10, rowsData.length, 1);
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE'], true)
+      .setAllowInvalid(true)
+      .build();
+    statusRange.setDataValidation(rule);
+  }
+  
+  // Notifikasi sukses di Google Sheet
+  SpreadsheetApp.getUi().alert('✅ Berhasil mengisi ' + rowsData.length + ' baris data Maps Review ke Spreadsheet!');
+}
+`;
+};
+
+/**
+ * ALTERNATIF 2 (TANPA WEBHOOK):
+ * Generate Menu Custom di Google Spreadsheet "🚀 GM Agency" -> "🔄 Tarik Data dari Web Admin".
+ * Tinggal pasang di Apps Script sekali, dan pengguna bisa klik menu tersebut kapan saja di Spreadsheet!
+ */
+export const generateSpreadsheetMenuScript = (customUrl?: string): string => {
+  const baseUrl = customUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://ais-dev-va7r3aabcl2a4tok24yig5-984852773462.asia-southeast1.run.app');
+  const exportUrl = `${baseUrl}/api/sheets/export-csv?type=maps_reviews`;
+
+  return `/**
+ * ==============================================================================
+ * GM AGENCY - MENU OTOMATIS GOOGLE SPREADSHEET (TANPA WEBHOOK)
+ * ==============================================================================
+ * Menambahkan tombol Menu "🚀 GM Agency" langsung di bilah toolbar Google Spreadsheet Anda.
+ * 
+ * 🚀 CARA PAKAI:
+ * 1. Di Google Spreadsheet Anda, buka menu "Ekstensi" (Extensions) -> "Apps Script".
+ * 2. Tempel (Paste) script ini, lalu klik Simpan (Ctrl+S).
+ * 3. Muat ulang (Refresh / F5) tab Google Spreadsheet Anda.
+ * 4. Akan muncul Menu baru "🚀 GM Agency" di samping menu Bantuan (Help).
+ *    Klik "🚀 GM Agency" -> "🔄 Tarik Data Terbaru dari Web Admin".
+ * 
+ * ✨ KELEBIHAN:
+ * - Tidak perlu deploy Web App
+ * - Bisa ditarik berulang kali kapan saja langsung dari dalam Google Sheet
+ */
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🚀 GM Agency')
+    .addItem('🔄 Tarik Data Terbaru dari Web Admin', 'tarikDataDariWebAdmin')
+    .addItem('🎨 Rapikan Header & Dropdown Status', 'rapikanFormatSpreadsheet')
+    .addToUi();
+}
+
+function tarikDataDariWebAdmin() {
+  var exportUrl = "${exportUrl}";
+  
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Sedang mengambil data terbaru dari Web Admin...', 'Mohon Tunggu', 5);
+    
+    var response = UrlFetchApp.fetch(exportUrl, { 
+      muteHttpExceptions: true,
+      headers: {
+        'User-Agent': 'Mozilla/5.0'
+      }
+    });
+    
+    var csvText = response.getContentText();
+    if (!csvText || csvText.indexOf('row_id') === -1) {
+      SpreadsheetApp.getUi().alert('❌ Gagal membaca data dari Web Admin. Pastikan server web sedang online.');
+      return;
+    }
+    
+    var csvData = Utilities.parseCsv(csvText);
+    if (csvData.length < 1) {
+      SpreadsheetApp.getUi().alert('⚠️ Tidak ada data yang ditemukan.');
+      return;
+    }
+    
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    sheet.clearContents();
+    sheet.getRange(1, 1, csvData.length, csvData[0].length).setValues(csvData);
+    
+    // Format Header & Dropdown
+    rapikanFormatSpreadsheet();
+    
+    SpreadsheetApp.getUi().alert('✅ Berhasil menyinkronkan ' + (csvData.length - 1) + ' data dari Web Admin GM Agency!');
+  } catch (err) {
+    SpreadsheetApp.getUi().alert('❌ Terjadi kesalahan: ' + err.toString());
+  }
+}
+
+function rapikanFormatSpreadsheet() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var lastRow = Math.max(sheet.getLastRow(), 2);
+  var lastCol = Math.max(sheet.getLastColumn(), 12);
+  
+  // Format Header Navy
+  var headerRange = sheet.getRange(1, 1, 1, lastCol);
+  headerRange.setBackground('#0f172a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setHorizontalAlignment('center');
+  sheet.setFrozenRows(1);
+  
+  // Format Dropdown Status
+  if (lastRow >= 2) {
+    var statusRange = sheet.getRange(2, 10, lastRow - 1, 1);
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE'], true)
+      .setAllowInvalid(true)
+      .build();
+    statusRange.setDataValidation(rule);
+  }
+}
+`;
+};
 
 /**
  * Robust Client-Side and Direct Sync from Google Spreadsheet URL (Pull)
