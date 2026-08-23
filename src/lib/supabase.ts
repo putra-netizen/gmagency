@@ -584,7 +584,7 @@ function getLocalMapsReviews(): MapsReview[] {
   return [];
 }
 
-function updateLocalStorageMapsReview(review: MapsReview) {
+export function updateLocalStorageMapsReview(review: MapsReview) {
   try {
     const normalized = normalizeMapsReview(review);
     const list = getLocalMapsReviews();
@@ -1625,6 +1625,7 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
     ...finalData
   });
   updateLocalStorageMapsReview(fallback);
+  triggerSheetsSync('maps_review', 'update', fallback);
   return fallback;
 }
 

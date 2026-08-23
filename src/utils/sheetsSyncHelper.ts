@@ -59,7 +59,6 @@ export async function triggerSheetsSync(
   }
 
   try {
-    // We send payload to the Web App URL
     const accountsFormatted = payload.reviewer_accounts
       ? (Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts))
       : '[]';
@@ -80,8 +79,28 @@ export async function triggerSheetsSync(
       }
     };
 
-    // Use standard fetch with timeout
-    const response = await fetch(url, {
+    // Try server proxy first for reliable execution and logging
+    try {
+      if (type === 'maps_review') {
+        const proxyRes = await fetch('/api/sheets/push-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            webhookUrl: url,
+            reviews: [payload]
+          })
+        });
+        if (proxyRes.ok) {
+          const json = await proxyRes.json();
+          if (json && json.success) return true;
+        }
+      }
+    } catch (proxyErr) {
+      console.warn('Proxy push notice:', proxyErr);
+    }
+
+    // Direct browser fetch
+    await fetch(url, {
       method: 'POST',
       mode: 'no-cors',
       headers: {
@@ -101,18 +120,46 @@ export async function triggerSheetsSync(
 /**
  * Sync batch of maps reviews to Google Apps Script
  */
-export async function triggerBatchMapsReviewsSync(reviews: any[]): Promise<boolean> {
+export async function triggerBatchMapsReviewsSync(reviews: any[]): Promise<{ success: boolean; message: string }> {
   const config = getSheetsSyncConfig();
-  if (!config.enabled || !config.webhookUrl) {
-    return false;
-  }
+  const url = (config.webhookUrl || DEFAULT_SHEETS_WEBHOOK_URL).trim();
 
-  const url = config.webhookUrl.trim();
   if (!url.startsWith('http')) {
-    return false;
+    return { success: false, message: 'URL Webhook Google Apps Script tidak valid.' };
   }
 
   try {
+    // 1. Try server proxy endpoint first
+    const proxyRes = await fetch('/api/sheets/push-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        webhookUrl: url,
+        reviews
+      })
+    });
+
+    if (proxyRes.ok) {
+      const data = await proxyRes.json();
+      if (data.success) {
+        return {
+          success: true,
+          message: data.message || `Berhasil mengirim ${reviews.length} data ke Google Spreadsheet!`
+        };
+      } else {
+        return {
+          success: false,
+          message: data.error || 'Gagal mengirim data ke Google Apps Script.'
+        };
+      }
+    } else {
+      const errData = await proxyRes.json().catch(() => ({}));
+      if (errData.error) {
+        return { success: false, message: errData.error };
+      }
+    }
+
+    // 2. Direct browser fetch fallback
     const formattedReviews = reviews.map(r => ({
       ...r,
       reviewer_accounts_json: r.reviewer_accounts 
@@ -136,11 +183,16 @@ export async function triggerBatchMapsReviewsSync(reviews: any[]): Promise<boole
       body: JSON.stringify(body),
     });
 
-    console.log(`📊 Batch sync ${reviews.length} Maps Reviews to Google Sheets sent.`);
-    return true;
-  } catch (error) {
+    return {
+      success: true,
+      message: `Berhasil mengirim ${reviews.length} data ke Google Spreadsheet!`
+    };
+  } catch (error: any) {
     console.error('❌ Batch Google Sheets sync failed:', error);
-    return false;
+    return {
+      success: false,
+      message: error.message || 'Terjadi kesalahan saat mengirim ke Google Apps Script.'
+    };
   }
 }
 
@@ -150,34 +202,58 @@ export async function triggerBatchMapsReviewsSync(reviews: any[]): Promise<boole
  */
 export function getGoogleAppsScriptTemplate(): string {
   return `/**
- * Google Apps Script untuk Sinkronisasi Real-Time Database GM Agency
+ * =========================================================================
+ * GOOGLE APPS SCRIPT: SINKRONISASI REALTIME GM AGENCY <-> GOOGLE SPREADSHEET
+ * =========================================================================
  * 
- * STRUKTUR KOLOM SPREADSHEET (A s/d L):
- * A: row_id
- * B: TANGGAL
- * C: KLIEN
- * D: STORE
- * E: TIPE REVIEW
- * F: TARGET LINK
- * G: INPUT PROGRES AKUN (Format JSON: ["dafa","wani","syafira",...])
- * H: CLUE
- * I: LINK BUKTI
- * J: STATUS
- * K: updated_at
- * L: TARGET AKUN
+ * PETUNJUK PEMASANGAN:
+ * 1. Di Google Sheets, klik menu "Ekstensi" (Extensions) -> "Apps Script".
+ * 2. Hapus seluruh kode yang ada, lalu TEMPEL (PASTE) seluruh script ini.
+ * 3. Klik ikon Simpan (Disk/Save).
+ * 4. Klik tombol "Terapkan" (Deploy) di pojok kanan atas -> "Kelola Penerapan" (Manage Deployments).
+ * 5. Klik ikon Edit (Pensil) pada Web App -> Pilih Versi: "Baru" (New version).
+ *    - Jalankan sebagai: "Saya" (Me)
+ *    - Siapa yang memiliki akses: "Siapa saja" (Anyone)
+ * 6. Klik "Terapkan" (Deploy) dan salin URL Web App yang berakhiran "/exec".
+ * 7. Tempel URL tersebut ke menu Admin Web GM Agency.
  */
 
-var SPREADSHEET_ID = ""; // Opsional: Isikan ID Spreadsheet jika dijalankan standalone
+var SPREADSHEET_ID = ""; // Kosongkan jika script terpasang langsung di Spreadsheet
+
+function doGet(e) {
+  try {
+    var doc = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = getSheetForType(doc, 'maps_review');
+    var lastRow = Math.max(0, sheet.getLastRow() - 1);
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "online",
+      message: "GM Agency Apps Script Web App aktif dan siap menerima data!",
+      total_rows: lastRow,
+      timestamp: new Date().toISOString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
 
 function doPost(e) {
   try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "No post data received" }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+
     var content = e.postData.contents;
     var data = JSON.parse(content);
     
     var doc = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
     
-    var type = data.type; // 'maps_review' | 'batch_maps_reviews' | 'order' | 'shopee_order'
-    var action = data.action; // 'insert' | 'update' | 'delete' | 'sync_all'
+    var type = data.type || 'maps_review'; 
+    var action = data.action || 'sync_all'; 
     var id = data.id;
     var payload = data.payload;
     
@@ -185,10 +261,16 @@ function doPost(e) {
     if (type === 'batch_maps_reviews' && data.reviews) {
       var sheet = getSheetForType(doc, 'maps_review');
       batchSyncMapsReviews(sheet, data.reviews);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", count: data.reviews.length }))
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Batch sync berhasil", count: data.reviews.length }))
                            .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // 2. Ping Test
+    if (type === 'test' || action === 'ping') {
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Ping OK" }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+
     var sheet = getSheetForType(doc, type);
     
     if (action === 'delete') {
@@ -272,6 +354,7 @@ function deleteRowById(sheet, id) {
 }
 
 function upsertRow(sheet, type, id, payload) {
+  if (!payload) return;
   var lastRow = sheet.getLastRow();
   var rowIndex = -1;
   
@@ -300,7 +383,7 @@ function upsertRow(sheet, type, id, payload) {
       payload.id || id,
       payload.created_at || new Date().toISOString(),
       payload.client_name || "",
-      payload.store_name || "",
+      payload.store_name || "MP",
       payload.review_type || "G_MAPS",
       payload.maps_link || "",
       accountsFormatted,
@@ -309,31 +392,6 @@ function upsertRow(sheet, type, id, payload) {
       payload.status || "PROGRESS",
       payload.updated_at || new Date().toISOString(),
       Number(payload.target_count || payload.target_review || 1)
-    ];
-  } else if (type === 'order') {
-    rowValues = [
-      payload.id || id,
-      payload.created_at || new Date().toISOString(),
-      payload.buyer_name || "",
-      payload.phone_number || "",
-      payload.product_name || "",
-      payload.target_link || payload.target_spam_phone || "",
-      payload.quantity || 1,
-      payload.total_price || 0,
-      payload.payment_status || "PENDING",
-      payload.notes || ""
-    ];
-  } else if (type === 'shopee_order') {
-    rowValues = [
-      payload.id || id,
-      payload.created_at || new Date().toISOString(),
-      payload.store_name || "",
-      payload.buyer_name || "",
-      payload.service_type || "",
-      payload.quantity || 1,
-      payload.target_link || "",
-      payload.job_status || "PENDING",
-      payload.notes || ""
     ];
   }
   
@@ -349,12 +407,10 @@ function upsertRow(sheet, type, id, payload) {
 function batchSyncMapsReviews(sheet, reviews) {
   if (!reviews || !Array.isArray(reviews) || reviews.length === 0) return;
   
-  // Pastikan header ada di baris 1
   if (sheet.getLastRow() < 1) {
     setupSheetHeaders(sheet, 'maps_review');
   }
   
-  // Baca baris yang sudah ada
   var lastRow = sheet.getLastRow();
   var existingIdsMap = {};
   if (lastRow >= 2) {
@@ -362,7 +418,7 @@ function batchSyncMapsReviews(sheet, reviews) {
     for (var i = 0; i < existingIds.length; i++) {
       var rid = String(existingIds[i][0]).trim();
       if (rid) {
-        existingIdsMap[rid] = i + 2; // nomor baris di sheet
+        existingIdsMap[rid] = i + 2;
       }
     }
   }
@@ -382,7 +438,7 @@ function batchSyncMapsReviews(sheet, reviews) {
       item.id,
       item.created_at || new Date().toISOString(),
       item.client_name || "",
-      item.store_name || "",
+      item.store_name || "MP",
       item.review_type || "G_MAPS",
       item.maps_link || "",
       accountsFormatted,
@@ -404,3 +460,4 @@ function batchSyncMapsReviews(sheet, reviews) {
 }
 `;
 }
+

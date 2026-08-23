@@ -423,3 +423,371 @@ function setupSheetAutomation() {
 };
 
 export const generateAppsScriptCode = generateGoogleAppsScript;
+
+/**
+ * Robust Client-Side and Direct Sync from Google Spreadsheet URL (Pull)
+ * Uses Google Visualization API (GViz) JSONP for 100% CORS-free browser fetching,
+ * plus Apps Script Web App and CSV fallbacks.
+ */
+function fetchGVizData(sheetId: string, gid: string = '0'): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const callbackName = '__gviz_cb_' + Math.random().toString(36).substring(2, 10);
+    const script = document.createElement('script');
+    
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Koneksi ke Google Sheets timeout (12 detik). Pastikan spreadsheet disetel ke Publik ("Siapa saja yang memiliki link sebagai Pelihat/Viewer").'));
+    }, 12000);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      if (script.parentNode) script.parentNode.removeChild(script);
+      delete (window as any)[callbackName];
+    };
+
+    (window as any)[callbackName] = (json: any) => {
+      cleanup();
+      resolve(json);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Gagal memuat Google Spreadsheet. Pastikan Spreadsheet disetel ke akses publik: Klik Bagikan (Share) -> Ubah Akses Umum menjadi "Siapa saja yang memiliki link" sebagai Pelihat (Viewer).'));
+    };
+
+    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=responseHandler:${callbackName}&gid=${gid}`;
+    document.head.appendChild(script);
+  });
+}
+
+function parseGVizResponseToMapsReviews(gvizData: any): MapsReview[] {
+  if (!gvizData || !gvizData.table) return [];
+  const cols = gvizData.table.cols || [];
+  const rows = gvizData.table.rows || [];
+  if (rows.length === 0) return [];
+
+  const colMap: Record<string, number> = {};
+  let startIndex = 0;
+
+  // Check column labels
+  cols.forEach((col: any, idx: number) => {
+    const lbl = (col.label || '').trim().toLowerCase();
+    if (lbl) colMap[lbl] = idx;
+  });
+
+  // Check if row 0 has header names
+  const row0 = rows[0]?.c || [];
+  const row0Texts = row0.map((cell: any) => String(cell?.v || cell?.f || '').trim().toLowerCase());
+  const hasHeadersInRow0 = row0Texts.some((t: string) => 
+    t.includes('klien') || t.includes('client') || t.includes('row_id') || t.includes('target') || t.includes('store') || t.includes('toko')
+  );
+
+  if (hasHeadersInRow0) {
+    startIndex = 1;
+    row0Texts.forEach((t: string, idx: number) => {
+      if (t) colMap[t] = idx;
+    });
+  }
+
+  const findIdx = (aliases: string[], fallbackIdx: number): number => {
+    for (const a of aliases) {
+      for (const [key, idx] of Object.entries(colMap)) {
+        if (key.includes(a)) return idx;
+      }
+    }
+    return fallbackIdx;
+  };
+
+  const idIdx = findIdx(['row_id', 'id'], 0);
+  const dateIdx = findIdx(['tanggal', 'created_at', 'date'], 1);
+  const clientIdx = findIdx(['klien', 'client', 'nama klien', 'pembeli'], 2);
+  const storeIdx = findIdx(['store', 'toko', 'nama toko'], 3);
+  const typeIdx = findIdx(['tipe review', 'tipe', 'type', 'review_type'], 4);
+  const linkIdx = findIdx(['target link', 'maps', 'link maps', 'target_link', 'link'], 5);
+  const accountsIdx = findIdx(['input progres akun', 'progres', 'akun', 'reviewer_accounts', 'reviewer'], 6);
+  const notesIdx = findIdx(['clue', 'catatan', 'notes'], 7);
+  const proofIdx = findIdx(['link bukti', 'bukti', 'proof', 'proof_link'], 8);
+  const statusIdx = findIdx(['status'], 9);
+  const targetIdx = findIdx(['target akun', 'target_count', 'target', 'qty', 'slot'], 11);
+
+  const reviews: MapsReview[] = [];
+
+  for (let i = startIndex; i < rows.length; i++) {
+    const cells = rows[i]?.c || [];
+    if (!cells || cells.length === 0) continue;
+
+    const getVal = (idx: number): string => {
+      if (idx < 0 || idx >= cells.length || !cells[idx]) return '';
+      const cell = cells[idx];
+      if (cell.v === null || cell.v === undefined) return cell.f ? String(cell.f).trim() : '';
+      if (typeof cell.v === 'object' && cell.f) return String(cell.f).trim();
+      return String(cell.v).trim();
+    };
+
+    const rawId = getVal(idIdx);
+    const rawClient = getVal(clientIdx);
+    const rawStore = getVal(storeIdx);
+    const rawLink = getVal(linkIdx);
+    const rawAccounts = getVal(accountsIdx);
+    const rawType = getVal(typeIdx);
+    const rawNotes = getVal(notesIdx);
+    const rawProof = getVal(proofIdx);
+    const rawStatus = getVal(statusIdx).toUpperCase();
+    const rawTarget = getVal(targetIdx);
+    const rawDate = getVal(dateIdx);
+
+    // Skip empty row
+    if (!rawId && !rawClient && !rawLink && !rawStore && !rawAccounts) continue;
+
+    const id = rawId || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
+    const client_name = rawClient || 'Pelanggan Google Maps';
+    const store_name = rawStore || 'MP';
+    const review_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' = 
+      (rawType.toUpperCase() === 'TRIPAD' || rawType.toUpperCase() === 'REVIEW_APPS') 
+        ? (rawType.toUpperCase() as 'TRIPAD' | 'REVIEW_APPS') 
+        : 'G_MAPS';
+    const maps_link = rawLink || 'https://maps.google.com';
+    const reviewer_accounts = parseAccountsList(rawAccounts);
+    const notes = rawNotes || '';
+    const proof_link = rawProof || '';
+
+    let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PROGRESS';
+    if (rawStatus.includes('DONE')) status = 'DONE';
+    else if (rawStatus.includes('PROGRESS') || rawStatus.includes('PROGRES')) status = 'PROGRESS';
+    else if (rawStatus.includes('READY')) status = 'READY';
+    else if (rawStatus.includes('REKAP')) status = 'SUDAH DIREKAP';
+    else if (rawStatus.includes('PENDING')) status = 'PENDING';
+
+    const parsedTarget = Number(rawTarget);
+    const target_count = (!isNaN(parsedTarget) && parsedTarget > 0) ? parsedTarget : Math.max(1, reviewer_accounts.length || 10);
+    const created_at = rawDate || new Date().toISOString();
+
+    reviews.push({
+      id,
+      client_name,
+      maps_link,
+      target_count,
+      reviewer_accounts,
+      notes,
+      proof_link,
+      status,
+      created_at,
+      store_name,
+      review_type
+    });
+  }
+
+  return reviews;
+}
+
+export const syncFromGoogleSheetsUrl = async (
+  rawUrl: string,
+  onProgress?: (msg: string) => void
+): Promise<{ success: boolean; message: string; count: number; items: MapsReview[] }> => {
+  const cleanUrl = (rawUrl || '').trim();
+  if (!cleanUrl) {
+    throw new Error('Mohon masukkan URL Google Spreadsheet atau Web App Apps Script.');
+  }
+
+  // 1. Try Server-Side Sync first (fastest, saves to backend & Supabase simultaneously)
+  onProgress?.('Menyinkronkan via server GM Agency...');
+  try {
+    const serverRes = await fetch('/api/sheets/sync-from-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sheetUrl: cleanUrl })
+    });
+
+    if (serverRes.ok) {
+      const sData = await serverRes.json();
+      if (sData && sData.success && Array.isArray(sData.items) && sData.items.length > 0) {
+        return {
+          success: true,
+          message: sData.message || `Berhasil menyinkronkan ${sData.items.length} data dari Google Spreadsheet!`,
+          count: sData.items.length,
+          items: sData.items
+        };
+      }
+    } else {
+      const errRes = await serverRes.json().catch(() => ({}));
+      if (errRes && errRes.error && errRes.error.includes('publik')) {
+        throw new Error(errRes.error);
+      }
+    }
+  } catch (srvErr: any) {
+    if (srvErr && srvErr.message && srvErr.message.includes('publik')) {
+      throw srvErr;
+    }
+    console.warn('Server sync notice, falling back to client GViz:', srvErr);
+  }
+
+  // 2. If it's an Apps Script Web App URL
+  if (cleanUrl.includes('script.google.com/macros/s/')) {
+    onProgress?.('Menghubungi Google Apps Script Web App...');
+    try {
+      const res = await fetch(cleanUrl, { method: 'GET' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.orders)) {
+          const items: MapsReview[] = json.orders.map((o: any) => ({
+            id: o.id || ('map-' + Date.now().toString().slice(-6)),
+            client_name: o.client_name || 'Pelanggan',
+            maps_link: o.target_link || 'https://maps.google.com',
+            target_count: Number(o.target_count || o.accounts?.length || 10),
+            reviewer_accounts: Array.isArray(o.accounts) ? o.accounts : parseAccountsList(o.accounts),
+            notes: o.clue || o.notes || '',
+            proof_link: o.proof_link || '',
+            status: (o.status || 'PROGRESS') as any,
+            created_at: o.date || new Date().toISOString(),
+            store_name: o.store || 'MP',
+            review_type: (o.review_type || 'G_MAPS') as any
+          }));
+          return {
+            success: true,
+            message: `Berhasil menarik ${items.length} data via Google Apps Script!`,
+            count: items.length,
+            items
+          };
+        }
+      }
+    } catch (appsErr) {
+      console.warn('Apps Script GET error, will continue to standard sheet parsing if applicable:', appsErr);
+    }
+  }
+
+  // 3. Extract Sheet ID and GID for Google Spreadsheet
+  const match = cleanUrl.match(/\/d\/([a-zA-Z0-9-_]+)/) || cleanUrl.match(/id=([a-zA-Z0-9-_]+)/) || cleanUrl.match(/key=([a-zA-Z0-9-_]+)/);
+  if (!match || !match[1]) {
+    throw new Error('Format link Google Spreadsheet tidak valid. Pastikan link berisi https://docs.google.com/spreadsheets/d/...');
+  }
+
+  const sheetId = match[1];
+  const gidMatch = cleanUrl.match(/[#?&]gid=([0-9]+)/);
+  const gid = gidMatch ? gidMatch[1] : '0';
+
+  onProgress?.('Membaca tabel Google Spreadsheet secara langsung...');
+
+  // 4. GViz JSONP (100% CORS-safe browser technique)
+  try {
+    const gvizData = await fetchGVizData(sheetId, gid);
+    if (gvizData && gvizData.table) {
+      const items = parseGVizResponseToMapsReviews(gvizData);
+      if (items.length > 0) {
+        return {
+          success: true,
+          message: `Berhasil menarik ${items.length} data langsung dari Google Spreadsheet!`,
+          count: items.length,
+          items
+        };
+      }
+    }
+  } catch (gvizErr: any) {
+    console.warn('GViz JSONP error, attempting direct CSV fetch fallback:', gvizErr);
+  }
+
+  // 4. Fallback: CSV Fetch
+  const urlsToTry = [
+    `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+    `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
+    `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`
+  ];
+
+  let csvText = '';
+  for (const u of urlsToTry) {
+    try {
+      const res = await fetch(u);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && !text.includes('<!DOCTYPE') && !text.includes('<html') && !text.includes('accounts.google.com')) {
+          csvText = text;
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed URL attempt:', u, e);
+    }
+  }
+
+  if (!csvText) {
+    throw new Error(
+      'Gagal mengambil data dari Google Spreadsheet. Pastikan Spreadsheet disetel ke akses publik: Klik Bagikan (Share) -> Ubah Akses Umum menjadi "Siapa saja yang memiliki link" sebagai Pelihat (Viewer).'
+    );
+  }
+
+  const records = parseCsvText(csvText);
+  if (records.length === 0) {
+    throw new Error('Spreadsheet kosong atau tidak memiliki baris data.');
+  }
+
+  const processedReviews: MapsReview[] = [];
+
+  for (const r of records) {
+    const findKey = (keys: string[]) => {
+      for (const k of keys) {
+        for (const rk of Object.keys(r)) {
+          if (rk.toLowerCase().includes(k)) return r[rk];
+        }
+      }
+      return '';
+    };
+
+    const rawId = findKey(['row_id', 'id']).trim();
+    const rawClient = findKey(['klien', 'client', 'nama klien', 'pembeli']).trim();
+    const rawMapsLink = findKey(['target link', 'maps', 'link maps', 'target_link']).trim();
+    const rawStore = findKey(['store', 'toko', 'nama toko', 'store_name']).trim();
+    const rawType = findKey(['tipe review', 'tipe', 'type', 'review_type']).trim();
+    const rawAccounts = findKey(['input progres akun', 'progres', 'akun', 'reviewer_accounts', 'reviewer']).trim();
+    const rawClue = findKey(['clue', 'catatan', 'notes']).trim();
+    const rawProof = findKey(['link bukti', 'bukti', 'proof', 'proof_link']).trim();
+    const rawStatus = findKey(['status']).trim().toUpperCase();
+    const rawTargetCount = findKey(['target akun', 'target_count', 'target', 'qty']).trim();
+    const rawCreatedAt = findKey(['tanggal', 'created_at', 'date']).trim();
+
+    if (!rawId && !rawClient && !rawMapsLink && !rawStore && !rawAccounts) continue;
+
+    const id = rawId || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
+    const client_name = rawClient || 'Pelanggan Google Maps';
+    const store_name = rawStore || 'MP';
+    const review_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' = (rawType.toUpperCase() === 'TRIPAD' || rawType.toUpperCase() === 'REVIEW_APPS') ? (rawType.toUpperCase() as 'TRIPAD' | 'REVIEW_APPS') : 'G_MAPS';
+    const maps_link = rawMapsLink || 'https://maps.google.com';
+    const reviewer_accounts = parseAccountsList(rawAccounts);
+    const notes = rawClue || '';
+    const proof_link = rawProof || '';
+
+    let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PROGRESS';
+    if (rawStatus.includes('DONE')) status = 'DONE';
+    else if (rawStatus.includes('PROGRESS') || rawStatus.includes('PROGRES')) status = 'PROGRESS';
+    else if (rawStatus.includes('READY')) status = 'READY';
+    else if (rawStatus.includes('REKAP')) status = 'SUDAH DIREKAP';
+    else if (rawStatus.includes('PENDING')) status = 'PENDING';
+
+    const parsedTarget = Number(rawTargetCount);
+    const target_count = (!isNaN(parsedTarget) && parsedTarget > 0) ? parsedTarget : Math.max(1, reviewer_accounts.length || 10);
+    const created_at = rawCreatedAt || new Date().toISOString();
+
+    processedReviews.push({
+      id,
+      client_name,
+      maps_link,
+      target_count,
+      reviewer_accounts,
+      notes,
+      proof_link,
+      status,
+      created_at,
+      store_name,
+      review_type
+    });
+  }
+
+  if (processedReviews.length === 0) {
+    throw new Error('Tidak ditemukan data valid dalam kolom Spreadsheet.');
+  }
+
+  return {
+    success: true,
+    message: `Berhasil menarik ${processedReviews.length} data langsung dari Google Spreadsheet!`,
+    count: processedReviews.length,
+    items: processedReviews
+  };
+};

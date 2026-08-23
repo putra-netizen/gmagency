@@ -1541,7 +1541,8 @@ app.post('/api/sheets/sync-from-url', async (req, res) => {
       success: true,
       message: `Berhasil menyinkronkan ${upsertedCount} baris data dari Google Spreadsheet! (${syncMethod})`,
       totalSynced: upsertedCount,
-      totalRowsInSheet: rowsCount
+      totalRowsInSheet: rowsCount,
+      items: processedReviews
     });
   } catch (err: any) {
     console.error('Sync from URL error:', err);
@@ -1549,7 +1550,112 @@ app.post('/api/sheets/sync-from-url', async (req, res) => {
   }
 });
 
-// 5.3 WEBHOOK UNTUK REAL-TIME 2-WAY SYNC DARI GOOGLE APPS SCRIPT (onEdit)
+// 5.3 PUSH BATCH / TRANSAKSI KE GOOGLE SPREADSHEET VIA APPS SCRIPT WEBHOOK (SERVER PROXY)
+app.post('/api/sheets/push-batch', async (req, res) => {
+  try {
+    const { webhookUrl, reviews } = req.body;
+    const url = (webhookUrl || '').trim() || 'https://script.google.com/macros/s/AKfycbzeu460eHLYqtLmJnBo9-eFGzqxV8zWK1AOuubiFHy0HNoJZ-t5J0q3CQkkY-IurTiahA/exec';
+    
+    if (!url.startsWith('http')) {
+      return res.status(400).json({ error: 'URL Webhook Google Apps Script tidak valid.' });
+    }
+
+    let itemsToSend = reviews;
+    if (!itemsToSend || !Array.isArray(itemsToSend) || itemsToSend.length === 0) {
+      const db = readDatabase();
+      itemsToSend = db.maps_reviews || [];
+    }
+
+    const formattedReviews = itemsToSend.map((r: any) => ({
+      ...r,
+      reviewer_accounts_json: r.reviewer_accounts 
+        ? (Array.isArray(r.reviewer_accounts) ? JSON.stringify(r.reviewer_accounts) : String(r.reviewer_accounts))
+        : '[]'
+    }));
+
+    const payload = {
+      type: 'batch_maps_reviews',
+      action: 'sync_all',
+      timestamp: new Date().toISOString(),
+      reviews: formattedReviews
+    };
+
+    const gRes = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await gRes.text();
+
+    if (text.includes('Script function not found: doPost') || text.includes('Script function not found')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Google Apps Script belum memiliki fungsi doPost. Silakan buka menu Ekstensi -> Apps Script di Google Sheets Anda, salin kode Apps Script yang disediakan di modal panduan website, lalu deploy ulang sebagai Web App (Akses: Siapa Saja).'
+      });
+    }
+
+    let parsedResponse = null;
+    try {
+      parsedResponse = JSON.parse(text);
+    } catch (e) {}
+
+    return res.json({
+      success: true,
+      message: `Berhasil mengirim ${formattedReviews.length} data ke Google Spreadsheet!`,
+      count: formattedReviews.length,
+      googleResponse: parsedResponse || text.slice(0, 200)
+    });
+  } catch (err: any) {
+    console.error('Push batch error:', err);
+    return res.status(500).json({ error: 'Gagal mengirim data ke Apps Script: ' + err.message });
+  }
+});
+
+// 5.4 TEST KONEKSI APPS SCRIPT WEBHOOK
+app.post('/api/sheets/test-webhook', async (req, res) => {
+  try {
+    const { webhookUrl } = req.body;
+    const url = (webhookUrl || '').trim();
+    if (!url || !url.startsWith('http')) {
+      return res.status(400).json({ error: 'Mohon masukkan URL Webhook Google Apps Script yang valid.' });
+    }
+
+    const testPayload = {
+      type: 'test',
+      action: 'ping',
+      timestamp: new Date().toISOString()
+    };
+
+    const gRes = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(testPayload)
+    });
+
+    const text = await gRes.text();
+
+    if (text.includes('Script function not found: doPost') || text.includes('Script function not found')) {
+      return res.json({
+        online: false,
+        hasDoPost: false,
+        message: 'Google Apps Script ditemukan, tetapi FUNGSI doPost TIDAK DITEMUKAN. Salin kode terbaru dari Website dan Deploy ulang sebagai Web App.'
+      });
+    }
+
+    return res.json({
+      online: true,
+      hasDoPost: true,
+      message: 'Koneksi ke Google Apps Script Webhook berhasil dan siap digunakan!'
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Gagal menguji webhook: ' + err.message });
+  }
+});
+
+// 5.5 WEBHOOK UNTUK REAL-TIME 2-WAY SYNC DARI GOOGLE APPS SCRIPT (onEdit)
 app.post('/api/sheets/webhook', async (req, res) => {
   try {
     const { action, row_id, status, reviewer_accounts, proof_link, notes, target_count } = req.body;

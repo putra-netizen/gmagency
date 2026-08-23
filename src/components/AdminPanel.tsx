@@ -3635,8 +3635,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
               {activeSettingsTab === 'spreadsheet_integration' && (
                 <div className="space-y-6" id="spreadsheet-integration-panel">
-                  {/* Top Banner & Quick Trigger */}
-                  <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/50 p-6 shadow-sm">
+                  {/* Top Sync Card */}
+                  <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/50 p-6 shadow-sm">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
@@ -3644,30 +3644,27 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                             <FileSpreadsheet className="h-4 w-4" />
                           </span>
                           <h3 className="text-base font-black text-slate-900 uppercase tracking-tight font-sans">
-                            Integrasi Google Sheets & Dual-Input Engine
+                            Sinkronisasi Google Spreadsheet
                           </h3>
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-black text-emerald-800 uppercase">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            2-Way Sync Siap
+                            Live Sync Siap
                           </span>
                         </div>
                         <p className="text-xs text-slate-600 font-medium">
-                          Kelola integrasi penuh 2 jalur: input via Web Admin & Google Spreadsheet secara sinkron dan otomatis.
+                          Tarik dan perbarui data Maps Review secara langsung dari Google Spreadsheet publik Anda ke database web.
                         </p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2.5">
                         <button
                           type="button"
-                          onClick={() => {
-                            setSpreadsheetModalTab('sync');
-                            setIsSpreadsheetModalOpen(true);
-                          }}
+                          onClick={() => setIsSpreadsheetModalOpen(true)}
                           className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-black text-white shadow-md transition-all cursor-pointer hover:shadow-lg active:scale-95"
                           id="open-spreadsheet-modal-btn"
                         >
-                          <Database className="h-4 w-4" />
-                          <span>Buka Spreadsheet Hub</span>
+                          <RefreshCw className="h-4 w-4" />
+                          <span>Mulai Sinkronkan Data</span>
                         </button>
 
                         <a
@@ -3676,7 +3673,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                           rel="noreferrer"
                           className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3.5 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-all cursor-pointer"
                         >
-                          <span>Buka Sheet</span>
+                          <span>Buka Spreadsheet</span>
                           <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
                         </a>
                       </div>
@@ -3707,106 +3704,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </div>
                   </div>
 
-                  {/* 3 Main Action Tiles */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    {/* Tile 1: Sinkronisasi Tarik Data */}
-                    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex flex-col justify-between space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                            <RefreshCw className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-black uppercase tracking-tight text-slate-900">
-                              Tarik Data Sheet
-                            </h4>
-                            <p className="text-[11px] text-slate-400 font-medium">Impor data dari Google Sheet live</p>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-600 leading-relaxed pt-1">
-                          Tarik seluruh target Maps Review, Shopee, dan Layanan langsung dari Google Spreadsheet publik Anda.
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSpreadsheetModalTab('sync');
-                          setIsSpreadsheetModalOpen(true);
-                        }}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 py-2.5 text-xs font-black transition-colors cursor-pointer"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                        <span>Mulai Sinkronisasi</span>
-                      </button>
-                    </div>
-
-                    {/* Tile 2: Export CSV Format Lengkap */}
-                    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex flex-col justify-between space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                            <Download className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-black uppercase tracking-tight text-slate-900">
-                              Export File CSV
-                            </h4>
-                            <p className="text-[11px] text-slate-400 font-medium">Format kolom presisi untuk Sheet</p>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-600 leading-relaxed pt-1">
-                          Unduh CSV dengan kolom terstandarisasi (Worker, Klien, Toko, Target, Link, Bukti) untuk backup atau paste langsung ke Spreadsheet.
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSpreadsheetModalTab('export');
-                          setIsSpreadsheetModalOpen(true);
-                        }}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-2.5 text-xs font-black transition-colors cursor-pointer"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span>Export CSV Sekarang</span>
-                      </button>
-                    </div>
-
-                    {/* Tile 3: Otomasi Apps Script 2-Arah */}
-                    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex flex-col justify-between space-y-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-                            <Copy className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-black uppercase tracking-tight text-slate-900">
-                              Script 2-Arah (Apps Script)
-                            </h4>
-                            <p className="text-[11px] text-slate-400 font-medium">Edit di Sheet auto update web</p>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-600 leading-relaxed pt-1">
-                          Pasang trigger <code className="bg-slate-100 px-1 py-0.5 rounded text-[10px] font-mono font-bold">onEdit</code> di Google Sheet agar perubahan data langsung terkirim ke Web Admin secara instan.
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSpreadsheetModalTab('script');
-                          setIsSpreadsheetModalOpen(true);
-                        }}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 py-2.5 text-xs font-black transition-colors cursor-pointer"
-                      >
-                        <Copy className="h-4 w-4" />
-                        <span>Salin Kode Apps Script</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Connected Spreadsheet Box */}
+                  {/* Connected Spreadsheet Details */}
                   <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
                       <div>
@@ -3814,10 +3712,10 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                           Tautan Spreadsheet Terhubung
                         </h4>
                         <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                          Spreadsheet Google yang digunakan sebagai sumber data & target sinkronisasi
+                          Google Spreadsheet yang digunakan sebagai sumber data sinkronisasi otomatis
                         </p>
                       </div>
-                      <span className="text-[10px] font-black font-mono bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg">
+                      <span className="text-[10px] font-black font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg">
                         PUBLIC / VIEW-ENABLED
                       </span>
                     </div>
