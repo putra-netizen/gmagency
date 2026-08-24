@@ -11,34 +11,40 @@ let cachedLogoBase64: string | null = null;
 export async function getLogoBase64(): Promise<string | null> {
   if (cachedLogoBase64) return cachedLogoBase64;
 
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.src = LOGO_URL;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 200;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // Circle gradient background
+      const grad = ctx.createLinearGradient(0, 0, 200, 200);
+      grad.addColorStop(0, '#2563eb');
+      grad.addColorStop(1, '#4f46e5');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(100, 100, 95, 0, Math.PI * 2);
+      ctx.fill();
 
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width || 400;
-        canvas.height = img.height || 400;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          cachedLogoBase64 = canvas.toDataURL('image/png');
-          resolve(cachedLogoBase64);
-          return;
-        }
-      } catch (err) {
-        console.warn('Canvas logo export error:', err);
-      }
-      resolve(null);
-    };
+      // Inner border
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 4;
+      ctx.stroke();
 
-    img.onerror = () => {
-      console.warn('Failed to load GM Agency logo for PDF watermark/header');
-      resolve(null);
-    };
-  });
+      // Text GM
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 75px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('GM', 100, 100);
+
+      cachedLogoBase64 = canvas.toDataURL('image/png');
+      return cachedLogoBase64;
+    }
+  } catch (err) {
+    console.warn('Canvas logo export error:', err);
+  }
+  return null;
 }
 
 /**

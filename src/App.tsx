@@ -385,13 +385,8 @@ export default function App() {
               {/* About brand column (5 columns) */}
               <div className="md:col-span-5 space-y-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="relative h-10 w-10 shrink-0 p-0.5 rounded-full border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex items-center justify-center overflow-hidden">
-                    <img
-                      src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
-                      alt="GM Agency"
-                      className="w-full h-full object-cover rounded-full"
-                      referrerPolicy="no-referrer"
-                    />
+                  <div className="relative h-10 w-10 shrink-0 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 shadow-md flex items-center justify-center overflow-hidden">
+                    <span className="font-black text-white text-sm tracking-tighter">GM</span>
                   </div>
                   <span className={`text-lg font-black tracking-widest ${
                     theme === 'dark' ? 'text-white' : 'text-slate-900'
@@ -554,13 +549,8 @@ export default function App() {
           >
             <div className="flex items-start gap-4">
               {/* Enlarged Favicon Logo */}
-              <div className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-2xl overflow-hidden border-2 border-blue-500/50 bg-white shadow-md shadow-blue-500/20 shrink-0 flex items-center justify-center p-0.5">
-                <img
-                  src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
-                  alt="GM AGENCY App Logo"
-                  className="w-full h-full object-cover rounded-xl"
-                  referrerPolicy="no-referrer"
-                />
+              <div className="relative h-14 w-14 rounded-2xl overflow-hidden bg-gradient-to-tr from-blue-600 to-indigo-700 shadow-md shadow-blue-500/20 shrink-0 flex items-center justify-center">
+                <span className="font-black text-white text-xl tracking-tighter">GM</span>
               </div>
 
               {/* Message Details */}

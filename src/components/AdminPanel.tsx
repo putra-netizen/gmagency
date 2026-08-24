@@ -3864,13 +3864,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center pt-2">
                     <div className="space-y-4">
-                      <div className="relative h-24 w-24 rounded-2xl overflow-hidden border-2 border-blue-500/50 bg-white shadow-md shadow-blue-500/20 flex items-center justify-center p-0.5">
-                        <img
-                          src="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png"
-                          alt="GM AGENCY App Logo"
-                          className="w-full h-full object-cover rounded-xl"
-                          referrerPolicy="no-referrer"
-                        />
+                      <div className="relative h-20 w-20 rounded-2xl overflow-hidden bg-gradient-to-tr from-blue-600 to-indigo-700 shadow-lg shadow-blue-500/20 flex items-center justify-center">
+                        <span className="font-black text-white text-2xl tracking-tighter">GM</span>
                       </div>
 
                       <div className="space-y-2">

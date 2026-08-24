@@ -1012,7 +1012,7 @@ function formatHeaderAndDropdown(sheet, colCount, rowCount, statusColIdx, status
  * Uses Google Visualization API (GViz) JSONP for 100% CORS-free browser fetching,
  * plus Apps Script Web App and CSV fallbacks.
  */
-function fetchGVizData(sheetId: string, gid: string = '0'): Promise<any> {
+export function fetchGVizData(sheetId: string, sheetNameOrGid: string = '0'): Promise<any> {
   return new Promise((resolve, reject) => {
     const callbackName = '__gviz_cb_' + Math.random().toString(36).substring(2, 10);
     const script = document.createElement('script');
@@ -1020,7 +1020,7 @@ function fetchGVizData(sheetId: string, gid: string = '0'): Promise<any> {
     const timeout = setTimeout(() => {
       cleanup();
       reject(new Error('Koneksi ke Google Sheets timeout (12 detik). Pastikan spreadsheet disetel ke Publik ("Siapa saja yang memiliki link sebagai Pelihat/Viewer").'));
-    }, 12000);
+    }, 15000);
 
     const cleanup = () => {
       clearTimeout(timeout);
@@ -1038,9 +1038,137 @@ function fetchGVizData(sheetId: string, gid: string = '0'): Promise<any> {
       reject(new Error('Gagal memuat Google Spreadsheet. Pastikan Spreadsheet disetel ke akses publik: Klik Bagikan (Share) -> Ubah Akses Umum menjadi "Siapa saja yang memiliki link" sebagai Pelihat (Viewer).'));
     };
 
-    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=responseHandler:${callbackName}&gid=${gid}`;
+    const isNumericGid = /^\d+$/.test(sheetNameOrGid);
+    const sheetParam = isNumericGid 
+      ? `&gid=${sheetNameOrGid}` 
+      : (sheetNameOrGid ? `&sheet=${encodeURIComponent(sheetNameOrGid)}` : '');
+
+    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=responseHandler:${callbackName}${sheetParam}`;
     document.head.appendChild(script);
   });
+}
+
+export function parseGVizResponseToShopeeOrders(gvizData: any): ShopeeOrder[] {
+  if (!gvizData || !gvizData.table) return [];
+  const cols = gvizData.table.cols || [];
+  const rows = gvizData.table.rows || [];
+  if (rows.length === 0) return [];
+
+  const colMap: Record<string, number> = {};
+  let startIndex = 0;
+
+  // Check column labels
+  cols.forEach((col: any, idx: number) => {
+    const lbl = (col.label || col.id || '').trim().toLowerCase();
+    if (lbl) colMap[lbl] = idx;
+  });
+
+  // Check if row 0 has header names
+  const row0 = rows[0]?.c || [];
+  const row0Texts = row0.map((cell: any) => String(cell?.v || cell?.f || '').trim().toLowerCase());
+  const hasHeadersInRow0 = row0Texts.some((t: string) => 
+    t.includes('toko') || t.includes('pembeli') || t.includes('jasa') || t.includes('target') || t.includes('row_id') || t.includes('worker')
+  );
+
+  if (hasHeadersInRow0) {
+    startIndex = 1;
+    row0Texts.forEach((t: string, idx: number) => {
+      if (t) colMap[t] = idx;
+    });
+  }
+
+  const findIdx = (aliases: string[], fallbackIdx: number): number => {
+    for (const a of aliases) {
+      for (const [key, idx] of Object.entries(colMap)) {
+        if (key.includes(a)) return idx;
+      }
+    }
+    return fallbackIdx;
+  };
+
+  const idIdx = findIdx(['row_id', 'id'], 0);
+  const typeIdx = findIdx(['order_type', 'tipe_order'], 1);
+  const storeIdx = findIdx(['nama toko', 'store', 'toko', 'store_name'], 2);
+  const buyerIdx = findIdx(['pembeli', 'buyer', 'nama pembeli', 'buyer_name'], 3);
+  const serviceIdx = findIdx(['tipe jasa', 'layanan', 'service', 'service_type'], 4);
+  const qtyIdx = findIdx(['qty', 'jumlah', 'quantity'], 5);
+  const targetIdx = findIdx(['target link', 'target', 'link target', 'target_link'], 6);
+  const notesIdx = findIdx(['catatan', 'keterangan', 'notes'], 7);
+  const formattedIdx = findIdx(['formatted_text', 'format', 'pesanan'], 8);
+  const workerIdx = findIdx(['worker', 'pekerja', 'worker_id'], 9);
+  const woIdx = findIdx(['work order', 'wo', 'work_order'], 10);
+  const dateIdx = findIdx(['tanggal', 'date', 'created_at'], 11);
+  const statusIdx = findIdx(['status kerja', 'status'], 12);
+  const adminIdx = findIdx(['admin by', 'admin', 'created_by'], 13);
+
+  const shopeeOrders: ShopeeOrder[] = [];
+
+  for (let i = startIndex; i < rows.length; i++) {
+    const cells = rows[i]?.c || [];
+    if (!cells || cells.length === 0) continue;
+
+    const getVal = (idx: number): string => {
+      if (idx < 0 || idx >= cells.length || !cells[idx]) return '';
+      const cell = cells[idx];
+      if (cell.v === null || cell.v === undefined) return cell.f ? String(cell.f).trim() : '';
+      if (typeof cell.v === 'object' && cell.f) return String(cell.f).trim();
+      return String(cell.v).trim();
+    };
+
+    const rawId = getVal(idIdx);
+    const rawStore = getVal(storeIdx);
+    const rawBuyer = getVal(buyerIdx);
+    const rawTarget = getVal(targetIdx);
+    const rawService = getVal(serviceIdx) || 'SPAM_WA';
+    const rawQty = getVal(qtyIdx);
+    const rawNotes = getVal(notesIdx);
+    const rawWorker = getVal(workerIdx);
+    const rawWo = getVal(woIdx);
+    const rawDate = getVal(dateIdx);
+    const rawStatus = getVal(statusIdx).toUpperCase();
+    const rawAdmin = getVal(adminIdx);
+    const rawFormatted = getVal(formattedIdx);
+    const rawOrderType = getVal(typeIdx);
+
+    if (!rawId && !rawStore && !rawBuyer && !rawTarget) continue;
+
+    const id = rawId || ('shp-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
+    const store_name = rawStore || 'Toko Shopee';
+    const buyer_name = rawBuyer || 'Pembeli';
+    const service_type = rawService;
+    const qtyNum = Number(rawQty);
+    const quantity = (!isNaN(qtyNum) && qtyNum > 0) ? qtyNum : 1;
+    const target_link = rawTarget;
+    
+    let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PROGRESS';
+    if (rawStatus.includes('DONE')) status = 'DONE';
+    else if (rawStatus.includes('PENDING')) status = 'PENDING';
+    else if (rawStatus.includes('READY')) status = 'READY';
+    else if (rawStatus.includes('REKAP')) status = 'SUDAH DIREKAP';
+
+    const order_type = rawOrderType === 'REPORT_ALL_SOSMED' || service_type.toUpperCase().includes('REPORT')
+      ? 'REPORT_ALL_SOSMED'
+      : 'SPAM_WA';
+
+    shopeeOrders.push({
+      id,
+      order_type,
+      store_name,
+      buyer_name,
+      service_type,
+      quantity,
+      target_link,
+      status,
+      worker_id: rawWorker,
+      work_order: rawWo,
+      notes: rawNotes,
+      created_by: rawAdmin || 'adminshp1',
+      created_at: rawDate || new Date().toISOString(),
+      formatted_text: rawFormatted || `Pesanan ${service_type} - Toko ${store_name} - ${buyer_name}`
+    });
+  }
+
+  return shopeeOrders;
 }
 
 function parseGVizResponseToMapsReviews(gvizData: any): MapsReview[] {
@@ -1374,3 +1502,142 @@ export const syncFromGoogleSheetsUrl = async (
     items: processedReviews
   };
 };
+
+/**
+ * Universal Multi-Table Google Sheets Pull (Maps Reviews + Shopee Orders)
+ * Tries server-side sync with safe fallback to direct browser GViz queries.
+ * Always populates localStorage immediately so UI refreshes without delay.
+ */
+export const syncAllTablesFromSpreadsheetUrl = async (
+  rawUrl: string,
+  onProgress?: (msg: string) => void
+): Promise<{
+  success: boolean;
+  message: string;
+  totalSynced: number;
+  totalMaps: number;
+  totalShopee: number;
+  mapsReviews: MapsReview[];
+  shopeeOrders: ShopeeOrder[];
+}> => {
+  const cleanUrl = (rawUrl || '').trim();
+  if (!cleanUrl) {
+    throw new Error('Mohon masukkan URL Google Spreadsheet atau Web App Apps Script.');
+  }
+
+  // 1. First Attempt: Backend endpoint /api/sheets/sync-from-url (if Express server is accessible)
+  onProgress?.('Menghubungi server GM Agency...');
+  try {
+    const serverRes = await fetch('/api/sheets/sync-from-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sheetUrl: cleanUrl })
+    });
+
+    if (serverRes.ok) {
+      const text = await serverRes.text();
+      try {
+        const sData = JSON.parse(text);
+        if (sData && sData.success) {
+          const mList = Array.isArray(sData.mapsReviews) ? sData.mapsReviews : [];
+          const sList = Array.isArray(sData.shopeeOrders) ? sData.shopeeOrders : [];
+          
+          // Save immediately to local storage cache
+          if (mList.length > 0) {
+            try { localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(mList)); } catch {}
+          }
+          if (sList.length > 0) {
+            try { localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(sList)); } catch {}
+          }
+
+          return {
+            success: true,
+            message: sData.message || `Berhasil menyinkronkan ${sData.totalSynced || (mList.length + sList.length)} data!`,
+            totalSynced: sData.totalSynced || (mList.length + sList.length),
+            totalMaps: sData.totalMaps || mList.length,
+            totalShopee: sData.totalShopee || sList.length,
+            mapsReviews: mList,
+            shopeeOrders: sList
+          };
+        }
+      } catch (e) {
+        console.warn('Backend returned non-JSON, switching to direct client-side fetch...');
+      }
+    }
+  } catch (srvErr) {
+    console.warn('Backend sync failed, falling back to direct browser GViz pull:', srvErr);
+  }
+
+  // 2. Second Attempt: Direct Browser-Side GViz fetch for both maps_orders and shopee_orders
+  onProgress?.('Mengambil data langsung dari Google Sheets via GViz...');
+
+  let sheetId = '';
+  const match = cleanUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match && match[1]) {
+    sheetId = match[1];
+  } else if (/^[a-zA-Z0-9-_]{20,}$/.test(cleanUrl)) {
+    sheetId = cleanUrl;
+  }
+
+  if (!sheetId) {
+    throw new Error('Format Link Spreadsheet tidak valid. Gunakan link Google Spreadsheet standar (misal: https://docs.google.com/spreadsheets/d/...).');
+  }
+
+  let directMaps: MapsReview[] = [];
+  let directShopee: ShopeeOrder[] = [];
+
+  // Try fetching maps_orders sheet
+  try {
+    onProgress?.('Membaca tab maps_orders...');
+    const mapsGviz = await fetchGVizData(sheetId, 'maps_orders');
+    directMaps = parseGVizResponseToMapsReviews(mapsGviz);
+  } catch (errMaps) {
+    console.warn('Gagal membaca tab maps_orders, mencoba sheet pertama (gid 0)...', errMaps);
+    try {
+      const fallbackGviz = await fetchGVizData(sheetId, '0');
+      directMaps = parseGVizResponseToMapsReviews(fallbackGviz);
+    } catch {}
+  }
+
+  // Try fetching shopee_orders sheet
+  try {
+    onProgress?.('Membaca tab shopee_orders...');
+    const shopeeGviz = await fetchGVizData(sheetId, 'shopee_orders');
+    directShopee = parseGVizResponseToShopeeOrders(shopeeGviz);
+  } catch (errShopee) {
+    console.warn('Gagal membaca tab shopee_orders:', errShopee);
+  }
+
+  const totalCount = directMaps.length + directShopee.length;
+  if (totalCount === 0) {
+    throw new Error('Tidak ada data yang ditemukan di Spreadsheet. Pastikan tab "maps_orders" dan/atau "shopee_orders" sudah dibuat dan Spreadsheet disetel ke akses publik (Viewer).');
+  }
+
+  // Store in localStorage
+  if (directMaps.length > 0) {
+    try { localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(directMaps)); } catch {}
+  }
+  if (directShopee.length > 0) {
+    try { localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(directShopee)); } catch {}
+  }
+
+  // Asynchronously send to server to populate db.json if backend is up
+  try {
+    fetch('/api/sheets/push-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mapsReviews: directMaps, shopeeOrders: directShopee })
+    }).catch(() => {});
+  } catch {}
+
+  return {
+    success: true,
+    message: `Berhasil menarik ${totalCount} data (${directMaps.length} Ulasan Maps, ${directShopee.length} Pesanan Shopee) langsung dari Google Sheets!`,
+    totalSynced: totalCount,
+    totalMaps: directMaps.length,
+    totalShopee: directShopee.length,
+    mapsReviews: directMaps,
+    shopeeOrders: directShopee
+  };
+};
+

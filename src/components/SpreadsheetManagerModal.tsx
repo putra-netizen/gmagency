@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { MapsReview, ShopeeOrder, Order } from '../types';
-import { generateBuildAllTablesAppsScript } from '../utils/spreadsheetIntegration';
+import { generateBuildAllTablesAppsScript, syncAllTablesFromSpreadsheetUrl } from '../utils/spreadsheetIntegration';
 import { toast } from '../utils/toast';
 
 interface SpreadsheetManagerModalProps {
@@ -81,22 +81,20 @@ export function SpreadsheetManagerModal({
       return;
     }
 
+    localStorage.setItem('gm_sheets_pull_url', sheetUrl.trim());
     setIsPulling(true);
-    setPullSummary(null);
+    setPullSummary('Sedang menghubungkan ke Google Sheets...');
     try {
-      const res = await fetch('/api/sheets/sync-from-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheetUrl: sheetUrl.trim() })
+      const result = await syncAllTablesFromSpreadsheetUrl(sheetUrl.trim(), (msg) => {
+        setPullSummary(msg);
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Gagal menarik data dari Google Spreadsheet');
+      if (!result.success) {
+        throw new Error(result.message || 'Gagal menarik data dari Google Spreadsheet');
       }
 
-      toast.success(data.message || `Berhasil menyinkronkan ${data.totalSynced} baris data!`);
-      setPullSummary(`✅ Berhasil menarik ${data.totalSynced || 0} total pesanan (${data.totalMaps || 0} Ulasan Maps & ${data.totalShopee || 0} Pesanan Shopee) dari tab maps_orders dan shopee_orders.`);
+      toast.success(result.message || `Berhasil menyinkronkan ${result.totalSynced} baris data!`);
+      setPullSummary(`✅ Berhasil menarik ${result.totalSynced || 0} total pesanan (${result.totalMaps || 0} Ulasan Maps & ${result.totalShopee || 0} Pesanan Shopee) dari tab maps_orders dan shopee_orders.`);
       
       if (onRefreshData) {
         onRefreshData();
@@ -104,6 +102,7 @@ export function SpreadsheetManagerModal({
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Gagal menarik data dari Spreadsheet');
+      setPullSummary(`❌ Gagal: ${err.message || 'Periksa apakah Spreadsheet disetel ke Publik (Viewer).'}`);
     } finally {
       setIsPulling(false);
     }

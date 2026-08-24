@@ -24,18 +24,8 @@ import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus, MapsReview, ShopeeOrder } from './src/types';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
-
-const isSupabaseConfigured = !!(
-  supabaseUrl && 
-  supabaseAnonKey && 
-  supabaseUrl !== 'YOUR_SUPABASE_URL' && 
-  supabaseUrl !== 'MY_SUPABASE_URL' &&
-  !supabaseUrl.includes('placeholder')
-);
-
-const supabase = isSupabaseConfigured ? createClient(supabaseUrl!, supabaseAnonKey!) : null;
+const isSupabaseConfigured = false;
+const supabase = null;
 
 // Track if Supabase failed or reached quota limit on server
 let serverSupabaseFailed = false;
