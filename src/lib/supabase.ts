@@ -12,10 +12,13 @@ import { triggerSheetsSync } from '../utils/sheetsSyncHelper';
 
 export function isDummyOrder(o: any): boolean {
   if (!o) return true;
-  const dummyIds = ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005'];
-  if (dummyIds.includes(o.id)) return true;
-  const dummyNames = ['Budi Santoso', 'Siti Rahma', 'Randi Wijaya', 'Agus Salim', 'Dewi Lestari'];
-  if (dummyNames.includes(o.buyer_name)) return true;
+  const dummyIds = ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005', 'ord-1', 'ord-2', 'ord-3', 'dummy-1', 'dummy-2'];
+  if (dummyIds.includes(String(o.id))) return true;
+  const dummyNames = ['budi santoso', 'siti rahma', 'randi wijaya', 'agus salim', 'dewi lestari', 'john doe', 'jane doe', 'test order', 'dummy'];
+  const buyer = String(o.buyer_name || o.customer_name || '').toLowerCase().trim();
+  if (dummyNames.some(name => buyer === name || buyer.includes('dummy') || buyer.includes('sample') || buyer.includes('contoh order'))) return true;
+  const notes = String(o.notes || '').toLowerCase();
+  if (notes.includes('dummy') || notes.includes('contoh order') || notes.includes('sample order')) return true;
   return false;
 }
 
@@ -61,16 +64,20 @@ let supabaseFailed = false;
 
 export function isSupabaseQuotaError(err: any): boolean {
   if (!err) return false;
+  if (err.status === 402 || err.statusCode === 402 || err.code === '402') return true;
+  if (err.status === 401 || err.status === 403) return true;
   const str = typeof err === 'string' 
     ? err 
-    : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${JSON.stringify(err)}`;
+    : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${err.status || ''} ${err.statusText || ''} ${JSON.stringify(err)}`;
   return (
     str.includes('exceed_egress_quota') ||
     str.includes('restricted') ||
     str.includes('spend caps') ||
     str.includes('upgrade their plan') ||
     str.includes('Payment Required') ||
-    str.includes('quota')
+    str.includes('402') ||
+    str.includes('quota') ||
+    str.includes('Failed to fetch')
   );
 }
 
@@ -1213,7 +1220,7 @@ export async function dbGetShopeeOrders(limit: number = 10000, forceRefresh: boo
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const data = await fetchAllSupabaseRows<ShopeeOrder>(supabase, 'shopee_orders', 'created_at', false, forceRefresh, limit);
-      if (data) {
+      if (data && Array.isArray(data) && data.length > 0) {
         list = data;
       }
     } catch (err) {
@@ -1441,7 +1448,7 @@ export async function dbGetMapsReviews(limit: number = 10000, forceRefresh: bool
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       const data = await fetchAllSupabaseRows<MapsReview>(supabase, 'maps_reviews', 'created_at', false, forceRefresh, limit);
-      if (data && Array.isArray(data)) {
+      if (data && Array.isArray(data) && data.length > 0) {
         list = data.map(normalizeMapsReview);
       }
     } catch (err) {

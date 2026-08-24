@@ -616,7 +616,8 @@ function rapikanFormatSpreadsheet() {
 
 /**
  * GENERATE BUILD ALL TABLE APPS SCRIPT (.gs)
- * Multi-Sheet builder for Maps Reviews, Shopee Orders, Services & 2-Way Sync Engine.
+ * Uses existing sheets: 'maps_orders' and 'shopee_orders'
+ * Features complete 2-Way Realtime Sync, Web App doGet (JSON API), doPost (Webhook receiver), and onEdit triggers.
  */
 export const generateBuildAllTablesAppsScript = (
   mapsReviews: MapsReview[], 
@@ -653,7 +654,7 @@ export const generateBuildAllTablesAppsScript = (
 
   const shopeeHeaders = [
     "row_id", "TANGGAL", "NAMA TOKO", "PEMBELI", "TIPE JASA", 
-    "QTY", "TARGET LINK", "STATUS KERJA", "CATATAN", "ADMIN BY", "WORKER"
+    "QTY", "TARGET LINK", "STATUS KERJA", "WORKER", "WORK ORDER", "CATATAN", "ADMIN BY"
   ];
 
   const shopeeRows = shopeeOrders.map(s => [
@@ -665,185 +666,234 @@ export const generateBuildAllTablesAppsScript = (
     Number(s.quantity || 1),
     s.target_link || '',
     s.status || 'PROGRESS',
+    s.worker_id || '',
+    s.work_order || '',
     s.notes || '',
-    s.created_by || '',
-    s.worker_id || ''
+    s.created_by || 'Admin'
   ]);
 
   return `/**
  * ==============================================================================
- * 🚀 GM AGENCY - GOOGLE APPS SCRIPT: BUILD ALL TABLES & 2-WAY SYNC
+ * 🚀 GM AGENCY - GOOGLE APPS SCRIPT: 2-WAY REAL-TIME SYNC
  * ==============================================================================
- * Dibuat Khusus untuk: Sinkronisasi Penuh Spreadsheet & Sistem Tanpa Supabase
- * Server Web Admin : ${baseUrl}
- * Data Snapshot    : ${mapsRows.length} Maps Reviews | ${shopeeRows.length} Shopee Orders
+ * Database Sheets Terdaftar: 'maps_orders' & 'shopee_orders'
+ * Server Web Admin         : ${baseUrl}
  * 
  * 📋 FITUR LENGKAP:
- * 1. ⚡ buildAllTables() : Membuat & mengisi otomatis semua sheet (Maps Reviews, Shopee Orders, & Katalog)
- * 2. 🔄 tarikDataMaps()  : Mengambil data ulasan Maps terbaru langsung dari Web Admin
- * 3. 🔄 tarikDataShopee(): Mengambil data pesanan Shopee/Sosmed terbaru dari Web Admin
- * 4. 📤 onEdit(e)        : Mengirim perubahan status/catatan/akun real-time kembali ke Web Admin
- * 5. 🎨 Format Otomatis  : Header Navy elegan, Dropdown Status, & Freeze Header
+ * 1. 🌐 doGet(e)         : Menyediakan REST API JSON untuk menarik 2500+ data lengkap Maps & Shopee tanpa limit
+ * 2. 📥 doPost(e)        : Menerima input/update data baru secara instan dari Web Admin langsung ke Sheet
+ * 3. 📤 onEdit(e)        : Mengirim perubahan status, akun, bukti, & catatan di Spreadsheet secara real-time ke Web Admin
+ * 4. ⚡ syncToSheet()    : Memasukkan data awal ke sheet 'maps_orders' dan 'shopee_orders' tanpa membuat sheet baru
+ * 5. 🎨 rapikanFormat()  : Merapikan header navy & dropdown status di 'maps_orders' dan 'shopee_orders'
  * 
  * 🛠️ CARA PEMASANGAN DI GOOGLE SPREADSHEET:
- * 1. Buka Google Spreadsheet Anda.
+ * 1. Buka Google Spreadsheet Anda (yang sudah ada sheet 'maps_orders' dan 'shopee_orders').
  * 2. Klik menu "Ekstensi" (Extensions) -> "Apps Script".
- * 3. Hapus semua kode yang ada, lalu TEMPELKAN (PASTE) seluruh script ini.
- * 4. Klik Simpan (Ctrl+S / Cmd+S).
- * 5. Pilih fungsi "buildAllTables" di toolbar atas, lalu klik "Jalankan" (Run).
- * 6. Berikan izin saat pertama kali dijalankan. Semua tabel langsung terisi lengkap!
- * 7. Refresh halaman Google Spreadsheet, maka Menu "🚀 GM Agency" akan muncul di toolbar atas.
+ * 3. Hapus semua kode lama, lalu TEMPELKAN (PASTE) seluruh script ini.
+ * 4. Klik Simpan (Ctrl+S).
+ * 5. Klik tombol "Terapkan" (Deploy) di kanan atas -> "Kelola Penerapan" (Manage Deployments) -> Edit -> Versi Baru (New Version).
+ *    Pastikan "Akses" (Who has access) disetel ke "Siapa Saja" (Anyone).
+ * 6. Selesai! Web Admin dan Spreadsheet Anda kini tersinkronisasi 2 arah secara instan & realtime.
  */
 
 var WEB_ADMIN_URL = "${baseUrl}";
 
-// 1. MEMBUAT MENU DI SPREADSHEET
+// 1. MEMBUAT MENU DI GOOGLE SPREADSHEET
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu('🚀 GM Agency')
-    .addItem('⚡ Build & Refresh Semua Tabel (Lengkap)', 'buildAllTables')
+    .createMenu('🚀 GM Agency Sync')
+    .addItem('⚡ Sync Data dari Web ke Sheet Ini', 'syncToSheet')
     .addSeparator()
-    .addItem('📥 Tarik Data Maps Reviews dari Web', 'tarikDataMaps')
-    .addItem('📥 Tarik Data Shopee Orders dari Web', 'tarikDataShopee')
-    .addSeparator()
-    .addItem('🎨 Rapikan Format & Dropdown Semua Sheet', 'rapikanSemuaSheet')
+    .addItem('🎨 Rapikan Format & Dropdown (maps_orders & shopee_orders)', 'rapikanFormat')
     .addToUi();
 }
 
-// 2. FUNGSI UTAMA: BUILD ALL TABLES
-function buildAllTables() {
+// 2. GET API ENDPOINT: MENGIRIM SELURUH DATA SHEET KE WEB ADMIN TANPA BATAS (2500+ ROWS)
+function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // A. SHEET 1: MAPS REVIEWS
-  var sheetMaps = ss.getSheetByName('📊 MAPS & APP REVIEWS') || ss.insertSheet('📊 MAPS & APP REVIEWS');
-  var mapsHeaders = ${JSON.stringify(mapsHeaders)};
-  var mapsData = ${JSON.stringify(mapsRows, null, 2)};
-  
-  sheetMaps.clearContents();
-  var allMapsData = [mapsHeaders].concat(mapsData);
-  if (allMapsData.length > 0) {
-    sheetMaps.getRange(1, 1, allMapsData.length, mapsHeaders.length).setValues(allMapsData);
-  }
-  formatHeaderAndDropdown(sheetMaps, mapsHeaders.length, allMapsData.length, 10, ['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE']);
-
-  // B. SHEET 2: SHOPEE & SOSMED ORDERS
-  var sheetShopee = ss.getSheetByName('🛒 SHOPEE & SOSMED ORDERS') || ss.insertSheet('🛒 SHOPEE & SOSMED ORDERS');
-  var shopeeHeaders = ${JSON.stringify(shopeeHeaders)};
-  var shopeeData = ${JSON.stringify(shopeeRows, null, 2)};
-  
-  sheetShopee.clearContents();
-  var allShopeeData = [shopeeHeaders].concat(shopeeData);
-  if (allShopeeData.length > 0) {
-    sheetShopee.getRange(1, 1, allShopeeData.length, shopeeHeaders.length).setValues(allShopeeData);
-  }
-  formatHeaderAndDropdown(sheetShopee, shopeeHeaders.length, allShopeeData.length, 8, ['PENDING', 'PROGRESS', 'DONE', 'CANCEL']);
-
-  // Selesai
-  SpreadsheetApp.getActiveSpreadsheet().toast('Semua sheet berhasil dibuat dan disinkronkan!', 'Sukses', 5);
-  SpreadsheetApp.getUi().alert('✅ SUKSES!\\n\\n1. Sheet "📊 MAPS & APP REVIEWS" (' + mapsData.length + ' data)\\n2. Sheet "🛒 SHOPEE & SOSMED ORDERS" (' + shopeeData.length + ' data)\\n\\nSemua tabel telah diformat dengan dropdown status dan siap digunakan.');
-}
-
-// Helper formatting
-function formatHeaderAndDropdown(sheet, colCount, rowCount, statusColIdx, statusValues) {
-  // Header Style
-  var headerRange = sheet.getRange(1, 1, 1, colCount);
-  headerRange.setBackground('#0f172a');
-  headerRange.setFontColor('#ffffff');
-  headerRange.setFontWeight('bold');
-  headerRange.setHorizontalAlignment('center');
-  sheet.setFrozenRows(1);
-  
-  // Set dropdown validation
-  if (rowCount > 1) {
-    var statusRange = sheet.getRange(2, statusColIdx, rowCount - 1, 1);
-    var rule = SpreadsheetApp.newDataValidation()
-      .requireValueInList(statusValues, true)
-      .setAllowInvalid(true)
-      .build();
-    statusRange.setDataValidation(rule);
-  }
-  
-  // Auto-resize columns
-  for (var c = 1; c <= Math.min(colCount, 8); c++) {
-    sheet.autoResizeColumn(c);
-  }
-}
-
-// 3. TARIK DATA MAPS REVIEWS DARI WEB ADMIN
-function tarikDataMaps() {
-  var url = WEB_ADMIN_URL + '/api/sheets/export-csv?type=maps_reviews';
-  try {
-    SpreadsheetApp.getActiveSpreadsheet().toast('Mengambil data Maps Reviews dari Web Admin...', 'Loading', 5);
-    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    var csvText = res.getContentText();
-    if (!csvText || csvText.indexOf('row_id') === -1) {
-      SpreadsheetApp.getUi().alert('⚠️ Gagal mengambil CSV Maps. Pastikan server web sedang online.');
-      return;
+  // Baca maps_orders
+  var mapsSheet = ss.getSheetByName('maps_orders') || ss.getSheets()[0];
+  var mapsData = [];
+  if (mapsSheet && mapsSheet.getLastRow() > 1) {
+    var mapsRange = mapsSheet.getRange(2, 1, mapsSheet.getLastRow() - 1, Math.min(12, mapsSheet.getLastColumn())).getValues();
+    for (var i = 0; i < mapsRange.length; i++) {
+      var r = mapsRange[i];
+      if (!r[0] && !r[2] && !r[5]) continue;
+      mapsData.push({
+        row_id: String(r[0] || ''),
+        TANGGAL: String(r[1] || ''),
+        KLIEN: String(r[2] || ''),
+        STORE: String(r[3] || 'MP'),
+        "TIPE REVIEW": String(r[4] || 'G_MAPS'),
+        "TARGET LINK": String(r[5] || ''),
+        "INPUT PROGRES AKUN": String(r[6] || ''),
+        CLUE: String(r[7] || ''),
+        "LINK BUKTI": String(r[8] || ''),
+        STATUS: String(r[9] || 'PROGRESS'),
+        updated_at: String(r[10] || ''),
+        "TARGET AKUN": Number(r[11]) || 1
+      });
     }
-    var data = Utilities.parseCsv(csvText);
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName('📊 MAPS & APP REVIEWS') || ss.getActiveSheet();
-    sheet.clearContents();
-    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
-    formatHeaderAndDropdown(sheet, data[0].length, data.length, 10, ['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE']);
-    SpreadsheetApp.getUi().alert('✅ Berhasil menyinkronkan ' + (data.length - 1) + ' data Maps Reviews!');
-  } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ Error: ' + e.toString());
   }
-}
 
-// 4. TARIK DATA SHOPEE ORDERS DARI WEB ADMIN
-function tarikDataShopee() {
-  var url = WEB_ADMIN_URL + '/api/sheets/export-csv?type=shopee_orders';
-  try {
-    SpreadsheetApp.getActiveSpreadsheet().toast('Mengambil data Shopee Orders dari Web Admin...', 'Loading', 5);
-    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    var csvText = res.getContentText();
-    if (!csvText || csvText.indexOf('row_id') === -1) {
-      SpreadsheetApp.getUi().alert('⚠️ Gagal mengambil CSV Shopee. Pastikan server web sedang online.');
-      return;
+  // Baca shopee_orders
+  var shopeeSheet = ss.getSheetByName('shopee_orders');
+  var shopeeData = [];
+  if (shopeeSheet && shopeeSheet.getLastRow() > 1) {
+    var shpRange = shopeeSheet.getRange(2, 1, shopeeSheet.getLastRow() - 1, Math.min(12, shopeeSheet.getLastColumn())).getValues();
+    for (var j = 0; j < shpRange.length; j++) {
+      var s = shpRange[j];
+      if (!s[0] && !s[2] && !s[3]) continue;
+      shopeeData.push({
+        row_id: String(s[0] || ''),
+        TANGGAL: String(s[1] || ''),
+        "NAMA TOKO": String(s[2] || ''),
+        PEMBELI: String(s[3] || ''),
+        "TIPE JASA": String(s[4] || 'SPAM_WA'),
+        QTY: Number(s[5]) || 1,
+        "TARGET LINK": String(s[6] || ''),
+        "STATUS KERJA": String(s[7] || 'PROGRESS'),
+        WORKER: String(s[8] || ''),
+        "WORK ORDER": String(s[9] || ''),
+        CATATAN: String(s[10] || ''),
+        "ADMIN BY": String(s[11] || 'Admin')
+      });
     }
-    var data = Utilities.parseCsv(csvText);
+  }
+
+  var result = {
+    status: "success",
+    total_maps: mapsData.length,
+    total_shopee: shopeeData.length,
+    maps_orders: mapsData,
+    shopee_orders: shopeeData
+  };
+
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 3. POST WEBHOOK: MENERIMA INSERT / UPDATE DARI WEB ADMIN KE SPREADSHEET
+function doPost(e) {
+  try {
+    var contents = e.postData ? JSON.parse(e.postData.contents) : {};
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName('🛒 SHOPEE & SOSMED ORDERS') || ss.getActiveSheet();
-    sheet.clearContents();
-    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
-    formatHeaderAndDropdown(sheet, data[0].length, data.length, 8, ['PENDING', 'PROGRESS', 'DONE', 'CANCEL']);
-    SpreadsheetApp.getUi().alert('✅ Berhasil menyinkronkan ' + (data.length - 1) + ' data Shopee Orders!');
-  } catch (e) {
-    SpreadsheetApp.getUi().alert('❌ Error: ' + e.toString());
+    var action = contents.action || 'update';
+    var type = contents.type || 'maps_orders';
+    var payload = contents.payload || contents.reviews || contents;
+
+    if (type === 'shopee_orders' || (contents.order_type && contents.order_type !== 'G_MAPS')) {
+      var sheetShp = ss.getSheetByName('shopee_orders') || ss.insertSheet('shopee_orders');
+      if (action === 'sync_all' && Array.isArray(payload)) {
+        // Bulk update/append
+        var existingData = sheetShp.getLastRow() > 1 ? sheetShp.getRange(2, 1, sheetShp.getLastRow() - 1, 1).getValues() : [];
+        var existingIds = {};
+        for (var i = 0; i < existingData.length; i++) existingIds[String(existingData[i][0])] = i + 2;
+
+        for (var k = 0; k < payload.length; k++) {
+          var item = payload[k];
+          var rowId = String(item.id || item.row_id || '');
+          var rowData = [
+            rowId, item.created_at || new Date().toISOString(), item.store_name || '', item.buyer_name || '',
+            item.service_type || 'SPAM_WA', item.quantity || 1, item.target_link || '', item.status || 'PROGRESS',
+            item.worker_id || '', item.work_order || '', item.notes || '', item.created_by || 'Admin'
+          ];
+          if (existingIds[rowId]) {
+            sheetShp.getRange(existingIds[rowId], 1, 1, rowData.length).setValues([rowData]);
+          } else {
+            sheetShp.appendRow(rowData);
+          }
+        }
+      } else {
+        // Single update
+        var sId = String(payload.id || payload.row_id || '');
+        if (sId && sheetShp.getLastRow() > 1) {
+          var sData = sheetShp.getRange(2, 1, sheetShp.getLastRow() - 1, 1).getValues();
+          for (var si = 0; si < sData.length; si++) {
+            if (String(sData[si][0]) === sId) {
+              var sRow = si + 2;
+              if (payload.status) sheetShp.getRange(sRow, 8).setValue(payload.status);
+              if (payload.worker_id) sheetShp.getRange(sRow, 9).setValue(payload.worker_id);
+              if (payload.work_order) sheetShp.getRange(sRow, 10).setValue(payload.work_order);
+              if (payload.notes) sheetShp.getRange(sRow, 11).setValue(payload.notes);
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      // Maps Orders
+      var sheetMaps = ss.getSheetByName('maps_orders') || ss.insertSheet('maps_orders');
+      if (action === 'sync_all' && Array.isArray(payload)) {
+        var mExisting = sheetMaps.getLastRow() > 1 ? sheetMaps.getRange(2, 1, sheetMaps.getLastRow() - 1, 1).getValues() : [];
+        var mExistingIds = {};
+        for (var mi = 0; mi < mExisting.length; mi++) mExistingIds[String(mExisting[mi][0])] = mi + 2;
+
+        for (var mk = 0; mk < payload.length; mk++) {
+          var mItem = payload[mk];
+          var mRowId = String(mItem.id || mItem.row_id || '');
+          var mAccounts = mItem.reviewer_accounts_json || (Array.isArray(mItem.reviewer_accounts) ? JSON.stringify(mItem.reviewer_accounts) : String(mItem.reviewer_accounts || '[]'));
+          var mRowData = [
+            mRowId, mItem.created_at || new Date().toISOString(), mItem.client_name || '', mItem.store_name || 'MP',
+            mItem.review_type || 'G_MAPS', mItem.maps_link || '', mAccounts, mItem.notes || '', mItem.proof_link || '',
+            mItem.status || 'PROGRESS', new Date().toISOString(), Number(mItem.target_count || 1)
+          ];
+          if (mExistingIds[mRowId]) {
+            sheetMaps.getRange(mExistingIds[mRowId], 1, 1, mRowData.length).setValues([mRowData]);
+          } else {
+            sheetMaps.appendRow(mRowData);
+          }
+        }
+      } else {
+        var mId = String(payload.id || payload.row_id || '');
+        if (mId && sheetMaps.getLastRow() > 1) {
+          var allM = sheetMaps.getRange(2, 1, sheetMaps.getLastRow() - 1, 1).getValues();
+          for (var ri = 0; ri < allM.length; ri++) {
+            if (String(allM[ri][0]) === mId) {
+              var targetRow = ri + 2;
+              if (payload.status) sheetMaps.getRange(targetRow, 10).setValue(payload.status);
+              if (payload.reviewer_accounts) {
+                var accStr = Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts);
+                sheetMaps.getRange(targetRow, 7).setValue(accStr);
+              }
+              if (payload.notes) sheetMaps.getRange(targetRow, 8).setValue(payload.notes);
+              if (payload.proof_link) sheetMaps.getRange(targetRow, 9).setValue(payload.proof_link);
+              if (payload.target_count) sheetMaps.getRange(targetRow, 12).setValue(Number(payload.target_count));
+              sheetMaps.getRange(targetRow, 11).setValue(new Date().toISOString());
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Berhasil disinkronkan ke Sheet" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-// 5. RAPAIKAN SEMUA SHEET
-function rapikanSemuaSheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet1 = ss.getSheetByName('📊 MAPS & APP REVIEWS');
-  if (sheet1) formatHeaderAndDropdown(sheet1, 12, sheet1.getLastRow(), 10, ['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE']);
-  
-  var sheet2 = ss.getSheetByName('🛒 SHOPEE & SOSMED ORDERS');
-  if (sheet2) formatHeaderAndDropdown(sheet2, 11, sheet2.getLastRow(), 8, ['PENDING', 'PROGRESS', 'DONE', 'CANCEL']);
-  
-  SpreadsheetApp.getUi().alert('🎨 Format semua sheet berhasil dirapikan!');
-}
-
-// 6. ON EDIT: SINKRONISASI 2 ARAH OTOMATIS SAAT DIEDIT
+// 4. ON EDIT TRIGGER: SINKRONISASI REALTIME DARI SPREADSHEET KE WEB ADMIN SAAT CELL DIEDIT
 function onEdit(e) {
   if (!e || !e.range) return;
   var sheet = e.range.getSheet();
   var sheetName = sheet.getName();
   var row = e.range.getRow();
-  if (row <= 1) return; // Skip baris header
+  if (row <= 1) return; // Abaikan baris header
   
   var webhookUrl = WEB_ADMIN_URL + '/api/sheets/webhook';
   
   try {
-    if (sheetName.indexOf('MAPS') !== -1) {
-      var rowValues = sheet.getRange(row, 1, 1, 12).getValues()[0];
+    if (sheetName === 'maps_orders' || sheetName.toLowerCase().includes('map')) {
+      var rowValues = sheet.getRange(row, 1, 1, Math.min(12, sheet.getLastColumn())).getValues()[0];
       var rowId = String(rowValues[0] || '').trim();
       if (!rowId) return;
 
-      var payload = {
+      var payloadMaps = {
+        type: 'maps_orders',
         action: 'UPDATE_ROW',
         row_id: rowId,
         status: String(rowValues[9] || 'PROGRESS').trim(),
@@ -853,17 +903,104 @@ function onEdit(e) {
         target_count: Number(rowValues[11]) || 1
       };
 
-      sheet.getRange(row, 11).setValue(new Date().toISOString()); // Kolom updated_at
+      sheet.getRange(row, 11).setValue(new Date().toISOString()); // Update kolom updated_at
       
       UrlFetchApp.fetch(webhookUrl, {
         method: 'post',
         contentType: 'application/json',
-        payload: JSON.stringify(payload),
+        payload: JSON.stringify(payloadMaps),
+        muteHttpExceptions: true
+      });
+    } else if (sheetName === 'shopee_orders' || sheetName.toLowerCase().includes('shopee') || sheetName.toLowerCase().includes('shp')) {
+      var shpValues = sheet.getRange(row, 1, 1, Math.min(12, sheet.getLastColumn())).getValues()[0];
+      var shpId = String(shpValues[0] || '').trim();
+      if (!shpId) return;
+
+      var payloadShopee = {
+        type: 'shopee_orders',
+        action: 'UPDATE_ROW',
+        row_id: shpId,
+        status: String(shpValues[7] || 'PROGRESS').trim(),
+        worker_id: String(shpValues[8] || '').trim(),
+        work_order: String(shpValues[9] || '').trim(),
+        notes: String(shpValues[10] || '').trim()
+      };
+
+      UrlFetchApp.fetch(webhookUrl, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payloadShopee),
         muteHttpExceptions: true
       });
     }
   } catch (err) {
     Logger.log('onEdit error: ' + err.toString());
+  }
+}
+
+// 5. HELPER UNTUK MEMASUKKAN DATA SNAPSHOT JIKA PERLU
+function syncToSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Sheet maps_orders
+  var sheetMaps = ss.getSheetByName('maps_orders') || ss.insertSheet('maps_orders');
+  var mapsHeaders = ${JSON.stringify(mapsHeaders)};
+  var mapsData = ${JSON.stringify(mapsRows, null, 2)};
+  
+  if (sheetMaps.getLastRow() === 0) {
+    sheetMaps.appendRow(mapsHeaders);
+  }
+  if (mapsData.length > 0) {
+    sheetMaps.getRange(2, 1, mapsData.length, mapsHeaders.length).setValues(mapsData);
+  }
+  formatHeaderAndDropdown(sheetMaps, mapsHeaders.length, Math.max(2, mapsData.length + 1), 10, ['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE']);
+
+  // Sheet shopee_orders
+  var sheetShopee = ss.getSheetByName('shopee_orders') || ss.insertSheet('shopee_orders');
+  var shopeeHeaders = ${JSON.stringify(shopeeHeaders)};
+  var shopeeData = ${JSON.stringify(shopeeRows, null, 2)};
+  
+  if (sheetShopee.getLastRow() === 0) {
+    sheetShopee.appendRow(shopeeHeaders);
+  }
+  if (shopeeData.length > 0) {
+    sheetShopee.getRange(2, 1, shopeeData.length, shopeeHeaders.length).setValues(shopeeData);
+  }
+  formatHeaderAndDropdown(sheetShopee, shopeeHeaders.length, Math.max(2, shopeeData.length + 1), 8, ['PENDING', 'PROGRESS', 'DONE', 'CANCEL']);
+
+  SpreadsheetApp.getActiveSpreadsheet().toast('Sync selesai!', 'Sukses', 5);
+}
+
+// 6. RAPIKAN FORMAT & DROPDOWN
+function rapikanFormat() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet1 = ss.getSheetByName('maps_orders');
+  if (sheet1 && sheet1.getLastRow() > 0) {
+    formatHeaderAndDropdown(sheet1, 12, sheet1.getLastRow(), 10, ['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE']);
+  }
+  
+  var sheet2 = ss.getSheetByName('shopee_orders');
+  if (sheet2 && sheet2.getLastRow() > 0) {
+    formatHeaderAndDropdown(sheet2, 12, sheet2.getLastRow(), 8, ['PENDING', 'PROGRESS', 'DONE', 'CANCEL']);
+  }
+  SpreadsheetApp.getUi().alert('🎨 Format tabel maps_orders & shopee_orders berhasil dirapikan!');
+}
+
+function formatHeaderAndDropdown(sheet, colCount, rowCount, statusColIdx, statusValues) {
+  var headerRange = sheet.getRange(1, 1, 1, colCount);
+  headerRange.setBackground('#0f172a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setHorizontalAlignment('center');
+  sheet.setFrozenRows(1);
+  
+  if (rowCount > 1) {
+    var statusRange = sheet.getRange(2, statusColIdx, rowCount - 1, 1);
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(statusValues, true)
+      .setAllowInvalid(true)
+      .build();
+    statusRange.setDataValidation(rule);
   }
 }
 `;
@@ -945,16 +1082,16 @@ function parseGVizResponseToMapsReviews(gvizData: any): MapsReview[] {
   };
 
   const idIdx = findIdx(['row_id', 'id'], 0);
-  const dateIdx = findIdx(['tanggal', 'created_at', 'date'], 1);
-  const clientIdx = findIdx(['klien', 'client', 'nama klien', 'pembeli'], 2);
-  const storeIdx = findIdx(['store', 'toko', 'nama toko'], 3);
-  const typeIdx = findIdx(['tipe review', 'tipe', 'type', 'review_type'], 4);
-  const linkIdx = findIdx(['target link', 'maps', 'link maps', 'target_link', 'link'], 5);
-  const accountsIdx = findIdx(['input progres akun', 'progres', 'akun', 'reviewer_accounts', 'reviewer'], 6);
-  const notesIdx = findIdx(['clue', 'catatan', 'notes'], 7);
-  const proofIdx = findIdx(['link bukti', 'bukti', 'proof', 'proof_link'], 8);
-  const statusIdx = findIdx(['status'], 9);
-  const targetIdx = findIdx(['target akun', 'target_count', 'target', 'qty', 'slot'], 11);
+  const clientIdx = findIdx(['klien', 'client', 'nama klien', 'pembeli'], 1);
+  const linkIdx = findIdx(['target link', 'maps', 'link maps', 'target_link', 'link'], 2);
+  const targetIdx = findIdx(['target akun', 'target_count', 'target', 'qty', 'slot'], 3);
+  const accountsIdx = findIdx(['input progres akun', 'progres', 'akun', 'reviewer_accounts', 'reviewer'], 4);
+  const proofIdx = findIdx(['link bukti', 'bukti', 'proof', 'proof_link'], 5);
+  const statusIdx = findIdx(['status'], 6);
+  const dateIdx = findIdx(['tanggal', 'created_at', 'date'], 7);
+  const storeIdx = findIdx(['store', 'toko', 'nama toko'], 8);
+  const notesIdx = findIdx(['clue', 'catatan', 'notes'], 9);
+  const typeIdx = findIdx(['tipe review', 'tipe', 'type', 'review_type'], 10);
 
   const reviews: MapsReview[] = [];
 

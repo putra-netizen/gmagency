@@ -21,7 +21,7 @@ dotenv.config();
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { INITIAL_PRODUCTS } from './src/data/initialProducts';
-import { Order, Product, PaymentStatus, MapsReview } from './src/types';
+import { Order, Product, PaymentStatus, MapsReview, ShopeeOrder } from './src/types';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -42,16 +42,20 @@ let serverSupabaseFailed = false;
 
 function isSupabaseQuotaError(err: any): boolean {
   if (!err) return false;
+  if (err.status === 402 || err.statusCode === 402 || err.code === '402') return true;
+  if (err.status === 401 || err.status === 403) return true;
   const str = typeof err === 'string' 
     ? err 
-    : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${JSON.stringify(err)}`;
+    : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${err.status || ''} ${err.statusText || ''} ${JSON.stringify(err)}`;
   return (
     str.includes('exceed_egress_quota') ||
     str.includes('restricted') ||
     str.includes('spend caps') ||
     str.includes('upgrade their plan') ||
     str.includes('Payment Required') ||
-    str.includes('quota')
+    str.includes('402') ||
+    str.includes('quota') ||
+    str.includes('Failed to fetch')
   );
 }
 
@@ -87,10 +91,13 @@ const DB_PATH = path.join(DB_DIR, 'db.json');
 
 function isDummyOrder(o: any): boolean {
   if (!o) return true;
-  const dummyIds = ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005'];
-  if (dummyIds.includes(o.id)) return true;
-  const dummyNames = ['Budi Santoso', 'Siti Rahma', 'Randi Wijaya', 'Agus Salim', 'Dewi Lestari'];
-  if (dummyNames.includes(o.buyer_name)) return true;
+  const dummyIds = ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005', 'ord-1', 'ord-2', 'ord-3', 'dummy-1', 'dummy-2'];
+  if (dummyIds.includes(String(o.id))) return true;
+  const dummyNames = ['budi santoso', 'siti rahma', 'randi wijaya', 'agus salim', 'dewi lestari', 'john doe', 'jane doe', 'test order', 'dummy'];
+  const buyer = String(o.buyer_name || o.customer_name || '').toLowerCase().trim();
+  if (dummyNames.some(name => buyer === name || buyer.includes('dummy') || buyer.includes('sample') || buyer.includes('contoh order'))) return true;
+  const notes = String(o.notes || '').toLowerCase();
+  if (notes.includes('dummy') || notes.includes('contoh order') || notes.includes('sample order')) return true;
   return false;
 }
 
@@ -671,14 +678,12 @@ app.get('/api/shopee_orders', async (req, res) => {
   if (supabase && !serverSupabaseFailed) {
     try {
       const data = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, limit);
-      if (data) {
+      if (data && data.length > 0) {
         const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
         return res.json(filtered);
       }
     } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
+      serverSupabaseFailed = true;
     }
   }
 
@@ -841,7 +846,7 @@ app.get('/api/maps_reviews', async (req, res) => {
   if (supabase && !serverSupabaseFailed) {
     try {
       const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, limit);
-      if (data) {
+      if (data && data.length > 0) {
         const normalized = data.map((item: any) => ({
           ...item,
           reviewer_accounts: parseServerReviewerAccounts(item.reviewer_accounts)
@@ -850,9 +855,7 @@ app.get('/api/maps_reviews', async (req, res) => {
         return res.json(filtered);
       }
     } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
+      serverSupabaseFailed = true;
     }
   }
 
@@ -1369,284 +1372,298 @@ function parseServerCsvToRecords(csvText: string): Record<string, string>[] {
   return results;
 }
 
-// 5.2 SYNC & IMPORT LANGSUNG DARI GOOGLE SPREADSHEET URL (PULL)
+// 5.2 SYNC & IMPORT LANGSUNG DARI GOOGLE SPREADSHEET URL (PULL DATA LENGKAP MAPS & SHOPEE)
 app.post('/api/sheets/sync-from-url', async (req, res) => {
   try {
     const rawUrl = (req.body.sheetUrl || '').trim() || 'https://docs.google.com/spreadsheets/d/1OQ38cPjGPNcc6G2lQuQLwDlXTQMIqoUvNN0jaWCZwHI/edit';
     
-    // Extract sheet ID & GID
-    const match = rawUrl.match(/\/d\/([a-zA-Z0-9-_]+)/) || rawUrl.match(/id=([a-zA-Z0-9-_]+)/) || rawUrl.match(/key=([a-zA-Z0-9-_]+)/);
-    if (!match || !match[1]) {
-      return res.status(400).json({ error: 'Format link Google Spreadsheet tidak valid. Pastikan link berisi https://docs.google.com/spreadsheets/d/...' });
-    }
-    const sheetId = match[1];
-    const gidMatch = rawUrl.match(/[#?&]gid=([0-9]+)/);
-    const gid = gidMatch ? gidMatch[1] : '0';
-
     let processedReviews: MapsReview[] = [];
-    let rowsCount = 0;
+    let processedShopee: ShopeeOrder[] = [];
     let syncMethod = '';
 
-    // Method 1: Fetch via Google Spreadsheet CSV Export
-    try {
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
-      const csvRes = await fetch(csvUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-      });
-      if (csvRes.ok) {
-        const csvText = await csvRes.text();
-        if (csvText && !csvText.includes('<!DOCTYPE') && !csvText.includes('<html') && !csvText.includes('accounts.google.com')) {
-          const csvRecords = parseServerCsvToRecords(csvText);
-          if (csvRecords.length > 0) {
-            syncMethod = 'CSV Export';
-            rowsCount = csvRecords.length;
+    // CASE A: Jika input adalah URL Google Apps Script Web App (doGet JSON)
+    if (rawUrl.includes('script.google.com')) {
+      try {
+        const appRes = await fetch(rawUrl, {
+          headers: { 'User-Agent': 'GM-Agency-Sync/1.0' }
+        });
+        const appJson: any = await appRes.json();
+        if (appJson && (appJson.maps_orders || appJson.shopee_orders || Array.isArray(appJson.data))) {
+          syncMethod = 'Apps Script Web App JSON';
+          
+          const rawMaps = appJson.maps_orders || (Array.isArray(appJson.data?.maps_orders) ? appJson.data.maps_orders : []);
+          const rawShp = appJson.shopee_orders || (Array.isArray(appJson.data?.shopee_orders) ? appJson.data.shopee_orders : []);
 
-            for (const r of csvRecords) {
-              const findKey = (keys: string[]) => {
-                for (const k of keys) {
-                  for (const rk of Object.keys(r)) {
-                    if (rk.toLowerCase().includes(k)) return r[rk];
-                  }
-                }
-                return '';
-              };
+          for (const m of rawMaps) {
+            const id = String(m.row_id || m.id || '').trim() || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
+            const client_name = String(m.KLIEN || m.client_name || m.client || m.pembeli || '').trim() || 'Pelanggan Maps';
+            const store_name = String(m.STORE || m.store_name || m.toko || 'MP').trim();
+            const review_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' = String(m['TIPE REVIEW'] || m.review_type || 'G_MAPS').toUpperCase().includes('TRIPAD') ? 'TRIPAD' : String(m['TIPE REVIEW'] || m.review_type || '').toUpperCase().includes('APP') ? 'REVIEW_APPS' : 'G_MAPS';
+            const maps_link = String(m['TARGET LINK'] || m.maps_link || m.target_link || '').trim();
+            const reviewer_accounts = parseServerReviewerAccounts(m['INPUT PROGRES AKUN'] || m.reviewer_accounts || m.akun);
+            const notes = String(m.CLUE || m.notes || m.catatan || '').trim();
+            const proof_link = String(m['LINK BUKTI'] || m.proof_link || m.bukti || '').trim();
+            let statusRaw = String(m.STATUS || m.status || 'PENDING').trim().toUpperCase();
+            let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PENDING';
+            if (statusRaw.includes('DONE')) status = 'DONE';
+            else if (statusRaw.includes('PROGRESS') || statusRaw.includes('PROGRES')) status = 'PROGRESS';
+            else if (statusRaw.includes('READY')) status = 'READY';
+            else if (statusRaw.includes('REKAP')) status = 'SUDAH DIREKAP';
+            const target_count = Number(m['TARGET AKUN'] || m.target_count || m.qty || 1) || Math.max(1, reviewer_accounts.length || 1);
+            const created_at = String(m.TANGGAL || m.created_at || m.date || new Date().toISOString()).trim();
 
-              const rawId = findKey(['row_id', 'id']).trim();
-              const rawClient = findKey(['klien', 'client', 'nama klien', 'pembeli']).trim();
-              const rawMapsLink = findKey(['target link', 'maps', 'link maps', 'target_link']).trim();
-              const rawStore = findKey(['store', 'toko', 'nama toko', 'store_name']).trim();
-              const rawType = findKey(['tipe review', 'tipe', 'type', 'review_type']).trim();
-              const rawAccounts = findKey(['input progres akun', 'progres', 'akun', 'reviewer_accounts', 'reviewer']).trim();
-              const rawClue = findKey(['clue', 'catatan', 'notes']).trim();
-              const rawProof = findKey(['link bukti', 'bukti', 'proof', 'proof_link']).trim();
-              const rawStatus = findKey(['status']).trim().toUpperCase();
-              const rawTargetCount = findKey(['target akun', 'target_count', 'target', 'qty']).trim();
-              const rawCreatedAt = findKey(['tanggal', 'created_at', 'date']).trim();
+            processedReviews.push({
+              id, client_name, store_name, review_type, maps_link, reviewer_accounts,
+              notes, proof_link, status, target_count, created_at
+            });
+          }
 
-              if (!rawId && !rawClient && !rawMapsLink && !rawStore) continue;
+          for (const s of rawShp) {
+            const id = String(s.row_id || s.id || '').trim() || ('shp-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
+            const store_name = String(s['NAMA TOKO'] || s.store_name || s.toko || '').trim();
+            const buyer_name = String(s.PEMBELI || s.buyer_name || s.pembeli || '').trim();
+            const service_type = String(s['TIPE JASA'] || s.service_type || s.layanan || 'SPAM_WA').trim();
+            const quantity = Number(s.QTY || s.quantity || s.jumlah || 1) || 1;
+            const target_link = String(s['TARGET LINK'] || s.target_link || s.target || '').trim();
+            let statusRaw = String(s['STATUS KERJA'] || s.status || 'PENDING').trim().toUpperCase();
+            let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PROGRESS';
+            if (statusRaw.includes('DONE')) status = 'DONE';
+            else if (statusRaw.includes('PENDING')) status = 'PENDING';
+            else if (statusRaw.includes('READY')) status = 'READY';
+            else if (statusRaw.includes('REKAP')) status = 'SUDAH DIREKAP';
+            const worker_id = String(s.WORKER || s.worker_id || '').trim();
+            const work_order = String(s['WORK ORDER'] || s.work_order || '').trim();
+            const notes = String(s.CATATAN || s.notes || '').trim();
+            const created_by = String(s['ADMIN BY'] || s.created_by || 'Admin').trim();
+            const created_at = String(s.TANGGAL || s.created_at || new Date().toISOString()).trim();
 
-              const id = rawId || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
-              const client_name = rawClient || 'Pelanggan Google Maps';
-              const store_name = rawStore || 'MP';
-              const review_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' = (rawType.toUpperCase() === 'TRIPAD' || rawType.toUpperCase() === 'REVIEW_APPS') ? (rawType.toUpperCase() as 'TRIPAD' | 'REVIEW_APPS') : 'G_MAPS';
-              const maps_link = rawMapsLink || 'https://maps.google.com';
-              const reviewer_accounts = parseServerReviewerAccounts(rawAccounts);
-              const notes = rawClue || '';
-              const proof_link = rawProof || '';
-
-              let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PENDING';
-              if (rawStatus.includes('DONE')) status = 'DONE';
-              else if (rawStatus.includes('PROGRESS') || rawStatus.includes('PROGRES')) status = 'PROGRESS';
-              else if (rawStatus.includes('READY')) status = 'READY';
-              else if (rawStatus.includes('REKAP')) status = 'SUDAH DIREKAP';
-
-              const parsedTarget = Number(rawTargetCount);
-              const target_count = (!isNaN(parsedTarget) && parsedTarget > 0) ? parsedTarget : Math.max(1, reviewer_accounts.length || 10);
-              const created_at = rawCreatedAt || new Date().toISOString();
-
-              processedReviews.push({
-                id,
-                client_name,
-                maps_link,
-                target_count,
-                reviewer_accounts,
-                proof_link,
-                status,
-                created_at,
-                store_name,
-                notes,
-                review_type
-              });
-            }
+            processedShopee.push({
+              id,
+              order_type: service_type.toUpperCase().includes('SPAM') ? 'SPAM_WA' : 'REPORT_ALL_SOSMED',
+              store_name, buyer_name, service_type, quantity, target_link, status,
+              worker_id, work_order, notes, created_by, created_at,
+              formatted_text: `Pesanan ${service_type} - Toko ${store_name} - ${buyer_name}`
+            });
           }
         }
+      } catch (appErr) {
+        console.warn('Apps Script direct fetch failed, trying standard sheets extraction:', appErr);
       }
-    } catch (csvErr) {
-      console.warn('CSV export fetch fallback to GViz:', csvErr);
     }
 
-    // Method 2: GViz JSON fallback
-    if (processedReviews.length === 0) {
-      const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&gid=${gid}`;
-      const response = await fetch(gvizUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    // CASE B: Standard Google Sheets URL (Fetch maps_orders & shopee_orders sheets)
+    if (processedReviews.length === 0 && processedShopee.length === 0) {
+      const match = rawUrl.match(/\/d\/([a-zA-Z0-9-_]+)/) || rawUrl.match(/id=([a-zA-Z0-9-_]+)/) || rawUrl.match(/key=([a-zA-Z0-9-_]+)/);
+      if (!match || !match[1]) {
+        return res.status(400).json({ error: 'Format link Google Spreadsheet tidak valid. Masukkan URL https://docs.google.com/spreadsheets/d/...' });
+      }
+      const sheetId = match[1];
+
+      // Helper parser untuk GViz JSON
+      const fetchGvizSheet = async (sheetNameParam: string): Promise<any[]> => {
+        try {
+          const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json${sheetNameParam ? `&sheet=${encodeURIComponent(sheetNameParam)}` : ''}`;
+          const res = await fetch(gvizUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+          });
+          const text = await res.text();
+          if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('accounts.google.com')) return [];
+          const start = text.indexOf('{');
+          const end = text.lastIndexOf('}');
+          if (start === -1 || end === -1) return [];
+          const json = JSON.parse(text.substring(start, end + 1));
+          if (json.status === 'error') return [];
+          const cols = (json.table?.cols || []).map((c: any) => (c.label || c.id || '').trim());
+          const rows = json.table?.rows || [];
+          return rows.map((r: any) => {
+            const cells = r.c || [];
+            const rowObj: Record<string, any> = {};
+            cols.forEach((colName: string, idx: number) => {
+              const val = cells[idx]?.v !== undefined && cells[idx]?.v !== null ? cells[idx].v : (cells[idx]?.f || '');
+              rowObj[colName || `col_${idx}`] = val;
+              rowObj[`col_${idx}`] = val;
+            });
+            return rowObj;
+          });
+        } catch (e) {
+          return [];
         }
-      });
+      };
 
-      const text = await response.text();
-
-      if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('accounts.google.com') || text.includes('Sign in')) {
-        return res.status(400).json({
-          error: 'Spreadsheet belum disetel ke publik. Buka Google Spreadsheet -> Klik tombol "Bagikan" (Share) di pojok kanan atas -> Ubah Akses Umum menjadi "Siapa saja yang memiliki link" (Anyone with the link) sebagai "Pelihat" (Viewer)!'
-        });
+      // 1. Fetch Sheet maps_orders
+      let mapsRows = await fetchGvizSheet('maps_orders');
+      if (mapsRows.length === 0) {
+        // Fallback jika tab maps_orders tidak ditemukan namanya, coba tab default
+        mapsRows = await fetchGvizSheet('');
       }
 
-      const jsonStart = text.indexOf('{');
-      const jsonEnd = text.lastIndexOf('}');
-      if (jsonStart === -1 || jsonEnd === -1) {
-        return res.status(400).json({ 
-          error: 'Data Google Spreadsheet tidak dapat diakses atau di-parse. Pastikan hak akses Spreadsheet disetel ke "Siapa saja yang memiliki link" (Anyone with the link).' 
-        });
-      }
+      // 2. Fetch Sheet shopee_orders
+      let shopeeRows = await fetchGvizSheet('shopee_orders');
 
-      const parsedGviz = JSON.parse(text.substring(jsonStart, jsonEnd + 1));
-      if (parsedGviz.status === 'error') {
-        return res.status(400).json({
-          error: `Google Sheets Error: ${parsedGviz.errors?.[0]?.message || 'Akses ditolak. Pastikan akses disetel ke Siapa saja yang memiliki link.'}`
-        });
-      }
+      syncMethod = 'Google Sheets GViz Engine';
 
-      syncMethod = 'GViz JSON';
-      const cols = (parsedGviz.table?.cols || []).map((c: any) => (c.label || c.id || '').trim());
-      const rows = parsedGviz.table?.rows || [];
-      rowsCount = rows.length;
-
-      let colIdxMap: Record<string, number> = {};
-      cols.forEach((colName: string, idx: number) => {
-        const lower = colName.toLowerCase();
-        if (lower.includes('row_id') || lower.includes('id') || lower === 'a') colIdxMap['id'] = idx;
-        if (lower.includes('tanggal') || lower.includes('date') || lower === 'b') colIdxMap['created_at'] = idx;
-        if (lower.includes('klien') || lower.includes('client') || lower === 'c') colIdxMap['client_name'] = idx;
-        if (lower.includes('store') || lower.includes('toko') || lower === 'd') colIdxMap['store_name'] = idx;
-        if (lower.includes('tipe review') || lower.includes('type') || lower === 'e') colIdxMap['review_type'] = idx;
-        if (lower.includes('target link') || lower.includes('maps') || lower === 'f') colIdxMap['maps_link'] = idx;
-        if (lower.includes('input progres') || lower.includes('akun') || lower === 'g') colIdxMap['reviewer_accounts'] = idx;
-        if (lower.includes('clue') || lower.includes('catatan') || lower === 'h') colIdxMap['notes'] = idx;
-        if (lower.includes('link bukti') || lower.includes('bukti') || lower === 'i') colIdxMap['proof_link'] = idx;
-        if (lower.includes('status') || lower === 'j') colIdxMap['status'] = idx;
-        if (lower.includes('updated_at') || lower === 'k') colIdxMap['updated_at'] = idx;
-        if (lower.includes('target akun') || lower.includes('target_count') || lower === 'l') colIdxMap['target_count'] = idx;
-      });
-
-      if (colIdxMap['id'] === undefined) colIdxMap['id'] = 0;
-      if (colIdxMap['created_at'] === undefined) colIdxMap['created_at'] = 1;
-      if (colIdxMap['client_name'] === undefined) colIdxMap['client_name'] = 2;
-      if (colIdxMap['store_name'] === undefined) colIdxMap['store_name'] = 3;
-      if (colIdxMap['review_type'] === undefined) colIdxMap['review_type'] = 4;
-      if (colIdxMap['maps_link'] === undefined) colIdxMap['maps_link'] = 5;
-      if (colIdxMap['reviewer_accounts'] === undefined) colIdxMap['reviewer_accounts'] = 6;
-      if (colIdxMap['notes'] === undefined) colIdxMap['notes'] = 7;
-      if (colIdxMap['proof_link'] === undefined) colIdxMap['proof_link'] = 8;
-      if (colIdxMap['status'] === undefined) colIdxMap['status'] = 9;
-      if (colIdxMap['updated_at'] === undefined) colIdxMap['updated_at'] = 10;
-      if (colIdxMap['target_count'] === undefined) colIdxMap['target_count'] = 11;
-
-      for (const r of rows) {
-        const cells = r.c || [];
-        const getVal = (idx: number) => {
-          if (!cells[idx]) return '';
-          return cells[idx].v !== null && cells[idx].v !== undefined ? cells[idx].v : '';
+      // Parse Maps Rows
+      for (const row of mapsRows) {
+        // Direct matching priority based on actual sheet columns:
+        // Col 0 (A): id
+        // Col 1 (B): client_name
+        // Col 2 (C): maps_link
+        // Col 3 (D): target_count
+        // Col 4 (E): reviewer_accounts
+        // Col 5 (F): proof_link
+        // Col 6 (G): status
+        // Col 7 (H): created_at
+        // Col 8 (I): store_name
+        // Col 9 (J): notes / CLUE
+        // Col 10 (K): review_type
+        // Col 11 (L): created_by
+        const getVal = (exactKey: string, fallbackKeywords: string[] = []): string => {
+          if (row[exactKey] !== undefined && row[exactKey] !== null && String(row[exactKey]).trim() !== '') {
+            return String(row[exactKey]).trim();
+          }
+          for (const kw of fallbackKeywords) {
+            for (const k of Object.keys(row)) {
+              if (k.toLowerCase() === kw.toLowerCase() || k.toLowerCase().includes(kw.toLowerCase())) {
+                const val = row[k];
+                if (val !== undefined && val !== null && String(val).trim() !== '') {
+                  return String(val).trim();
+                }
+              }
+            }
+          }
+          return '';
         };
 
-        const rawId = String(getVal(colIdxMap['id'])).trim();
-        const rawClient = String(getVal(colIdxMap['client_name'])).trim();
-        const rawMapsLink = String(getVal(colIdxMap['maps_link'])).trim();
+        const rawId = getVal('id', ['row_id', 'col_0']);
+        const rawClient = getVal('client_name', ['klien', 'client', 'nama klien', 'pembeli', 'col_1']);
+        const rawMapsLink = getVal('maps_link', ['target link', 'maps', 'link maps', 'col_2']);
+        const rawStore = getVal('store_name', ['store', 'toko', 'nama toko', 'col_8']);
 
-        if (!rawId && !rawClient && !rawMapsLink) continue;
+        if (!rawId && !rawClient && !rawMapsLink && !rawStore) continue;
 
-        const id = rawId || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100));
-        const client_name = rawClient || 'Pelanggan Google Maps';
-        const store_name = String(getVal(colIdxMap['store_name'])).trim() || 'MP';
-        const review_type_raw = String(getVal(colIdxMap['review_type'])).trim().toUpperCase();
-        const review_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' = (review_type_raw === 'TRIPAD' || review_type_raw === 'REVIEW_APPS') ? (review_type_raw as 'TRIPAD' | 'REVIEW_APPS') : 'G_MAPS';
+        const id = rawId || ('map-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
+        const client_name = rawClient || 'Pelanggan Maps';
+        const store_name = rawStore || 'MP';
+        const rawType = (getVal('review_type', ['tipe review', 'tipe', 'type', 'col_10']) || 'G_MAPS').toUpperCase();
+        const review_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' = (rawType.includes('TRIPAD')) ? 'TRIPAD' : (rawType.includes('APP')) ? 'REVIEW_APPS' : 'G_MAPS';
         const maps_link = rawMapsLink || 'https://maps.google.com';
-        const reviewer_accounts = parseServerReviewerAccounts(getVal(colIdxMap['reviewer_accounts']));
-        const notes = String(getVal(colIdxMap['notes'])).trim();
-        const proof_link = String(getVal(colIdxMap['proof_link'])).trim();
-        
-        let statusRaw = String(getVal(colIdxMap['status'])).trim().toUpperCase();
-        if (!statusRaw || statusRaw === 'NULL') statusRaw = 'PENDING';
+        const reviewer_accounts = parseServerReviewerAccounts(getVal('reviewer_accounts', ['input progres akun', 'progres', 'akun', 'reviewer', 'col_4']));
+        const notes = getVal('notes', ['clue', 'catatan', 'keterangan', 'col_9']);
+        // proof_link is user manual input; if empty in sheet, keep it empty ""
+        const rawProof = getVal('proof_link', ['link bukti', 'bukti', 'proof', 'col_5']);
+        const proof_link = rawProof || '';
+        let statusRaw = (getVal('status', ['status', 'col_6']) || 'PENDING').toUpperCase();
         let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PENDING';
         if (statusRaw.includes('DONE')) status = 'DONE';
         else if (statusRaw.includes('PROGRESS') || statusRaw.includes('PROGRES')) status = 'PROGRESS';
         else if (statusRaw.includes('READY')) status = 'READY';
         else if (statusRaw.includes('REKAP')) status = 'SUDAH DIREKAP';
-
-        const targetCountNum = Number(getVal(colIdxMap['target_count']));
-        const target_count = (!isNaN(targetCountNum) && targetCountNum > 0) ? targetCountNum : Math.max(1, reviewer_accounts.length || 10);
-        const created_at = String(getVal(colIdxMap['created_at'])).trim() || new Date().toISOString();
+        const targetNum = Number(getVal('target_count', ['target akun', 'target', 'qty', 'col_3']));
+        const target_count = (!isNaN(targetNum) && targetNum > 0) ? targetNum : Math.max(1, reviewer_accounts.length || 1);
+        const created_at = getVal('created_at', ['tanggal', 'date', 'col_7']) || new Date().toISOString();
+        const created_by = getVal('created_by', ['admin by', 'admin', 'col_11']);
 
         processedReviews.push({
+          id, client_name, store_name, review_type, maps_link, reviewer_accounts,
+          notes, proof_link, status, target_count, created_at, created_by
+        });
+      }
+
+      // Parse Shopee Rows
+      // Col 0 (A): id
+      // Col 1 (B): order_type
+      // Col 2 (C): store_name
+      // Col 3 (D): buyer_name
+      // Col 4 (E): service_type
+      // Col 5 (F): quantity
+      // Col 6 (G): target_link
+      // Col 7 (H): notes
+      // Col 8 (I): formatted_text
+      // Col 9 (J): worker_id
+      // Col 10 (K): work_order
+      // Col 11 (L): created_at
+      // Col 12 (M): status
+      // Col 13 (N): created_by
+      for (const sRow of shopeeRows) {
+        const getSVal = (exactKey: string, fallbackKeywords: string[] = []): string => {
+          if (sRow[exactKey] !== undefined && sRow[exactKey] !== null && String(sRow[exactKey]).trim() !== '') {
+            return String(sRow[exactKey]).trim();
+          }
+          for (const kw of fallbackKeywords) {
+            for (const k of Object.keys(sRow)) {
+              if (k.toLowerCase() === kw.toLowerCase() || k.toLowerCase().includes(kw.toLowerCase())) {
+                const val = sRow[k];
+                if (val !== undefined && val !== null && String(val).trim() !== '') {
+                  return String(val).trim();
+                }
+              }
+            }
+          }
+          return '';
+        };
+
+        const rawId = getSVal('id', ['row_id', 'col_0']);
+        const rawStore = getSVal('store_name', ['nama toko', 'store', 'toko', 'col_2']);
+        const rawBuyer = getSVal('buyer_name', ['pembeli', 'buyer', 'nama pembeli', 'col_3']);
+        const rawTarget = getSVal('target_link', ['target link', 'target', 'link target', 'col_6']);
+
+        if (!rawId && !rawStore && !rawBuyer && !rawTarget) continue;
+
+        const id = rawId || ('shp-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000));
+        const store_name = rawStore || 'Toko Shopee';
+        const buyer_name = rawBuyer || 'Pembeli';
+        const service_type = getSVal('service_type', ['tipe jasa', 'layanan', 'service', 'col_4']) || 'SPAM_WA';
+        const qtyNum = Number(getSVal('quantity', ['qty', 'jumlah', 'col_5']));
+        const quantity = (!isNaN(qtyNum) && qtyNum > 0) ? qtyNum : 1;
+        const target_link = rawTarget || '';
+        let statusRaw = (getSVal('status', ['status kerja', 'col_12', 'col_7']) || 'PROGRESS').toUpperCase();
+        let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PROGRESS';
+        if (statusRaw.includes('DONE')) status = 'DONE';
+        else if (statusRaw.includes('PENDING')) status = 'PENDING';
+        else if (statusRaw.includes('READY')) status = 'READY';
+        else if (statusRaw.includes('REKAP')) status = 'SUDAH DIREKAP';
+        const worker_id = getSVal('worker_id', ['worker', 'pekerja', 'col_9', 'col_8']);
+        const work_order = getSVal('work_order', ['work order', 'wo', 'col_10', 'col_9']);
+        const notes = getSVal('notes', ['catatan', 'keterangan', 'col_7', 'col_10']);
+        const formatted_text = getSVal('formatted_text', ['col_8']) || `Pesanan ${service_type} - Toko ${store_name} - ${buyer_name}`;
+        const created_by = getSVal('created_by', ['admin by', 'admin', 'col_13', 'col_11']) || 'adminshp1';
+        const created_at = getSVal('created_at', ['tanggal', 'date', 'col_11', 'col_1']) || new Date().toISOString();
+        const order_type_raw = getSVal('order_type', ['col_1']);
+        const order_type = order_type_raw === 'REPORT_ALL_SOSMED' || service_type.toUpperCase().includes('REPORT')
+          ? 'REPORT_ALL_SOSMED'
+          : 'SPAM_WA';
+
+        processedShopee.push({
           id,
-          client_name,
-          maps_link,
-          target_count,
-          reviewer_accounts,
-          proof_link,
-          status,
-          created_at,
-          store_name,
-          notes,
-          review_type
+          order_type,
+          store_name, buyer_name, service_type, quantity, target_link, status,
+          worker_id, work_order, notes, created_by, created_at,
+          formatted_text
         });
       }
     }
 
-    if (processedReviews.length === 0) {
+    if (processedReviews.length === 0 && processedShopee.length === 0) {
       return res.status(400).json({
-        error: 'Tidak ada baris data review yang ditemukan di Google Spreadsheet tersebut.'
+        error: 'Tidak ada baris data ulasan maps_orders atau pesanan shopee_orders yang dapat ditarik. Pastikan hak akses Spreadsheet disetel ke "Siapa saja yang memiliki link (Pelihat/Viewer)".'
       });
     }
 
-    let upsertedCount = 0;
+    // SIMPAN KE DATABASE (GANTI DENGAN DATA TERBARU HASIL PARSING SHEET)
     const db = readDatabase();
-    if (!db.maps_reviews) db.maps_reviews = [];
+    db.maps_reviews = processedReviews;
+    db.shopee_orders = processedShopee;
 
-    // Pisahkan: baris BARU vs baris yang SUDAH ADA di database
-    const existingIds = new Set(db.maps_reviews.map((m: any) => m.id));
-    const newItems = processedReviews.filter(item => !existingIds.has(item.id));
-    const existingItems = processedReviews.map(item => {
-      if (!existingIds.has(item.id)) return null;
-      // Jangan pernah timpa created_at untuk baris yang sudah ada
-      const { created_at, ...rest } = item as any;
-      return rest;
-    }).filter(Boolean);
-
-    // Upsert ke Supabase in chunks (created_at cuma dikirim buat baris BARU)
-    if (supabase && !serverSupabaseFailed) {
-      try {
-        const chunkSize = 100;
-        const toInsert = [...newItems];
-        for (let i = 0; i < toInsert.length; i += chunkSize) {
-          const chunk = toInsert.slice(i, i + chunkSize);
-          if (chunk.length > 0) await supabase.from('maps_reviews').upsert(chunk, { onConflict: 'id' });
-        }
-        for (let i = 0; i < existingItems.length; i += chunkSize) {
-          const chunk = existingItems.slice(i, i + chunkSize);
-          if (chunk.length > 0) await supabase.from('maps_reviews').upsert(chunk, { onConflict: 'id' });
-        }
-        clearServerSupabaseCache('maps_reviews');
-      } catch (sErr) {
-        if (isSupabaseQuotaError(sErr)) {
-          serverSupabaseFailed = true;
-        } else {
-          console.warn('Supabase bulk upsert warning:', (sErr as any)?.message || sErr);
-        }
-      }
-    }
-
-    // Upsert ke local db.json (sama, created_at baris lama ga ikut ketimpa)
-    for (const item of processedReviews) {
-      const idx = db.maps_reviews.findIndex((m: any) => m.id === item.id);
-      if (idx !== -1) {
-        const { created_at, ...rest } = item as any;
-        db.maps_reviews[idx] = { ...db.maps_reviews[idx], ...rest };
-      } else {
-        db.maps_reviews.push(item);
-      }
-      upsertedCount++;
-    }
     writeDatabase(db);
 
     return res.json({
       success: true,
-      message: `Berhasil menyinkronkan ${upsertedCount} baris data dari Google Spreadsheet! (${syncMethod})`,
-      totalSynced: upsertedCount,
-      totalRowsInSheet: rowsCount,
-      items: processedReviews
+      message: `Berhasil menarik total ${processedReviews.length + processedShopee.length} pesanan (${processedReviews.length} Maps Reviews & ${processedShopee.length} Shopee Orders)! (${syncMethod})`,
+      totalSynced: processedReviews.length + processedShopee.length,
+      totalMaps: processedReviews.length,
+      totalShopee: processedShopee.length
     });
   } catch (err: any) {
     console.error('Sync from URL error:', err);
@@ -1654,7 +1671,41 @@ app.post('/api/sheets/sync-from-url', async (req, res) => {
   }
 });
 
-// 5.3 PUSH BATCH / TRANSAKSI KE GOOGLE SPREADSHEET VIA APPS SCRIPT WEBHOOK (SERVER PROXY)
+// 5.3 PUSH SINGLE RECORD KE GOOGLE SPREADSHEET VIA APPS SCRIPT WEBHOOK
+app.post('/api/sheets/push-single', async (req, res) => {
+  try {
+    const { webhookUrl, type, action, payload } = req.body;
+    const url = (webhookUrl || '').trim();
+    if (!url || !url.startsWith('http')) {
+      return res.status(400).json({ error: 'URL Webhook Google Apps Script tidak valid.' });
+    }
+
+    const gRes = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: type || 'maps_reviews',
+        action: action || 'update',
+        payload: payload || req.body
+      })
+    });
+
+    const text = await gRes.text();
+    let parsed: any = null;
+    try { parsed = JSON.parse(text); } catch (e) {}
+
+    return res.json({
+      success: true,
+      message: 'Perubahan berhasil dikirim ke Google Spreadsheet!',
+      result: parsed || text.slice(0, 150)
+    });
+  } catch (err: any) {
+    console.error('Push single error:', err);
+    return res.status(500).json({ error: 'Gagal mengirim update ke Google Spreadsheet: ' + err.message });
+  }
+});
+
+// 5.4 PUSH BATCH / TRANSAKSI KE GOOGLE SPREADSHEET VIA APPS SCRIPT WEBHOOK (SERVER PROXY)
 app.post('/api/sheets/push-batch', async (req, res) => {
   try {
     const { webhookUrl, reviews } = req.body;
@@ -1678,7 +1729,7 @@ app.post('/api/sheets/push-batch', async (req, res) => {
     }));
 
     const payload = {
-      type: 'batch_maps_reviews',
+      type: 'maps_orders',
       action: 'sync_all',
       timestamp: new Date().toISOString(),
       reviews: formattedReviews
@@ -1718,7 +1769,7 @@ app.post('/api/sheets/push-batch', async (req, res) => {
   }
 });
 
-// 5.4 TEST KONEKSI APPS SCRIPT WEBHOOK
+// 5.5 TEST KONEKSI APPS SCRIPT WEBHOOK
 app.post('/api/sheets/test-webhook', async (req, res) => {
   try {
     const { webhookUrl } = req.body;
@@ -1759,46 +1810,49 @@ app.post('/api/sheets/test-webhook', async (req, res) => {
   }
 });
 
-// 5.5 WEBHOOK UNTUK REAL-TIME 2-WAY SYNC DARI GOOGLE APPS SCRIPT (onEdit)
+// 5.6 WEBHOOK UNTUK REAL-TIME 2-WAY SYNC DARI GOOGLE APPS SCRIPT (onEdit)
 app.post('/api/sheets/webhook', async (req, res) => {
   try {
-    const { action, row_id, status, reviewer_accounts, proof_link, notes, target_count } = req.body;
+    const { type, action, row_id, status, reviewer_accounts, proof_link, notes, target_count, worker_id, work_order } = req.body;
     if (!row_id) {
       return res.status(400).json({ error: 'row_id wajib disertakan.' });
     }
 
-    const cleanAccounts = reviewer_accounts !== undefined ? parseServerReviewerAccounts(reviewer_accounts) : undefined;
-    const updatePayload: any = {};
-    if (status !== undefined) updatePayload.status = status;
-    if (cleanAccounts !== undefined) updatePayload.reviewer_accounts = cleanAccounts;
-    if (proof_link !== undefined) updatePayload.proof_link = proof_link;
-    if (notes !== undefined) updatePayload.notes = notes;
-    if (target_count !== undefined) updatePayload.target_count = Number(target_count);
-    updatePayload.updated_at = new Date().toISOString();
-
-    if (supabase && !serverSupabaseFailed) {
-      try {
-        await supabase
-          .from('maps_reviews')
-          .update(updatePayload)
-          .eq('id', row_id);
-        clearServerSupabaseCache('maps_reviews');
-      } catch (err) {
-        if (isSupabaseQuotaError(err)) {
-          serverSupabaseFailed = true;
-        }
-      }
-    }
-
     const db = readDatabase();
-    if (!db.maps_reviews) db.maps_reviews = [];
-    const idx = db.maps_reviews.findIndex((m: any) => m.id === row_id);
-    if (idx !== -1) {
-      db.maps_reviews[idx] = { ...db.maps_reviews[idx], ...updatePayload };
-      writeDatabase(db);
-    }
 
-    res.json({ success: true, message: `Webhook: Baris ${row_id} berhasil diperbarui.` });
+    if (type === 'shopee_orders' || String(row_id).startsWith('shp-')) {
+      if (!db.shopee_orders) db.shopee_orders = [];
+      const updatePayload: any = {};
+      if (status !== undefined) updatePayload.status = status;
+      if (worker_id !== undefined) updatePayload.worker_id = worker_id;
+      if (work_order !== undefined) updatePayload.work_order = work_order;
+      if (notes !== undefined) updatePayload.notes = notes;
+
+      const idx = db.shopee_orders.findIndex((s: any) => s.id === row_id);
+      if (idx !== -1) {
+        db.shopee_orders[idx] = { ...db.shopee_orders[idx], ...updatePayload };
+        writeDatabase(db);
+      }
+      return res.json({ success: true, message: `Webhook: Baris Shopee ${row_id} berhasil diperbarui.` });
+    } else {
+      const cleanAccounts = reviewer_accounts !== undefined ? parseServerReviewerAccounts(reviewer_accounts) : undefined;
+      const updatePayload: any = {};
+      if (status !== undefined) updatePayload.status = status;
+      if (cleanAccounts !== undefined) updatePayload.reviewer_accounts = cleanAccounts;
+      if (proof_link !== undefined) updatePayload.proof_link = proof_link;
+      if (notes !== undefined) updatePayload.notes = notes;
+      if (target_count !== undefined) updatePayload.target_count = Number(target_count);
+      updatePayload.updated_at = new Date().toISOString();
+
+      if (!db.maps_reviews) db.maps_reviews = [];
+      const idx = db.maps_reviews.findIndex((m: any) => m.id === row_id);
+      if (idx !== -1) {
+        db.maps_reviews[idx] = { ...db.maps_reviews[idx], ...updatePayload };
+        writeDatabase(db);
+      }
+
+      return res.json({ success: true, message: `Webhook: Baris Maps ${row_id} berhasil diperbarui.` });
+    }
   } catch (err: any) {
     console.error('Webhook error:', err);
     res.status(500).json({ error: 'Webhook processing error: ' + err.message });
@@ -1816,8 +1870,21 @@ async function startServer() {
     console.log('Vite server running in Middleware mode (development)');
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        } else if (filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      }
+    }));
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(distPath, 'index.html'));
     });
     console.log('Serving production static build from /dist');

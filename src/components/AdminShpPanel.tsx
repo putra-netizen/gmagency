@@ -1359,17 +1359,10 @@ Format Chat : ${data.notes || '-'}`;
               <User className="h-3 w-3 text-slate-450" />
               <span>Admin: {currentAdminUser.toUpperCase()}</span>
             </span>
-            {dbIsSupabaseConnected() ? (
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>Server Online</span>
-              </span>
-            ) : (
-              <span className="bg-red-50 text-red-700 border border-red-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                <span>Server Offline</span>
-              </span>
-            )}
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Google Sheets Sync</span>
+            </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight font-sans">
             Manual Shopee Order Entry Portal

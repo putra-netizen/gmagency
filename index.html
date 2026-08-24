@@ -11,11 +11,32 @@
     <link rel="icon" type="image/png" href="https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/Firefly_Flux_coba%20buatkan%20versi%20GM%20AGENCY%20404784.jpg%20(1).png" />
     <title>GmAgency</title>
     <script>
+      // Auto-recover from stale Service Worker or cached assets chunk load error
+      window.addEventListener('error', function (e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          if (!sessionStorage.getItem('gm_chunk_retry')) {
+            sessionStorage.setItem('gm_chunk_retry', '1');
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function (registrations) {
+                for (var r of registrations) r.unregister();
+              });
+            }
+            if ('caches' in window) {
+              caches.keys().then(function (names) {
+                for (var name of names) caches.delete(name);
+              });
+            }
+            setTimeout(function () {
+              window.location.reload();
+            }, 300);
+          }
+        }
+      }, true);
+
       if ('serviceWorker' in navigator && window.self === window.top) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then((reg) => {
-              // Ensure update
               reg.update().catch(() => {});
             })
             .catch((err) => console.warn('Service Worker registration skipped:', err));

@@ -127,16 +127,16 @@ export default function Navbar({
               ADMIN WORKING SPACE
             </span>
 
-            {/* Supabase connection status pill (Admin role only!) */}
+            {/* Google Sheets Active indicator */}
             <div 
-              className="flex items-center gap-1 sm:gap-1.5 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[11px] font-bold border transition-all bg-emerald-50 text-emerald-750 border-emerald-100"
-              title={supabaseConnected ? "Database Supabase Aktif" : "Database Supabase Tidak Aktif (Local Fallback)"}
-              id="supabase-status-pill"
+              className="flex items-center gap-1 sm:gap-1.5 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[11px] font-bold border transition-all bg-emerald-50 text-emerald-700 border-emerald-200"
+              title="Sistem Google Sheets Aktif"
+              id="sheets-status-pill"
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${supabaseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="inline-block">
-                <span className="hidden sm:inline">Supabase: </span>
-                {supabaseConnected ? 'AKTIF' : 'OFFLINE'}
+                <span className="hidden sm:inline">DATABASE: </span>
+                GOOGLE SHEETS
               </span>
             </div>
 

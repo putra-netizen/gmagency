@@ -3698,8 +3698,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                       </div>
                       <div className="bg-white/80 backdrop-blur rounded-xl p-3.5 border border-slate-100 shadow-xs">
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Status Jalur</span>
-                        <span className="text-sm font-black text-emerald-700 font-sans mt-1 block">DUAL ACTIVE</span>
-                        <span className="text-[10px] font-medium text-slate-500 mt-1 block">Supabase + Sheet</span>
+                        <span className="text-sm font-black text-emerald-700 font-sans mt-1 block">GOOGLE SHEETS</span>
+                        <span className="text-[10px] font-medium text-slate-500 mt-1 block">Online Realtime Sync</span>
                       </div>
                     </div>
                   </div>
