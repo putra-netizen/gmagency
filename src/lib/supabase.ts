@@ -37,52 +37,16 @@ const checkValidUrl = (url: string | undefined): boolean => {
   }
 };
 
-export const isSupabaseConfigured = !!(
-  supabaseUrl && 
-  supabaseAnonKey && 
-  supabaseUrl !== 'YOUR_SUPABASE_URL' && 
-  supabaseUrl !== 'MY_SUPABASE_URL' &&
-  !supabaseUrl.includes('placeholder') &&
-  supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY' &&
-  supabaseAnonKey !== 'MY_SUPABASE_ANON_KEY' &&
-  checkValidUrl(supabaseUrl)
-);
-
-let supabaseInstance = null;
-if (isSupabaseConfigured) {
-  try {
-    supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!);
-  } catch (err) {
-    console.error('Failed to initialize Supabase client:', err);
-  }
-}
-
-export const supabase = supabaseInstance;
-
-// Track if Supabase database query failures happen, to fallback dynamically
-let supabaseFailed = false;
+export const isSupabaseConfigured = false;
+export const supabase: any = null;
+let supabaseFailed = true;
 
 export function isSupabaseQuotaError(err: any): boolean {
-  if (!err) return false;
-  if (err.status === 402 || err.statusCode === 402 || err.code === '402') return true;
-  if (err.status === 401 || err.status === 403) return true;
-  const str = typeof err === 'string' 
-    ? err 
-    : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${err.status || ''} ${err.statusText || ''} ${JSON.stringify(err)}`;
-  return (
-    str.includes('exceed_egress_quota') ||
-    str.includes('restricted') ||
-    str.includes('spend caps') ||
-    str.includes('upgrade their plan') ||
-    str.includes('Payment Required') ||
-    str.includes('402') ||
-    str.includes('quota') ||
-    str.includes('Failed to fetch')
-  );
+  return false;
 }
 
 export function dbIsSupabaseConnected(): boolean {
-  return isSupabaseConfigured && !supabaseFailed;
+  return false;
 }
 
 // In-memory cache for fetchAllSupabaseRows to reduce Egress
