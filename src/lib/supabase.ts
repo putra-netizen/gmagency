@@ -59,6 +59,21 @@ export const supabase = supabaseInstance;
 // Track if Supabase database query failures happen, to fallback dynamically
 let supabaseFailed = false;
 
+export function isSupabaseQuotaError(err: any): boolean {
+  if (!err) return false;
+  const str = typeof err === 'string' 
+    ? err 
+    : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${JSON.stringify(err)}`;
+  return (
+    str.includes('exceed_egress_quota') ||
+    str.includes('restricted') ||
+    str.includes('spend caps') ||
+    str.includes('upgrade their plan') ||
+    str.includes('Payment Required') ||
+    str.includes('quota')
+  );
+}
+
 export function dbIsSupabaseConnected(): boolean {
   return isSupabaseConfigured && !supabaseFailed;
 }
@@ -91,7 +106,7 @@ export async function fetchAllSupabaseRows<T = any>(
   forceRefresh: boolean = false,
   limit: number = 10000
 ): Promise<T[]> {
-  if (!client) return [];
+  if (!client || supabaseFailed) return [];
 
   const maxRows = Math.max(1, Math.min(limit, 50000));
   const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}`;
@@ -118,7 +133,14 @@ export async function fetchAllSupabaseRows<T = any>(
     const { data, error } = await query.range(from, to);
 
     if (error) {
-      console.error(`Error fetching page ${page} from Supabase table ${table}:`, error);
+      if (isSupabaseQuotaError(error)) {
+        if (!supabaseFailed) {
+          console.warn('📦 Supabase egress quota exceeded / project restricted. Seamlessly switching to Local & Express fallback database.');
+        }
+        supabaseFailed = true;
+      } else {
+        console.warn(`Supabase fetch warning on table ${table}:`, error.message || error);
+      }
       throw error;
     }
 
@@ -1721,7 +1743,10 @@ export async function dbUploadProductImage(file: File): Promise<string> {
     }
 
     if (lastError) {
-      throw new Error(lastError.message || JSON.stringify(lastError));
+      console.warn('Supabase storage upload failed or quota reached, falling back to local compressed image:', lastError);
+      if (isSupabaseQuotaError(lastError)) {
+        supabaseFailed = true;
+      }
     }
   }
 

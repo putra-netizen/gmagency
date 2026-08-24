@@ -37,6 +37,24 @@ const isSupabaseConfigured = !!(
 
 const supabase = isSupabaseConfigured ? createClient(supabaseUrl!, supabaseAnonKey!) : null;
 
+// Track if Supabase failed or reached quota limit on server
+let serverSupabaseFailed = false;
+
+function isSupabaseQuotaError(err: any): boolean {
+  if (!err) return false;
+  const str = typeof err === 'string' 
+    ? err 
+    : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${JSON.stringify(err)}`;
+  return (
+    str.includes('exceed_egress_quota') ||
+    str.includes('restricted') ||
+    str.includes('spend caps') ||
+    str.includes('upgrade their plan') ||
+    str.includes('Payment Required') ||
+    str.includes('quota')
+  );
+}
+
 if (supabase) {
   console.log('⚡ Server: Supabase client initialized successfully!');
 } else {
@@ -168,7 +186,7 @@ async function fetchAllSupabaseRows<T = any>(
   limit: number = 10000,
   forceRefresh: boolean = false
 ): Promise<T[]> {
-  if (!client) return [];
+  if (!client || serverSupabaseFailed) return [];
 
   const maxRows = Math.max(1, Math.min(limit, 50000));
   const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}`;
@@ -195,7 +213,14 @@ async function fetchAllSupabaseRows<T = any>(
     const { data, error } = await query.range(from, to);
 
     if (error) {
-      console.error(`Error fetching page ${page} from Supabase table ${table}:`, error);
+      if (isSupabaseQuotaError(error)) {
+        if (!serverSupabaseFailed) {
+          console.warn('📦 Server: Supabase egress quota exceeded / project restricted. Seamlessly switching to local JSON database.');
+        }
+        serverSupabaseFailed = true;
+      } else {
+        console.warn(`Server: Supabase fetch warning on table ${table}:`, error.message || error);
+      }
       throw error;
     }
 
@@ -220,7 +245,7 @@ async function fetchAllSupabaseRows<T = any>(
 // 1. PRODUCTS API
 app.get('/api/products', async (req, res) => {
   const limit = Number(req.query.limit) || 500;
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const data = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true, limit);
       if (data) {
@@ -235,7 +260,11 @@ app.get('/api/products', async (req, res) => {
         }
       }
     } catch (err) {
-      console.error('Supabase products fetch exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      } else {
+        console.warn('Supabase products fetch exception, using local JSON DB:', (err as any)?.message || err);
+      }
     }
   }
 
@@ -257,7 +286,7 @@ app.post('/api/products', async (req, res) => {
     created_at: new Date().toISOString()
   };
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('products')
@@ -270,21 +299,26 @@ app.post('/api/products', async (req, res) => {
         return res.status(201).json(data);
       }
       
-      console.warn('Supabase product insert with target_type failed, trying without target_type:', error);
-      const { target_type, ...newProductNoTargetType } = newProduct;
-      const retryResult = await supabase
-        .from('products')
-        .insert([newProductNoTargetType])
-        .select()
-        .single();
-        
-      if (!retryResult.error && retryResult.data) {
-        clearServerSupabaseCache('products');
-        return res.status(201).json(retryResult.data);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      } else {
+        console.warn('Supabase product insert with target_type failed, trying without target_type:', error?.message || error);
+        const { target_type, ...newProductNoTargetType } = newProduct;
+        const retryResult = await supabase
+          .from('products')
+          .insert([newProductNoTargetType])
+          .select()
+          .single();
+          
+        if (!retryResult.error && retryResult.data) {
+          clearServerSupabaseCache('products');
+          return res.status(201).json(retryResult.data);
+        }
       }
-      console.error('Supabase error inserting product:', retryResult.error || error);
     } catch (err) {
-      console.error('Supabase product insert exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -297,7 +331,7 @@ app.post('/api/products', async (req, res) => {
 app.put('/api/products/:id', async (req, res) => {
   const { id } = req.params;
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const updateData = {
         name: req.body.name,
@@ -324,22 +358,26 @@ app.put('/api/products/:id', async (req, res) => {
         return res.json(data);
       }
       
-      console.warn('Supabase product update with target_type failed, trying without target_type:', error);
-      const { target_type, ...updateDataNoTargetType } = updateData;
-      const retryResult = await supabase
-        .from('products')
-        .update(updateDataNoTargetType)
-        .eq('id', id)
-        .select()
-        .single();
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      } else {
+        const { target_type, ...updateDataNoTargetType } = updateData;
+        const retryResult = await supabase
+          .from('products')
+          .update(updateDataNoTargetType)
+          .eq('id', id)
+          .select()
+          .single();
 
-      if (!retryResult.error && retryResult.data) {
-        clearServerSupabaseCache('products');
-        return res.json(retryResult.data);
+        if (!retryResult.error && retryResult.data) {
+          clearServerSupabaseCache('products');
+          return res.json(retryResult.data);
+        }
       }
-      console.error('Supabase error updating product:', retryResult.error || error);
     } catch (err) {
-      console.error('Supabase product update exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -368,7 +406,7 @@ app.put('/api/products/:id', async (req, res) => {
 app.delete('/api/products/:id', async (req, res) => {
   const { id } = req.params;
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { error } = await supabase
         .from('products')
@@ -378,9 +416,13 @@ app.delete('/api/products/:id', async (req, res) => {
         clearServerSupabaseCache('products');
         return res.json({ success: true, message: 'Product deleted' });
       }
-      console.error('Supabase error deleting product:', error);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      }
     } catch (err) {
-      console.error('Supabase product delete exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -402,7 +444,7 @@ app.get('/api/orders', async (req, res) => {
   const db = readDatabase();
   const deletedOrders = db.deleted_orders || [];
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       // Purge dummy orders from Supabase if present
       await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
@@ -413,7 +455,9 @@ app.get('/api/orders', async (req, res) => {
         return res.json(filtered);
       }
     } catch (err) {
-      console.error('Supabase orders fetch exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -431,7 +475,7 @@ app.post('/api/orders', async (req, res) => {
   let productPrice = 0;
   let productName = 'Produk';
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { data: prod, error: prodError } = await supabase
         .from('products')
@@ -442,8 +486,13 @@ app.post('/api/orders', async (req, res) => {
         productPrice = prod.price;
         productName = prod.name;
       }
+      if (isSupabaseQuotaError(prodError)) {
+        serverSupabaseFailed = true;
+      }
     } catch (err) {
-      console.error('Supabase order product lookup exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -477,7 +526,7 @@ app.post('/api/orders', async (req, res) => {
     created_at: new Date().toISOString()
   };
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('orders')
@@ -488,9 +537,13 @@ app.post('/api/orders', async (req, res) => {
         clearServerSupabaseCache('orders');
         return res.status(201).json(data);
       }
-      console.error('Supabase error inserting order:', error);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      }
     } catch (err) {
-      console.error('Supabase order insert exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -503,7 +556,7 @@ app.post('/api/orders', async (req, res) => {
 app.put('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const updateData = {
         payment_status: req.body.payment_status,
@@ -531,9 +584,13 @@ app.put('/api/orders/:id', async (req, res) => {
         clearServerSupabaseCache('orders');
         return res.json(data);
       }
-      console.error('Supabase error updating order:', error);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      }
     } catch (err) {
-      console.error('Supabase order update exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -571,22 +628,23 @@ app.put('/api/orders/:id', async (req, res) => {
 
 app.delete('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
-  let supabaseDeleted = false;
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { error } = await supabase
         .from('orders')
         .delete()
         .eq('id', id);
       if (!error) {
-        supabaseDeleted = true;
         clearServerSupabaseCache('orders');
-      } else {
-        console.error('Supabase error deleting order:', error);
+      }
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
       }
     } catch (err) {
-      console.error('Supabase order delete exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -610,7 +668,7 @@ app.get('/api/shopee_orders', async (req, res) => {
   const db = readDatabase();
   const deletedShopee = db.deleted_shopee_orders || [];
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const data = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, limit);
       if (data) {
@@ -618,7 +676,9 @@ app.get('/api/shopee_orders', async (req, res) => {
         return res.json(filtered);
       }
     } catch (err) {
-      console.error('Supabase shopee_orders fetch exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -633,7 +693,7 @@ app.post('/api/shopee_orders', async (req, res) => {
     created_at: new Date().toISOString()
   };
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('shopee_orders')
@@ -644,9 +704,13 @@ app.post('/api/shopee_orders', async (req, res) => {
         clearServerSupabaseCache('shopee_orders');
         return res.status(201).json(data);
       }
-      console.error('Supabase error inserting shopee_order:', error);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      }
     } catch (err) {
-      console.error('Supabase shopee_order insert exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -660,7 +724,7 @@ app.post('/api/shopee_orders', async (req, res) => {
 app.put('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('shopee_orders')
@@ -672,9 +736,13 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
         clearServerSupabaseCache('shopee_orders');
         return res.json(data);
       }
-      console.error('Supabase error updating shopee_order:', error);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      }
     } catch (err) {
-      console.error('Supabase shopee_order update exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -701,22 +769,23 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
 
 app.delete('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
-  let supabaseDeleted = false;
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { error } = await supabase
         .from('shopee_orders')
         .delete()
         .eq('id', id);
       if (!error) {
-        supabaseDeleted = true;
         clearServerSupabaseCache('shopee_orders');
-      } else {
-        console.error('Supabase error deleting shopee_order:', error);
+      }
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
       }
     } catch (err) {
-      console.error('Supabase shopee_order delete exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -769,7 +838,7 @@ app.get('/api/maps_reviews', async (req, res) => {
   const db = readDatabase();
   const deletedMaps = db.deleted_maps_reviews || [];
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, limit);
       if (data) {
@@ -781,7 +850,9 @@ app.get('/api/maps_reviews', async (req, res) => {
         return res.json(filtered);
       }
     } catch (err) {
-      console.error('Supabase maps_reviews fetch exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -806,7 +877,7 @@ app.post('/api/maps_reviews', async (req, res) => {
     created_at: new Date().toISOString()
   };
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('maps_reviews')
@@ -820,9 +891,13 @@ app.post('/api/maps_reviews', async (req, res) => {
           reviewer_accounts: cleanAccounts
         });
       }
-      console.error('Supabase error inserting maps_review:', error);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      }
     } catch (err) {
-      console.error('Supabase maps_review insert exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -841,7 +916,7 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
     updatePayload.reviewer_accounts = reqAccounts;
   }
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { data, error } = await supabase
         .from('maps_reviews')
@@ -860,9 +935,13 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
           reviewer_accounts: accounts
         });
       }
-      console.error('Supabase error updating maps_review:', error);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
+      }
     } catch (err) {
-      console.error('Supabase maps_review update exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -896,21 +975,20 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
 
 app.delete('/api/maps_reviews/:id', async (req, res) => {
   const { id } = req.params;
-  let supabaseDeleted = false;
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const { error } = await supabase
         .from('maps_reviews')
         .delete()
         .eq('id', id);
-      if (!error) {
-        supabaseDeleted = true;
-      } else {
-        console.error('Supabase error deleting maps_review:', error);
+      if (isSupabaseQuotaError(error)) {
+        serverSupabaseFailed = true;
       }
     } catch (err) {
-      console.error('Supabase maps_review delete exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -932,7 +1010,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
   const db = readDatabase();
   const deletedOrders = db.deleted_orders || [];
 
-  if (supabase) {
+  if (supabase && !serverSupabaseFailed) {
     try {
       const productsData = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true);
       const ordersData = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false);
@@ -976,7 +1054,9 @@ app.get('/api/dashboard/stats', async (req, res) => {
         });
       }
     } catch (err) {
-      console.error('Supabase stats compilation exception:', err);
+      if (isSupabaseQuotaError(err)) {
+        serverSupabaseFailed = true;
+      }
     }
   }
 
@@ -1071,14 +1151,14 @@ app.get('/api/sheets/export-csv', async (req, res) => {
   try {
     if (type === 'maps_reviews') {
       let data: any[] = [];
-      if (supabase) {
+      if (supabase && !serverSupabaseFailed) {
         try {
           const sData = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, 20000, true);
           if (sData && sData.length > 0) {
             data = sData;
           }
         } catch (e) {
-          console.error('Export supabase maps fetch error:', e);
+          if (isSupabaseQuotaError(e)) serverSupabaseFailed = true;
         }
       }
       if (data.length === 0) {
@@ -1143,11 +1223,13 @@ app.get('/api/sheets/export-csv', async (req, res) => {
 
     if (type === 'shopee_orders') {
       let data: any[] = [];
-      if (supabase) {
+      if (supabase && !serverSupabaseFailed) {
         try {
           const sData = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, 20000, true);
           if (sData && sData.length > 0) data = sData;
-        } catch (e) {}
+        } catch (e) {
+          if (isSupabaseQuotaError(e)) serverSupabaseFailed = true;
+        }
       }
       if (data.length === 0) data = db.shopee_orders || [];
 
@@ -1178,11 +1260,13 @@ app.get('/api/sheets/export-csv', async (req, res) => {
 
     if (type === 'orders') {
       let data: any[] = [];
-      if (supabase) {
+      if (supabase && !serverSupabaseFailed) {
         try {
           const sData = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false, 20000, true);
           if (sData && sData.length > 0) data = sData;
-        } catch (e) {}
+        } catch (e) {
+          if (isSupabaseQuotaError(e)) serverSupabaseFailed = true;
+        }
       }
       if (data.length === 0) data = db.orders || [];
 
@@ -1511,25 +1595,45 @@ app.post('/api/sheets/sync-from-url', async (req, res) => {
     const db = readDatabase();
     if (!db.maps_reviews) db.maps_reviews = [];
 
-    // Upsert into Supabase in chunks
-    if (supabase && processedReviews.length > 0) {
+    // Pisahkan: baris BARU vs baris yang SUDAH ADA di database
+    const existingIds = new Set(db.maps_reviews.map((m: any) => m.id));
+    const newItems = processedReviews.filter(item => !existingIds.has(item.id));
+    const existingItems = processedReviews.map(item => {
+      if (!existingIds.has(item.id)) return null;
+      // Jangan pernah timpa created_at untuk baris yang sudah ada
+      const { created_at, ...rest } = item as any;
+      return rest;
+    }).filter(Boolean);
+
+    // Upsert ke Supabase in chunks (created_at cuma dikirim buat baris BARU)
+    if (supabase && !serverSupabaseFailed) {
       try {
         const chunkSize = 100;
-        for (let i = 0; i < processedReviews.length; i += chunkSize) {
-          const chunk = processedReviews.slice(i, i + chunkSize);
-          await supabase.from('maps_reviews').upsert(chunk, { onConflict: 'id' });
+        const toInsert = [...newItems];
+        for (let i = 0; i < toInsert.length; i += chunkSize) {
+          const chunk = toInsert.slice(i, i + chunkSize);
+          if (chunk.length > 0) await supabase.from('maps_reviews').upsert(chunk, { onConflict: 'id' });
+        }
+        for (let i = 0; i < existingItems.length; i += chunkSize) {
+          const chunk = existingItems.slice(i, i + chunkSize);
+          if (chunk.length > 0) await supabase.from('maps_reviews').upsert(chunk, { onConflict: 'id' });
         }
         clearServerSupabaseCache('maps_reviews');
       } catch (sErr) {
-        console.error('Supabase bulk upsert error:', sErr);
+        if (isSupabaseQuotaError(sErr)) {
+          serverSupabaseFailed = true;
+        } else {
+          console.warn('Supabase bulk upsert warning:', (sErr as any)?.message || sErr);
+        }
       }
     }
 
-    // Upsert into local db.json
+    // Upsert ke local db.json (sama, created_at baris lama ga ikut ketimpa)
     for (const item of processedReviews) {
       const idx = db.maps_reviews.findIndex((m: any) => m.id === item.id);
       if (idx !== -1) {
-        db.maps_reviews[idx] = { ...db.maps_reviews[idx], ...item };
+        const { created_at, ...rest } = item as any;
+        db.maps_reviews[idx] = { ...db.maps_reviews[idx], ...rest };
       } else {
         db.maps_reviews.push(item);
       }
@@ -1672,7 +1776,7 @@ app.post('/api/sheets/webhook', async (req, res) => {
     if (target_count !== undefined) updatePayload.target_count = Number(target_count);
     updatePayload.updated_at = new Date().toISOString();
 
-    if (supabase) {
+    if (supabase && !serverSupabaseFailed) {
       try {
         await supabase
           .from('maps_reviews')
@@ -1680,7 +1784,9 @@ app.post('/api/sheets/webhook', async (req, res) => {
           .eq('id', row_id);
         clearServerSupabaseCache('maps_reviews');
       } catch (err) {
-        console.error('Webhook supabase update error:', err);
+        if (isSupabaseQuotaError(err)) {
+          serverSupabaseFailed = true;
+        }
       }
     }
 

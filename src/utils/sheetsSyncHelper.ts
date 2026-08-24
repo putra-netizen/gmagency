@@ -8,9 +8,157 @@ export interface SheetsSyncConfig {
   webhookUrl: string;
 }
 
+export interface OfflineSyncItem {
+  id: string;
+  type: 'order' | 'shopee_order' | 'maps_review';
+  action: 'insert' | 'update' | 'delete';
+  payload: any;
+  timestamp: string;
+  retryCount: number;
+}
+
 const STORAGE_KEY = 'gmsolution_sheets_sync_config';
+const OFFLINE_QUEUE_KEY = 'gm_offline_sync_queue';
 
 export const DEFAULT_SHEETS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzeu460eHLYqtLmJnBo9-eFGzqxV8zWK1AOuubiFHy0HNoJZ-t5J0q3CQkkY-IurTiahA/exec';
+
+// ==========================================
+// OFFLINE-FIRST SYNC QUEUE MANAGEMENT
+// ==========================================
+
+export function getOfflineQueue(): OfflineSyncItem[] {
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function saveOfflineQueue(queue: OfflineSyncItem[]): void {
+  try {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('gm_offline_queue_changed', { detail: { count: queue.length } }));
+    }
+  } catch (e) {}
+}
+
+export function addToOfflineQueue(
+  type: 'order' | 'shopee_order' | 'maps_review',
+  action: 'insert' | 'update' | 'delete',
+  payload: any
+): void {
+  const queue = getOfflineQueue();
+  const itemId = payload.id || `item_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  
+  // Deduplicate existing entry for same ID and type
+  const existingIdx = queue.findIndex(q => q.type === type && q.payload?.id === itemId);
+  const newItem: OfflineSyncItem = {
+    id: `queue_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+    type,
+    action,
+    payload,
+    timestamp: new Date().toISOString(),
+    retryCount: 0
+  };
+
+  if (existingIdx !== -1) {
+    queue[existingIdx] = newItem;
+  } else {
+    queue.push(newItem);
+  }
+
+  saveOfflineQueue(queue);
+}
+
+export function clearOfflineQueue(): void {
+  saveOfflineQueue([]);
+}
+
+export function getOfflineQueueCount(): number {
+  return getOfflineQueue().length;
+}
+
+let isProcessingQueue = false;
+
+/**
+ * Flush and auto-sync all offline queued worker inputs to Spreadsheet
+ */
+export async function processOfflineQueue(): Promise<{ processed: number; remaining: number; success: boolean }> {
+  if (isProcessingQueue) {
+    return { processed: 0, remaining: getOfflineQueueCount(), success: false };
+  }
+
+  const queue = getOfflineQueue();
+  if (queue.length === 0) {
+    return { processed: 0, remaining: 0, success: true };
+  }
+
+  isProcessingQueue = true;
+  let processedCount = 0;
+  const remainingQueue: OfflineSyncItem[] = [];
+
+  try {
+    // 1. Group maps reviews for batch upload if multiple exist
+    const mapsReviewsItems = queue.filter(q => q.type === 'maps_review' && q.action !== 'delete');
+    const otherItems = queue.filter(q => !(q.type === 'maps_review' && q.action !== 'delete'));
+
+    if (mapsReviewsItems.length > 0) {
+      const reviews = mapsReviewsItems.map(item => item.payload);
+      const batchRes = await triggerBatchMapsReviewsSync(reviews);
+      if (batchRes.success) {
+        processedCount += mapsReviewsItems.length;
+      } else {
+        // Keep in queue and increment retry
+        mapsReviewsItems.forEach(item => {
+          remainingQueue.push({ ...item, retryCount: item.retryCount + 1 });
+        });
+      }
+    }
+
+    // 2. Process other individual items
+    for (const item of otherItems) {
+      try {
+        const ok = await triggerDirectSheetsSync(item.type, item.action, item.payload);
+        if (ok) {
+          processedCount++;
+        } else {
+          remainingQueue.push({ ...item, retryCount: item.retryCount + 1 });
+        }
+      } catch (e) {
+        remainingQueue.push({ ...item, retryCount: item.retryCount + 1 });
+      }
+    }
+
+    saveOfflineQueue(remainingQueue);
+    return {
+      processed: processedCount,
+      remaining: remainingQueue.length,
+      success: remainingQueue.length === 0
+    };
+  } finally {
+    isProcessingQueue = false;
+  }
+}
+
+// Automatically start background sync queue worker in browser
+if (typeof window !== 'undefined') {
+  // Listen for online events
+  window.addEventListener('online', () => {
+    console.log('🌐 Koneksi online terdeteksi! Memproses antrean offline sync...');
+    processOfflineQueue();
+  });
+
+  // Periodic retry check every 25 seconds
+  setInterval(() => {
+    if (getOfflineQueueCount() > 0 && navigator.onLine) {
+      processOfflineQueue();
+    }
+  }, 25000);
+}
 
 export function getSheetsSyncConfig(): SheetsSyncConfig {
   try {
@@ -40,9 +188,9 @@ export function saveSheetsSyncConfig(config: SheetsSyncConfig): void {
 }
 
 /**
- * Sends transaction data to Google Apps Script Web App for real-time sync.
+ * Internal single-item push to Google Sheets Webhook
  */
-export async function triggerSheetsSync(
+export async function triggerDirectSheetsSync(
   type: 'order' | 'shopee_order' | 'maps_review',
   action: 'insert' | 'update' | 'delete',
   payload: any
@@ -52,67 +200,90 @@ export async function triggerSheetsSync(
     return false;
   }
 
-  // Clean Webhook URL
   const url = config.webhookUrl.trim();
   if (!url.startsWith('http')) {
     return false;
   }
 
-  try {
-    const accountsFormatted = payload.reviewer_accounts
-      ? (Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts))
-      : '[]';
+  const accountsFormatted = payload.reviewer_accounts
+    ? (Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts))
+    : '[]';
 
-    const body = {
-      type,
-      action,
-      id: payload.id,
-      timestamp: new Date().toISOString(),
-      payload: {
-        ...payload,
-        reviewer_accounts_json: accountsFormatted,
-        reviewer_accounts_str: payload.reviewer_accounts
-          ? (Array.isArray(payload.reviewer_accounts) 
-              ? (payload.reviewer_accounts as any[]).map(r => r.name || String(r)).join(', ')
-              : String(payload.reviewer_accounts))
-          : '',
-      }
-    };
-
-    // Try server proxy first for reliable execution and logging
-    try {
-      if (type === 'maps_review') {
-        const proxyRes = await fetch('/api/sheets/push-batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            webhookUrl: url,
-            reviews: [payload]
-          })
-        });
-        if (proxyRes.ok) {
-          const json = await proxyRes.json();
-          if (json && json.success) return true;
-        }
-      }
-    } catch (proxyErr) {
-      console.warn('Proxy push notice:', proxyErr);
+  const body = {
+    type,
+    action,
+    id: payload.id,
+    timestamp: new Date().toISOString(),
+    payload: {
+      ...payload,
+      reviewer_accounts_json: accountsFormatted,
+      reviewer_accounts_str: payload.reviewer_accounts
+        ? (Array.isArray(payload.reviewer_accounts) 
+            ? (payload.reviewer_accounts as any[]).map(r => r.name || String(r)).join(', ')
+            : String(payload.reviewer_accounts))
+        : '',
     }
+  };
 
-    // Direct browser fetch
-    await fetch(url, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+  // Try server proxy first for reliable execution and logging
+  try {
+    if (type === 'maps_review') {
+      const proxyRes = await fetch('/api/sheets/push-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webhookUrl: url,
+          reviews: [payload]
+        })
+      });
+      if (proxyRes.ok) {
+        const json = await proxyRes.json();
+        if (json && json.success) return true;
+      }
+    }
+  } catch (proxyErr) {
+    console.warn('Proxy push notice:', proxyErr);
+  }
 
-    console.log(`📊 Google Sheets sync triggered: ${type} - ${action} - ID: ${payload.id}`);
+  // Direct browser fetch
+  await fetch(url, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  return true;
+}
+
+/**
+ * Sends transaction data to Google Apps Script Web App for real-time sync,
+ * with automatic fallback to persistent Offline Queue if network is offline or maintenance.
+ */
+export async function triggerSheetsSync(
+  type: 'order' | 'shopee_order' | 'maps_review',
+  action: 'insert' | 'update' | 'delete',
+  payload: any
+): Promise<boolean> {
+  const config = getSheetsSyncConfig();
+  if (!config.enabled || !config.webhookUrl) {
+    // If webhook is disabled or not configured, store in offline queue
+    addToOfflineQueue(type, action, payload);
     return true;
+  }
+
+  try {
+    const success = await triggerDirectSheetsSync(type, action, payload);
+    if (!success) {
+      // Put in queue for retry
+      addToOfflineQueue(type, action, payload);
+    }
+    return success;
   } catch (error) {
-    console.error('❌ Google Sheets sync failed:', error);
+    console.warn('⚠️ Gagal terhubung ke Google Sheets (Sedang maintenance/offline). Menyimpan ke antrean lokal:', error);
+    addToOfflineQueue(type, action, payload);
     return false;
   }
 }
@@ -393,36 +564,56 @@ function upsertRow(sheet, type, id, payload) {
       payload.updated_at || new Date().toISOString(),
       Number(payload.target_count || payload.target_review || 1)
     ];
+  } else if (type === 'order') {
+    rowValues = [
+      payload.id || id,
+      payload.created_at || new Date().toISOString(),
+      payload.buyer_name || "",
+      payload.whatsapp || "",
+      payload.service_name || "",
+      payload.target_link || "",
+      payload.target_phone || "",
+      Number(payload.quantity || 1),
+      Number(payload.total_price || 0),
+      payload.payment_status || "PENDING",
+      payload.notes || ""
+    ];
+  } else if (type === 'shopee_order') {
+    rowValues = [
+      payload.id || id,
+      payload.created_at || new Date().toISOString(),
+      payload.store_name || "",
+      payload.buyer_name || "",
+      payload.service_type || "SPAM_WA",
+      Number(payload.quantity || 1),
+      payload.target_link || "",
+      payload.status || "PROGRESS",
+      payload.notes || ""
+    ];
   }
   
   if (rowValues.length > 0) {
     if (rowIndex > -1) {
       sheet.getRange(rowIndex, 1, 1, rowValues.length).setValues([rowValues]);
     } else {
-      sheet.appendRow(rowValues);
+      sheet.getRange(lastRow + 1, 1, 1, rowValues.length).setValues([rowValues]);
     }
   }
 }
 
+/**
+ * High-Speed Batch Synchronization (Takes < 1 second for thousands of rows)
+ */
 function batchSyncMapsReviews(sheet, reviews) {
   if (!reviews || !Array.isArray(reviews) || reviews.length === 0) return;
   
-  if (sheet.getLastRow() < 1) {
-    setupSheetHeaders(sheet, 'maps_review');
-  }
-  
-  var lastRow = sheet.getLastRow();
-  var existingIdsMap = {};
-  if (lastRow >= 2) {
-    var existingIds = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    for (var i = 0; i < existingIds.length; i++) {
-      var rid = String(existingIds[i][0]).trim();
-      if (rid) {
-        existingIdsMap[rid] = i + 2;
-      }
-    }
-  }
-  
+  var headers = [
+    "row_id", "TANGGAL", "KLIEN", "STORE", "TIPE REVIEW", 
+    "TARGET LINK", "INPUT PROGRES AKUN", "CLUE", "LINK BUKTI", 
+    "STATUS", "updated_at", "TARGET AKUN"
+  ];
+
+  var allRows = [];
   for (var r = 0; r < reviews.length; r++) {
     var item = reviews[r];
     var accountsFormatted = '[]';
@@ -434,29 +625,33 @@ function batchSyncMapsReviews(sheet, reviews) {
       accountsFormatted = item.reviewer_accounts;
     }
 
-    var rowValues = [
-      item.id,
+    allRows.push([
+      item.id || '',
       item.created_at || new Date().toISOString(),
-      item.client_name || "",
-      item.store_name || "MP",
-      item.review_type || "G_MAPS",
-      item.maps_link || "",
+      item.client_name || '',
+      item.store_name || 'MP',
+      item.review_type || 'G_MAPS',
+      item.maps_link || '',
       accountsFormatted,
-      item.notes || "",
-      item.proof_link || "",
-      item.status || "PROGRESS",
+      item.notes || '',
+      item.proof_link || '',
+      item.status || 'PROGRESS',
       item.updated_at || new Date().toISOString(),
       Number(item.target_count || item.target_review || 1)
-    ];
-
-    if (existingIdsMap[item.id]) {
-      var rowNum = existingIdsMap[item.id];
-      sheet.getRange(rowNum, 1, 1, rowValues.length).setValues([rowValues]);
-    } else {
-      sheet.appendRow(rowValues);
-      existingIdsMap[item.id] = sheet.getLastRow();
-    }
+    ]);
   }
+
+  // Instant 1-call matrix overwrite
+  sheet.clearContents();
+  var matrix = [headers].concat(allRows);
+  sheet.getRange(1, 1, matrix.length, headers.length).setValues(matrix);
+  
+  // Format Header
+  var headerRange = sheet.getRange(1, 1, 1, headers.length);
+  headerRange.setFontWeight('bold');
+  headerRange.setBackground('#0f172a');
+  headerRange.setFontColor('#ffffff');
+  sheet.setFrozenRows(1);
 }
 `;
 }

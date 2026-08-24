@@ -2,7 +2,7 @@
  * Custom modern toast notification event emitter.
  */
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warn';
 
 export interface ToastEventDetail {
   message: string;
@@ -22,6 +22,13 @@ export const toast = {
     window.dispatchEvent(
       new CustomEvent<ToastEventDetail>('gm-toast', {
         detail: { message, type: 'error', duration },
+      })
+    );
+  },
+  warn(message: string, duration = 3500) {
+    window.dispatchEvent(
+      new CustomEvent<ToastEventDetail>('gm-toast', {
+        detail: { message, type: 'warn', duration },
       })
     );
   },

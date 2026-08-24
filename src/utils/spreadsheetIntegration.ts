@@ -615,6 +615,262 @@ function rapikanFormatSpreadsheet() {
 };
 
 /**
+ * GENERATE BUILD ALL TABLE APPS SCRIPT (.gs)
+ * Multi-Sheet builder for Maps Reviews, Shopee Orders, Services & 2-Way Sync Engine.
+ */
+export const generateBuildAllTablesAppsScript = (
+  mapsReviews: MapsReview[], 
+  shopeeOrders: ShopeeOrder[] = [], 
+  customUrl?: string
+): string => {
+  const baseUrl = customUrl || (typeof window !== 'undefined' ? window.location.origin : 'https://ais-dev-va7r3aabcl2a4tok24yig5-984852773462.asia-southeast1.run.app');
+
+  const mapsHeaders = [
+    "row_id", "TANGGAL", "KLIEN", "STORE", "TIPE REVIEW", 
+    "TARGET LINK", "INPUT PROGRES AKUN", "CLUE", "LINK BUKTI", 
+    "STATUS", "updated_at", "TARGET AKUN"
+  ];
+
+  const mapsRows = mapsReviews.map(r => {
+    const acc = r.reviewer_accounts 
+      ? (Array.isArray(r.reviewer_accounts) ? JSON.stringify(r.reviewer_accounts) : String(r.reviewer_accounts)) 
+      : '[]';
+    return [
+      r.id,
+      r.created_at || new Date().toISOString(),
+      r.client_name || '',
+      r.store_name || 'MP',
+      r.review_type || 'G_MAPS',
+      r.maps_link || '',
+      acc,
+      r.notes || '',
+      r.proof_link || '',
+      r.status || 'PROGRESS',
+      r.updated_at || r.created_at || new Date().toISOString(),
+      Number(r.target_count || (r as any).target_review || 1)
+    ];
+  });
+
+  const shopeeHeaders = [
+    "row_id", "TANGGAL", "NAMA TOKO", "PEMBELI", "TIPE JASA", 
+    "QTY", "TARGET LINK", "STATUS KERJA", "CATATAN", "ADMIN BY", "WORKER"
+  ];
+
+  const shopeeRows = shopeeOrders.map(s => [
+    s.id,
+    s.created_at || new Date().toISOString(),
+    s.store_name || '',
+    s.buyer_name || '',
+    s.service_type || 'SPAM_WA',
+    Number(s.quantity || 1),
+    s.target_link || '',
+    s.status || 'PROGRESS',
+    s.notes || '',
+    s.created_by || '',
+    s.worker_id || ''
+  ]);
+
+  return `/**
+ * ==============================================================================
+ * 🚀 GM AGENCY - GOOGLE APPS SCRIPT: BUILD ALL TABLES & 2-WAY SYNC
+ * ==============================================================================
+ * Dibuat Khusus untuk: Sinkronisasi Penuh Spreadsheet & Sistem Tanpa Supabase
+ * Server Web Admin : ${baseUrl}
+ * Data Snapshot    : ${mapsRows.length} Maps Reviews | ${shopeeRows.length} Shopee Orders
+ * 
+ * 📋 FITUR LENGKAP:
+ * 1. ⚡ buildAllTables() : Membuat & mengisi otomatis semua sheet (Maps Reviews, Shopee Orders, & Katalog)
+ * 2. 🔄 tarikDataMaps()  : Mengambil data ulasan Maps terbaru langsung dari Web Admin
+ * 3. 🔄 tarikDataShopee(): Mengambil data pesanan Shopee/Sosmed terbaru dari Web Admin
+ * 4. 📤 onEdit(e)        : Mengirim perubahan status/catatan/akun real-time kembali ke Web Admin
+ * 5. 🎨 Format Otomatis  : Header Navy elegan, Dropdown Status, & Freeze Header
+ * 
+ * 🛠️ CARA PEMASANGAN DI GOOGLE SPREADSHEET:
+ * 1. Buka Google Spreadsheet Anda.
+ * 2. Klik menu "Ekstensi" (Extensions) -> "Apps Script".
+ * 3. Hapus semua kode yang ada, lalu TEMPELKAN (PASTE) seluruh script ini.
+ * 4. Klik Simpan (Ctrl+S / Cmd+S).
+ * 5. Pilih fungsi "buildAllTables" di toolbar atas, lalu klik "Jalankan" (Run).
+ * 6. Berikan izin saat pertama kali dijalankan. Semua tabel langsung terisi lengkap!
+ * 7. Refresh halaman Google Spreadsheet, maka Menu "🚀 GM Agency" akan muncul di toolbar atas.
+ */
+
+var WEB_ADMIN_URL = "${baseUrl}";
+
+// 1. MEMBUAT MENU DI SPREADSHEET
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🚀 GM Agency')
+    .addItem('⚡ Build & Refresh Semua Tabel (Lengkap)', 'buildAllTables')
+    .addSeparator()
+    .addItem('📥 Tarik Data Maps Reviews dari Web', 'tarikDataMaps')
+    .addItem('📥 Tarik Data Shopee Orders dari Web', 'tarikDataShopee')
+    .addSeparator()
+    .addItem('🎨 Rapikan Format & Dropdown Semua Sheet', 'rapikanSemuaSheet')
+    .addToUi();
+}
+
+// 2. FUNGSI UTAMA: BUILD ALL TABLES
+function buildAllTables() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // A. SHEET 1: MAPS REVIEWS
+  var sheetMaps = ss.getSheetByName('📊 MAPS & APP REVIEWS') || ss.insertSheet('📊 MAPS & APP REVIEWS');
+  var mapsHeaders = ${JSON.stringify(mapsHeaders)};
+  var mapsData = ${JSON.stringify(mapsRows, null, 2)};
+  
+  sheetMaps.clearContents();
+  var allMapsData = [mapsHeaders].concat(mapsData);
+  if (allMapsData.length > 0) {
+    sheetMaps.getRange(1, 1, allMapsData.length, mapsHeaders.length).setValues(allMapsData);
+  }
+  formatHeaderAndDropdown(sheetMaps, mapsHeaders.length, allMapsData.length, 10, ['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE']);
+
+  // B. SHEET 2: SHOPEE & SOSMED ORDERS
+  var sheetShopee = ss.getSheetByName('🛒 SHOPEE & SOSMED ORDERS') || ss.insertSheet('🛒 SHOPEE & SOSMED ORDERS');
+  var shopeeHeaders = ${JSON.stringify(shopeeHeaders)};
+  var shopeeData = ${JSON.stringify(shopeeRows, null, 2)};
+  
+  sheetShopee.clearContents();
+  var allShopeeData = [shopeeHeaders].concat(shopeeData);
+  if (allShopeeData.length > 0) {
+    sheetShopee.getRange(1, 1, allShopeeData.length, shopeeHeaders.length).setValues(allShopeeData);
+  }
+  formatHeaderAndDropdown(sheetShopee, shopeeHeaders.length, allShopeeData.length, 8, ['PENDING', 'PROGRESS', 'DONE', 'CANCEL']);
+
+  // Selesai
+  SpreadsheetApp.getActiveSpreadsheet().toast('Semua sheet berhasil dibuat dan disinkronkan!', 'Sukses', 5);
+  SpreadsheetApp.getUi().alert('✅ SUKSES!\\n\\n1. Sheet "📊 MAPS & APP REVIEWS" (' + mapsData.length + ' data)\\n2. Sheet "🛒 SHOPEE & SOSMED ORDERS" (' + shopeeData.length + ' data)\\n\\nSemua tabel telah diformat dengan dropdown status dan siap digunakan.');
+}
+
+// Helper formatting
+function formatHeaderAndDropdown(sheet, colCount, rowCount, statusColIdx, statusValues) {
+  // Header Style
+  var headerRange = sheet.getRange(1, 1, 1, colCount);
+  headerRange.setBackground('#0f172a');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  headerRange.setHorizontalAlignment('center');
+  sheet.setFrozenRows(1);
+  
+  // Set dropdown validation
+  if (rowCount > 1) {
+    var statusRange = sheet.getRange(2, statusColIdx, rowCount - 1, 1);
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(statusValues, true)
+      .setAllowInvalid(true)
+      .build();
+    statusRange.setDataValidation(rule);
+  }
+  
+  // Auto-resize columns
+  for (var c = 1; c <= Math.min(colCount, 8); c++) {
+    sheet.autoResizeColumn(c);
+  }
+}
+
+// 3. TARIK DATA MAPS REVIEWS DARI WEB ADMIN
+function tarikDataMaps() {
+  var url = WEB_ADMIN_URL + '/api/sheets/export-csv?type=maps_reviews';
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Mengambil data Maps Reviews dari Web Admin...', 'Loading', 5);
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    var csvText = res.getContentText();
+    if (!csvText || csvText.indexOf('row_id') === -1) {
+      SpreadsheetApp.getUi().alert('⚠️ Gagal mengambil CSV Maps. Pastikan server web sedang online.');
+      return;
+    }
+    var data = Utilities.parseCsv(csvText);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('📊 MAPS & APP REVIEWS') || ss.getActiveSheet();
+    sheet.clearContents();
+    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+    formatHeaderAndDropdown(sheet, data[0].length, data.length, 10, ['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE']);
+    SpreadsheetApp.getUi().alert('✅ Berhasil menyinkronkan ' + (data.length - 1) + ' data Maps Reviews!');
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('❌ Error: ' + e.toString());
+  }
+}
+
+// 4. TARIK DATA SHOPEE ORDERS DARI WEB ADMIN
+function tarikDataShopee() {
+  var url = WEB_ADMIN_URL + '/api/sheets/export-csv?type=shopee_orders';
+  try {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Mengambil data Shopee Orders dari Web Admin...', 'Loading', 5);
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    var csvText = res.getContentText();
+    if (!csvText || csvText.indexOf('row_id') === -1) {
+      SpreadsheetApp.getUi().alert('⚠️ Gagal mengambil CSV Shopee. Pastikan server web sedang online.');
+      return;
+    }
+    var data = Utilities.parseCsv(csvText);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('🛒 SHOPEE & SOSMED ORDERS') || ss.getActiveSheet();
+    sheet.clearContents();
+    sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+    formatHeaderAndDropdown(sheet, data[0].length, data.length, 8, ['PENDING', 'PROGRESS', 'DONE', 'CANCEL']);
+    SpreadsheetApp.getUi().alert('✅ Berhasil menyinkronkan ' + (data.length - 1) + ' data Shopee Orders!');
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('❌ Error: ' + e.toString());
+  }
+}
+
+// 5. RAPAIKAN SEMUA SHEET
+function rapikanSemuaSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet1 = ss.getSheetByName('📊 MAPS & APP REVIEWS');
+  if (sheet1) formatHeaderAndDropdown(sheet1, 12, sheet1.getLastRow(), 10, ['PENDING', 'PROGRESS', 'READY', 'SUDAH DIREKAP', 'DONE']);
+  
+  var sheet2 = ss.getSheetByName('🛒 SHOPEE & SOSMED ORDERS');
+  if (sheet2) formatHeaderAndDropdown(sheet2, 11, sheet2.getLastRow(), 8, ['PENDING', 'PROGRESS', 'DONE', 'CANCEL']);
+  
+  SpreadsheetApp.getUi().alert('🎨 Format semua sheet berhasil dirapikan!');
+}
+
+// 6. ON EDIT: SINKRONISASI 2 ARAH OTOMATIS SAAT DIEDIT
+function onEdit(e) {
+  if (!e || !e.range) return;
+  var sheet = e.range.getSheet();
+  var sheetName = sheet.getName();
+  var row = e.range.getRow();
+  if (row <= 1) return; // Skip baris header
+  
+  var webhookUrl = WEB_ADMIN_URL + '/api/sheets/webhook';
+  
+  try {
+    if (sheetName.indexOf('MAPS') !== -1) {
+      var rowValues = sheet.getRange(row, 1, 1, 12).getValues()[0];
+      var rowId = String(rowValues[0] || '').trim();
+      if (!rowId) return;
+
+      var payload = {
+        action: 'UPDATE_ROW',
+        row_id: rowId,
+        status: String(rowValues[9] || 'PROGRESS').trim(),
+        reviewer_accounts: String(rowValues[6] || ''),
+        notes: String(rowValues[7] || ''),
+        proof_link: String(rowValues[8] || ''),
+        target_count: Number(rowValues[11]) || 1
+      };
+
+      sheet.getRange(row, 11).setValue(new Date().toISOString()); // Kolom updated_at
+      
+      UrlFetchApp.fetch(webhookUrl, {
+        method: 'post',
+        contentType: 'application/json',
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      });
+    }
+  } catch (err) {
+    Logger.log('onEdit error: ' + err.toString());
+  }
+}
+`;
+};
+
+
+/**
  * Robust Client-Side and Direct Sync from Google Spreadsheet URL (Pull)
  * Uses Google Visualization API (GViz) JSONP for 100% CORS-free browser fetching,
  * plus Apps Script Web App and CSV fallbacks.

@@ -74,6 +74,7 @@ export interface MapsReview {
   proof_link?: string;
   status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE';
   created_at: string;
+  updated_at?: string;
   store_name?: string;
   notes?: string;
   review_type?: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS';

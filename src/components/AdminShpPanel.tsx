@@ -47,7 +47,10 @@ import {
   Users,
   Download,
   FileSpreadsheet,
-  X
+  X,
+  ShieldCheck,
+  Zap,
+  Clock
 } from 'lucide-react';
 import { 
   generateShopeeOrdersCsv, 
@@ -55,7 +58,11 @@ import {
   downloadCsvFile,
   parseAccountsList
 } from '../utils/spreadsheetIntegration';
-import { triggerBatchMapsReviewsSync } from '../utils/sheetsSyncHelper';
+import { 
+  triggerBatchMapsReviewsSync, 
+  getOfflineQueueCount, 
+  processOfflineQueue 
+} from '../utils/sheetsSyncHelper';
 
 interface AdminShpPanelProps {
   currentLang: 'id' | 'en';
@@ -400,6 +407,37 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'maps_review' } | null>(null);
   const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
+
+  // Offline queue state
+  const [pendingQueueCount, setPendingQueueCount] = useState<number>(() => getOfflineQueueCount());
+  const [isSyncingQueue, setIsSyncingQueue] = useState(false);
+
+  useEffect(() => {
+    const handleQueueChange = () => {
+      setPendingQueueCount(getOfflineQueueCount());
+    };
+    window.addEventListener('gm_offline_queue_changed', handleQueueChange);
+    return () => window.removeEventListener('gm_offline_queue_changed', handleQueueChange);
+  }, []);
+
+  const handleManualFlushQueue = async () => {
+    setIsSyncingQueue(true);
+    try {
+      const res = await processOfflineQueue();
+      if (res.processed > 0) {
+        toast.success(`Berhasil mengunggah ${res.processed} data antrean ke Spreadsheet!`);
+      } else if (res.remaining === 0) {
+        toast.info('Semua data sudah tersinkronisasi ke Spreadsheet.');
+      } else {
+        toast.warn('Sedang mencoba menghubungkan ke Spreadsheet...');
+      }
+      setPendingQueueCount(getOfflineQueueCount());
+    } catch (e) {
+      toast.error('Gagal sinkronisasi antrean.');
+    } finally {
+      setIsSyncingQueue(false);
+    }
+  };
 
   // Form Collapse States
   // 'REPORT' | 'SPAM' | null
@@ -1341,6 +1379,61 @@ Format Chat : ${data.notes || '-'}`;
           </p>
         </div>
 
+        {/* Offline Queue Indicator & Quick Sync */}
+        <div className="flex flex-wrap items-center gap-3">
+          {pendingQueueCount > 0 ? (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-2xl text-xs font-bold text-amber-800 shadow-xs">
+              <Clock className="h-4 w-4 text-amber-600 animate-pulse" />
+              <span>{pendingQueueCount} Data di Antrean Lokal</span>
+              <button
+                onClick={handleManualFlushQueue}
+                disabled={isSyncingQueue}
+                className="ml-2 flex items-center gap-1.5 bg-amber-600 text-white px-2.5 py-1 rounded-xl text-[11px] font-black uppercase hover:bg-amber-700 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                <Zap className={`h-3 w-3 ${isSyncingQueue ? 'animate-spin' : ''}`} />
+                <span>Upload Ke Sheet</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-2xl text-xs font-bold text-emerald-800 shadow-xs">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <span>Semua Data Tersinkronisasi</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Offline-First Storage Alert Banner */}
+      <div className="mb-6 rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-emerald-500/10 border border-orange-500/20 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-orange-500/20">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                Offline-First Storage Terpasang
+              </span>
+              <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
+                100% Anti Hilang
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Input order, review maps, dan akun worker <strong>langsung tersimpan otomatis di penyimpanan lokal</strong>. Anda dan worker bisa terus kerja tanpa kendala meski spreadsheet sedang maintenance!
+            </p>
+          </div>
+        </div>
+
+        {pendingQueueCount > 0 && (
+          <button
+            onClick={handleManualFlushQueue}
+            disabled={isSyncingQueue}
+            className="flex items-center gap-1.5 rounded-xl bg-orange-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-orange-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+          >
+            <Zap className={`h-3.5 w-3.5 ${isSyncingQueue ? 'animate-spin' : ''}`} />
+            <span>Sinkronkan {pendingQueueCount} Antrean Sekarang</span>
+          </button>
+        )}
       </div>
 
       {/* Tab Switches */}
