@@ -85,6 +85,15 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/stats', (req, res, next) => {
+  req.url = '/dashboard/stats';
+  app._router.handle(req, res, next);
+});
+
 // Path to JSON database
 const DB_DIR = path.join(process.cwd(), 'src', 'data');
 const DB_PATH = path.join(DB_DIR, 'db.json');
