@@ -1830,6 +1830,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
               >
                 <ShoppingBag className="h-4 w-4" />
                 <span>{currentLang === 'id' ? 'Pesanan Web' : 'Web Orders'}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+                  {orders.length}
+                </span>
               </button>
 
               <button
@@ -1849,6 +1852,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
               >
                 <ShoppingCart className="h-4 w-4" />
                 <span>{currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders'}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-mono">
+                  {shopeeOrders.length}
+                </span>
               </button>
 
               <button
@@ -1868,6 +1874,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
               >
                 <Star className="h-4 w-4" />
                 <span>Review Orders</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-mono">
+                  {mapsReviews.length}
+                </span>
               </button>
             </div>
           </>

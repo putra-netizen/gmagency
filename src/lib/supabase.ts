@@ -147,8 +147,9 @@ export async function fetchAllSupabaseRows<T = any>(
         supabaseFailed = true;
       } else {
         console.warn(`Supabase fetch warning on table ${table}:`, error.message || error);
+        supabaseFailed = true;
       }
-      throw error;
+      return [];
     }
 
     if (data && data.length > 0) {
@@ -648,26 +649,9 @@ export async function dbGetProducts(limit: number = 500, forceRefresh: boolean =
     try {
       const data = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true, forceRefresh, limit);
       
-      if (data) {
-        if (data.length === 0) {
-          const hasSeeded = localStorage.getItem('gmsolution_seeded_products');
-          if (!hasSeeded) {
-            console.log('Supabase products table is empty. Auto-seeding INITIAL_PRODUCTS...');
-            const { data: seededData, error: seedError } = await supabase
-              .from('products')
-              .insert(INITIAL_PRODUCTS)
-              .select();
-            if (!seedError && seededData) {
-              localStorage.setItem('gmsolution_seeded_products', 'true');
-              return seededData as Product[];
-            }
-            console.warn('Supabase seeding products warning:', seedError);
-          }
-          return [];
-        } else {
-          localStorage.setItem('gmsolution_seeded_products', 'true');
-          return data;
-        }
+      if (data && data.length > 0) {
+        localStorage.setItem('gmsolution_seeded_products', 'true');
+        return data;
       }
     } catch (err) {
       console.warn('Supabase products exception, falling back to Local/API:', err);
@@ -894,7 +878,7 @@ export async function dbGetOrders(limit: number = 10000, forceRefresh: boolean =
 
       const data = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false, forceRefresh, limit);
       
-      if (data) {
+      if (data && data.length > 0) {
         localStorage.setItem('gmsolution_seeded_orders', 'true');
         const orders = (data as Order[]).map(o => {
           if (!o.product_name) {
