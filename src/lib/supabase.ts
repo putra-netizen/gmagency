@@ -212,19 +212,22 @@ export function deserializeStatusAndNotes<T extends { notes?: string; status?: a
   let notes = item.notes || '';
 
   if (typeof notes === 'string') {
-    if (notes.includes('[STATUS:READY]')) {
-      status = 'READY';
-      notes = notes.replace(/\[STATUS:READY\]/g, '').trim();
-    } else if (notes.includes('[STATUS:SUDAH DIREKAP]')) {
-      status = 'SUDAH DIREKAP';
-      notes = notes.replace(/\[STATUS:SUDAH DIREKAP\]/g, '').trim();
-    } else if (notes.includes('[STATUS:DONE]')) {
-      status = 'DONE';
-      notes = notes.replace(/\[STATUS:DONE\]/g, '').trim();
-    } else if (notes.includes('[STATUS:PENDING]')) {
-      status = 'PENDING';
-      notes = notes.replace(/\[STATUS:PENDING\]/g, '').trim();
+    // If status is not explicitly set (or default PROGRESS) but notes had a legacy tag, derive status
+    if (!item.status || item.status === 'PROGRESS') {
+      if (notes.includes('[STATUS:DONE]')) {
+        status = 'DONE';
+      } else if (notes.includes('[STATUS:READY]')) {
+        status = 'READY';
+      } else if (notes.includes('[STATUS:SUDAH DIREKAP]')) {
+        status = 'SUDAH DIREKAP';
+      } else if (notes.includes('[STATUS:PENDING]')) {
+        status = 'PENDING';
+      }
     }
+    // Always cleanly strip legacy status tags from notes
+    notes = notes
+      .replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '')
+      .trim();
   }
 
   return {

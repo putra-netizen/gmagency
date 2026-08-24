@@ -806,6 +806,21 @@ function doPost(e) {
           }
         }
       } else {
+        var shpHeaders = sheetShp.getLastColumn() > 0 ? sheetShp.getRange(1, 1, 1, sheetShp.getLastColumn()).getValues()[0] : [];
+        function findShpCol(searchTerms, fallback) {
+          for (var st = 0; st < searchTerms.length; st++) {
+            var term = searchTerms[st].toLowerCase();
+            for (var sh = 0; sh < shpHeaders.length; sh++) {
+              if (String(shpHeaders[sh] || '').toLowerCase().indexOf(term) !== -1) return sh + 1;
+            }
+          }
+          return fallback;
+        }
+        var colStatusShp = findShpCol(['status'], 8);
+        var colWorkerShp = findShpCol(['worker', 'petugas'], 9);
+        var colWoShp = findShpCol(['work_order', 'wo'], 10);
+        var colNotesShp = findShpCol(['catatan', 'clue', 'notes'], 11);
+
         // Single update
         var sId = String(payload.id || payload.row_id || '');
         if (sId && sheetShp.getLastRow() > 1) {
@@ -813,10 +828,10 @@ function doPost(e) {
           for (var si = 0; si < sData.length; si++) {
             if (String(sData[si][0]) === sId) {
               var sRow = si + 2;
-              if (payload.status) sheetShp.getRange(sRow, 8).setValue(payload.status);
-              if (payload.worker_id) sheetShp.getRange(sRow, 9).setValue(payload.worker_id);
-              if (payload.work_order) sheetShp.getRange(sRow, 10).setValue(payload.work_order);
-              if (payload.notes) sheetShp.getRange(sRow, 11).setValue(payload.notes);
+              if (payload.status && colStatusShp) sheetShp.getRange(sRow, colStatusShp).setValue(payload.status);
+              if (payload.worker_id && colWorkerShp) sheetShp.getRange(sRow, colWorkerShp).setValue(payload.worker_id);
+              if (payload.work_order && colWoShp) sheetShp.getRange(sRow, colWoShp).setValue(payload.work_order);
+              if (payload.notes && colNotesShp) sheetShp.getRange(sRow, colNotesShp).setValue(payload.notes);
               break;
             }
           }
@@ -825,6 +840,23 @@ function doPost(e) {
     } else {
       // Maps Orders
       var sheetMaps = ss.getSheetByName('maps_orders') || ss.insertSheet('maps_orders');
+      var mapsHeaders = sheetMaps.getLastColumn() > 0 ? sheetMaps.getRange(1, 1, 1, sheetMaps.getLastColumn()).getValues()[0] : [];
+      function findMapsCol(searchTerms, fallback) {
+        for (var st = 0; st < searchTerms.length; st++) {
+          var term = searchTerms[st].toLowerCase();
+          for (var mh = 0; mh < mapsHeaders.length; mh++) {
+            if (String(mapsHeaders[mh] || '').toLowerCase().indexOf(term) !== -1) return mh + 1;
+          }
+        }
+        return fallback;
+      }
+      var colStatusMaps = findMapsCol(['status'], 10);
+      var colAccountsMaps = findMapsCol(['input progres', 'akun', 'account', 'progres'], 7);
+      var colNotesMaps = findMapsCol(['clue', 'catatan', 'notes'], 8);
+      var colProofMaps = findMapsCol(['link bukti', 'bukti', 'proof'], 9);
+      var colTargetMaps = findMapsCol(['target akun', 'target count', 'target', 'qty'], 12);
+      var colUpdatedMaps = findMapsCol(['updated_at', 'tanggal', 'date'], 11);
+
       if (action === 'sync_all' && Array.isArray(payload)) {
         var mExisting = sheetMaps.getLastRow() > 1 ? sheetMaps.getRange(2, 1, sheetMaps.getLastRow() - 1, 1).getValues() : [];
         var mExistingIds = {};
@@ -852,15 +884,15 @@ function doPost(e) {
           for (var ri = 0; ri < allM.length; ri++) {
             if (String(allM[ri][0]) === mId) {
               var targetRow = ri + 2;
-              if (payload.status) sheetMaps.getRange(targetRow, 10).setValue(payload.status);
-              if (payload.reviewer_accounts) {
+              if (payload.status && colStatusMaps) sheetMaps.getRange(targetRow, colStatusMaps).setValue(payload.status);
+              if (payload.reviewer_accounts && colAccountsMaps) {
                 var accStr = Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts);
-                sheetMaps.getRange(targetRow, 7).setValue(accStr);
+                sheetMaps.getRange(targetRow, colAccountsMaps).setValue(accStr);
               }
-              if (payload.notes) sheetMaps.getRange(targetRow, 8).setValue(payload.notes);
-              if (payload.proof_link) sheetMaps.getRange(targetRow, 9).setValue(payload.proof_link);
-              if (payload.target_count) sheetMaps.getRange(targetRow, 12).setValue(Number(payload.target_count));
-              sheetMaps.getRange(targetRow, 11).setValue(new Date().toISOString());
+              if (payload.notes && colNotesMaps) sheetMaps.getRange(targetRow, colNotesMaps).setValue(payload.notes);
+              if (payload.proof_link && colProofMaps) sheetMaps.getRange(targetRow, colProofMaps).setValue(payload.proof_link);
+              if (payload.target_count && colTargetMaps) sheetMaps.getRange(targetRow, colTargetMaps).setValue(Number(payload.target_count));
+              if (colUpdatedMaps) sheetMaps.getRange(targetRow, colUpdatedMaps).setValue(new Date().toISOString());
               break;
             }
           }
@@ -1140,11 +1172,28 @@ export function parseGVizResponseToShopeeOrders(gvizData: any): ShopeeOrder[] {
     const quantity = (!isNaN(qtyNum) && qtyNum > 0) ? qtyNum : 1;
     const target_link = rawTarget;
     
+    let cleanNotes = (rawNotes || '').trim();
     let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PROGRESS';
-    if (rawStatus.includes('DONE')) status = 'DONE';
-    else if (rawStatus.includes('PENDING')) status = 'PENDING';
-    else if (rawStatus.includes('READY')) status = 'READY';
-    else if (rawStatus.includes('REKAP')) status = 'SUDAH DIREKAP';
+
+    if (rawStatus.includes('DONE')) {
+      status = 'DONE';
+    } else if (rawStatus.includes('READY')) {
+      status = 'READY';
+    } else if (rawStatus.includes('REKAP')) {
+      status = 'SUDAH DIREKAP';
+    } else if (rawStatus.includes('PENDING')) {
+      status = 'PENDING';
+    } else if (cleanNotes.includes('[STATUS:DONE]')) {
+      status = 'DONE';
+    } else if (cleanNotes.includes('[STATUS:READY]')) {
+      status = 'READY';
+    } else if (cleanNotes.includes('[STATUS:SUDAH DIREKAP]')) {
+      status = 'SUDAH DIREKAP';
+    } else if (cleanNotes.includes('[STATUS:PENDING]')) {
+      status = 'PENDING';
+    }
+
+    cleanNotes = cleanNotes.replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
 
     const order_type = rawOrderType === 'REPORT_ALL_SOSMED' || service_type.toUpperCase().includes('REPORT')
       ? 'REPORT_ALL_SOSMED'
@@ -1161,7 +1210,7 @@ export function parseGVizResponseToShopeeOrders(gvizData: any): ShopeeOrder[] {
       status,
       worker_id: rawWorker,
       work_order: rawWo,
-      notes: rawNotes,
+      notes: cleanNotes,
       created_by: rawAdmin || 'adminshp1',
       created_at: rawDate || new Date().toISOString(),
       formatted_text: rawFormatted || `Pesanan ${service_type} - Toko ${store_name} - ${buyer_name}`
@@ -1259,15 +1308,30 @@ function parseGVizResponseToMapsReviews(gvizData: any): MapsReview[] {
         : 'G_MAPS';
     const maps_link = rawLink || 'https://maps.google.com';
     const reviewer_accounts = parseAccountsList(rawAccounts);
-    const notes = rawNotes || '';
-    const proof_link = rawProof || '';
-
+    let cleanNotes = (rawNotes || '').trim();
     let status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = 'PROGRESS';
-    if (rawStatus.includes('DONE')) status = 'DONE';
-    else if (rawStatus.includes('PROGRESS') || rawStatus.includes('PROGRES')) status = 'PROGRESS';
-    else if (rawStatus.includes('READY')) status = 'READY';
-    else if (rawStatus.includes('REKAP')) status = 'SUDAH DIREKAP';
-    else if (rawStatus.includes('PENDING')) status = 'PENDING';
+
+    if (rawStatus.includes('DONE')) {
+      status = 'DONE';
+    } else if (rawStatus.includes('READY')) {
+      status = 'READY';
+    } else if (rawStatus.includes('REKAP')) {
+      status = 'SUDAH DIREKAP';
+    } else if (rawStatus.includes('PENDING')) {
+      status = 'PENDING';
+    } else if (cleanNotes.includes('[STATUS:DONE]')) {
+      status = 'DONE';
+    } else if (cleanNotes.includes('[STATUS:READY]')) {
+      status = 'READY';
+    } else if (cleanNotes.includes('[STATUS:SUDAH DIREKAP]')) {
+      status = 'SUDAH DIREKAP';
+    } else if (cleanNotes.includes('[STATUS:PENDING]')) {
+      status = 'PENDING';
+    }
+
+    cleanNotes = cleanNotes.replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
+    const notes = cleanNotes;
+    const proof_link = rawProof || '';
 
     const parsedTarget = Number(rawTarget);
     const target_count = (!isNaN(parsedTarget) && parsedTarget > 0) ? parsedTarget : Math.max(1, reviewer_accounts.length || 10);
@@ -1508,6 +1572,82 @@ export const syncFromGoogleSheetsUrl = async (
  * Tries server-side sync with safe fallback to direct browser GViz queries.
  * Always populates localStorage immediately so UI refreshes without delay.
  */
+export function mergeMapsReviewsWithLocal(incoming: MapsReview[]): MapsReview[] {
+  let existing: MapsReview[] = [];
+  try {
+    const raw = localStorage.getItem('gmsolution_local_maps_reviews');
+    if (raw) existing = JSON.parse(raw);
+  } catch {}
+
+  return incoming.map(inc => {
+    const local = existing.find(e => e.id === inc.id);
+    const cleanNotes = (inc.notes || '').replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
+
+    if (!local) {
+      return { ...inc, notes: cleanNotes };
+    }
+
+    const localAcc = local.reviewer_accounts || [];
+    const incAcc = inc.reviewer_accounts || [];
+    const mergedAccounts = localAcc.length > incAcc.length ? localAcc : incAcc;
+    const finalNotes = (local.notes || cleanNotes).replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
+
+    // Preserve local status modifications
+    let finalStatus = inc.status;
+    if (local.status === 'DONE') {
+      finalStatus = 'DONE';
+    } else if (local.status === 'READY' && (inc.status === 'PROGRESS' || inc.status === 'PENDING')) {
+      finalStatus = 'READY';
+    } else if (local.status === 'SUDAH DIREKAP' && (inc.status === 'PROGRESS' || inc.status === 'PENDING')) {
+      finalStatus = 'SUDAH DIREKAP';
+    }
+
+    return {
+      ...inc,
+      status: finalStatus,
+      reviewer_accounts: mergedAccounts,
+      notes: finalNotes,
+      proof_link: local.proof_link || inc.proof_link
+    };
+  });
+}
+
+export function mergeShopeeOrdersWithLocal(incoming: ShopeeOrder[]): ShopeeOrder[] {
+  let existing: ShopeeOrder[] = [];
+  try {
+    const raw = localStorage.getItem('gmsolution_local_shopee_orders');
+    if (raw) existing = JSON.parse(raw);
+  } catch {}
+
+  return incoming.map(inc => {
+    const local = existing.find(e => e.id === inc.id);
+    const cleanNotes = (inc.notes || '').replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
+
+    if (!local) {
+      return { ...inc, notes: cleanNotes };
+    }
+
+    const finalNotes = (local.notes || cleanNotes).replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
+
+    let finalStatus = inc.status;
+    if (local.status === 'DONE') {
+      finalStatus = 'DONE';
+    } else if (local.status === 'READY' && (inc.status === 'PROGRESS' || inc.status === 'PENDING')) {
+      finalStatus = 'READY';
+    } else if (local.status === 'SUDAH DIREKAP' && (inc.status === 'PROGRESS' || inc.status === 'PENDING')) {
+      finalStatus = 'SUDAH DIREKAP';
+    }
+
+    return {
+      ...inc,
+      status: finalStatus,
+      worker_id: local.worker_id || inc.worker_id,
+      work_order: local.work_order || inc.work_order,
+      notes: finalNotes
+    };
+  });
+}
+
 export const syncAllTablesFromSpreadsheetUrl = async (
   rawUrl: string,
   onProgress?: (msg: string) => void
@@ -1539,9 +1679,12 @@ export const syncAllTablesFromSpreadsheetUrl = async (
       try {
         const sData = JSON.parse(text);
         if (sData && sData.success) {
-          const mList = Array.isArray(sData.mapsReviews) ? sData.mapsReviews : [];
-          const sList = Array.isArray(sData.shopeeOrders) ? sData.shopeeOrders : [];
+          const rawMList = Array.isArray(sData.mapsReviews) ? sData.mapsReviews : [];
+          const rawSList = Array.isArray(sData.shopeeOrders) ? sData.shopeeOrders : [];
           
+          const mList = mergeMapsReviewsWithLocal(rawMList);
+          const sList = mergeShopeeOrdersWithLocal(rawSList);
+
           // Save immediately to local storage cache
           if (mList.length > 0) {
             try { localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(mList)); } catch {}
@@ -1608,17 +1751,20 @@ export const syncAllTablesFromSpreadsheetUrl = async (
     console.warn('Gagal membaca tab shopee_orders:', errShopee);
   }
 
-  const totalCount = directMaps.length + directShopee.length;
+  const mergedMaps = mergeMapsReviewsWithLocal(directMaps);
+  const mergedShopee = mergeShopeeOrdersWithLocal(directShopee);
+
+  const totalCount = mergedMaps.length + mergedShopee.length;
   if (totalCount === 0) {
     throw new Error('Tidak ada data yang ditemukan di Spreadsheet. Pastikan tab "maps_orders" dan/atau "shopee_orders" sudah dibuat dan Spreadsheet disetel ke akses publik (Viewer).');
   }
 
   // Store in localStorage
-  if (directMaps.length > 0) {
-    try { localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(directMaps)); } catch {}
+  if (mergedMaps.length > 0) {
+    try { localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(mergedMaps)); } catch {}
   }
-  if (directShopee.length > 0) {
-    try { localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(directShopee)); } catch {}
+  if (mergedShopee.length > 0) {
+    try { localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(mergedShopee)); } catch {}
   }
 
   // Asynchronously send to server to populate db.json if backend is up
@@ -1626,18 +1772,18 @@ export const syncAllTablesFromSpreadsheetUrl = async (
     fetch('/api/sheets/push-batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mapsReviews: directMaps, shopeeOrders: directShopee })
+      body: JSON.stringify({ mapsReviews: mergedMaps, shopeeOrders: mergedShopee })
     }).catch(() => {});
   } catch {}
 
   return {
     success: true,
-    message: `Berhasil menarik ${totalCount} data (${directMaps.length} Ulasan Maps, ${directShopee.length} Pesanan Shopee) langsung dari Google Sheets!`,
+    message: `Berhasil menarik ${totalCount} data (${mergedMaps.length} Ulasan Maps, ${mergedShopee.length} Pesanan Shopee) langsung dari Google Sheets!`,
     totalSynced: totalCount,
-    totalMaps: directMaps.length,
-    totalShopee: directShopee.length,
-    mapsReviews: directMaps,
-    shopeeOrders: directShopee
+    totalMaps: mergedMaps.length,
+    totalShopee: mergedShopee.length,
+    mapsReviews: mergedMaps,
+    shopeeOrders: mergedShopee
   };
 };
 

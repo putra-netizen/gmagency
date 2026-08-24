@@ -11,15 +11,24 @@ import { processOfflineQueue, getOfflineQueueCount } from './sheetsSyncHelper';
 
 let isAutoSyncing = false;
 let lastSyncTimestamp = 0;
+let pauseUntilTimestamp = 0;
 let autoSyncIntervalId: any = null;
 
 export const STORAGE_LAST_AUTO_SYNC = 'gm_last_auto_sync_ts';
+
+export function pauseAutoSyncFor(ms: number = 20000): void {
+  pauseUntilTimestamp = Date.now() + ms;
+}
 
 export async function performGlobalAutoSync(force: boolean = false): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   if (!navigator.onLine) return false;
 
   const now = Date.now();
+  if (!force && now < pauseUntilTimestamp) {
+    return false;
+  }
+
   // Debounce: don't auto-sync if we just synced less than 10 seconds ago unless forced
   if (!force && now - lastSyncTimestamp < 10000) {
     return false;

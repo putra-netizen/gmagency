@@ -24,6 +24,7 @@ import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } fro
 import { FinanceView } from './FinanceView';
 import { SpreadsheetManagerModal } from './SpreadsheetManagerModal';
 import { DEFAULT_SPREADSHEET_URL, generateAppsScriptCode, parseAccountsList } from '../utils/spreadsheetIntegration';
+import { pauseAutoSyncFor } from '../utils/autoSyncManager';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
@@ -996,11 +997,63 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     }, 30000);
 
     const handleAutoSynced = () => {
-      // Refresh without full page loading indicator
+      const now = Date.now();
       dbGetProducts(10000, true).then(prodsData => setProducts(prodsData)).catch(console.error);
-      dbGetOrders(10000, true).then(ordsData => setOrders(ordsData)).catch(console.error);
-      dbGetShopeeOrders(10000, true).then(shopeeData => setShopeeOrders(shopeeData)).catch(console.error);
-      dbGetMapsReviews(10000, true).then(mapsData => setMapsReviews(mapsData)).catch(console.error);
+      
+      dbGetOrders(10000, true).then(ordsData => {
+        setOrders(prev => {
+          if (!prev || prev.length === 0) return ordsData;
+          return ordsData.map(newItem => {
+            const lock = recentLocalStatusUpdates.current.get(newItem.id);
+            if (lock && (now - lock.timestamp < 120000)) {
+              return { ...newItem, payment_status: lock.status as PaymentStatus };
+            }
+            return newItem;
+          });
+        });
+      }).catch(console.error);
+
+      dbGetShopeeOrders(10000, true).then(shopeeData => {
+        setShopeeOrders(prev => {
+          if (!prev || prev.length === 0) return shopeeData;
+          return shopeeData.map(newItem => {
+            const lock = recentLocalStatusUpdates.current.get(newItem.id);
+            if (lock && (now - lock.timestamp < 120000)) {
+              return { ...newItem, status: lock.status as any };
+            }
+            return newItem;
+          });
+        });
+      }).catch(console.error);
+
+      dbGetMapsReviews(10000, true).then(mapsData => {
+        setMapsReviews(prev => {
+          if (!prev || prev.length === 0) return mapsData;
+          return mapsData.map(newItem => {
+            const existing = prev.find(p => p.id === newItem.id);
+            const lock = recentLocalStatusUpdates.current.get(newItem.id);
+            let finalStatus = newItem.status;
+            if (lock && (now - lock.timestamp < 120000)) {
+              finalStatus = lock.status as any;
+            }
+            if (existing) {
+              const existingAccounts = existing.reviewer_accounts || [];
+              const newAccounts = newItem.reviewer_accounts || [];
+              const mergedAccounts = existingAccounts.length > newAccounts.length ? existingAccounts : newAccounts;
+              return {
+                ...newItem,
+                status: finalStatus,
+                reviewer_accounts: mergedAccounts
+              };
+            }
+            return {
+              ...newItem,
+              status: finalStatus
+            };
+          });
+        });
+      }).catch(console.error);
+
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(console.error);
     };
 
@@ -1071,7 +1124,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   };
 
   const handleUpdateShopeeStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE') => {
-    // 1. Lock and optimistic update
+    // 1. Pause auto sync to prevent immediate overwrite & lock
+    pauseAutoSyncFor(30000);
     recentLocalStatusUpdates.current.set(id, { status, timestamp: Date.now() });
     setShopeeOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
 
@@ -1089,7 +1143,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   };
 
   const handleUpdateMapsStatus = async (id: string, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE') => {
-    // 1. Lock and optimistic update
+    // 1. Pause auto sync to prevent immediate overwrite & lock
+    pauseAutoSyncFor(30000);
     recentLocalStatusUpdates.current.set(id, { status, timestamp: Date.now() });
     setMapsReviews(prev => prev.map(r => r.id === id ? { ...r, status } : r));
 

@@ -531,6 +531,18 @@ function deleteRowById(sheet, id) {
   }
 }
 
+function findColIdx(headers, aliases, fallback) {
+  if (!headers || !headers.length) return fallback;
+  for (var a = 0; a < aliases.length; a++) {
+    var search = aliases[a].toLowerCase();
+    for (var h = 0; h < headers.length; h++) {
+      var headerText = String(headers[h] || '').toLowerCase().trim();
+      if (headerText.indexOf(search) !== -1) return h + 1;
+    }
+  }
+  return fallback;
+}
+
 function upsertRow(sheet, type, id, payload) {
   if (!payload) return;
   var targetId = String(payload.id || payload.row_id || id || '').trim();
@@ -546,19 +558,28 @@ function upsertRow(sheet, type, id, payload) {
       }
     }
   }
+
+  var rawHeaders = sheet.getLastColumn() > 0 ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] : [];
   
   if (type === 'maps_review' || type === 'maps_orders') {
+    var colStatusM = findColIdx(rawHeaders, ['status'], 10);
+    var colAccountsM = findColIdx(rawHeaders, ['input progres', 'akun', 'account', 'progres'], 7);
+    var colNotesM = findColIdx(rawHeaders, ['clue', 'catatan', 'notes'], 8);
+    var colProofM = findColIdx(rawHeaders, ['link bukti', 'bukti', 'proof'], 9);
+    var colTargetM = findColIdx(rawHeaders, ['target akun', 'target count', 'target', 'qty'], 12);
+    var colUpdatedM = findColIdx(rawHeaders, ['updated_at', 'tanggal', 'date'], 11);
+
     if (rowIndex > -1) {
-      // Direct column update for existing row
-      if (payload.status) sheet.getRange(rowIndex, 10).setValue(payload.status);
-      if (payload.reviewer_accounts !== undefined) {
+      // Direct column update for existing row using dynamic header indices
+      if (payload.status && colStatusM) sheet.getRange(rowIndex, colStatusM).setValue(payload.status);
+      if (payload.reviewer_accounts !== undefined && colAccountsM) {
         var acc = Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts);
-        sheet.getRange(rowIndex, 7).setValue(acc);
+        sheet.getRange(rowIndex, colAccountsM).setValue(acc);
       }
-      if (payload.notes !== undefined) sheet.getRange(rowIndex, 8).setValue(payload.notes);
-      if (payload.proof_link !== undefined) sheet.getRange(rowIndex, 9).setValue(payload.proof_link);
-      if (payload.target_count) sheet.getRange(rowIndex, 12).setValue(Number(payload.target_count));
-      sheet.getRange(rowIndex, 11).setValue(new Date().toISOString());
+      if (payload.notes !== undefined && colNotesM) sheet.getRange(rowIndex, colNotesM).setValue(payload.notes);
+      if (payload.proof_link !== undefined && colProofM) sheet.getRange(rowIndex, colProofM).setValue(payload.proof_link);
+      if (payload.target_count && colTargetM) sheet.getRange(rowIndex, colTargetM).setValue(Number(payload.target_count));
+      if (colUpdatedM) sheet.getRange(rowIndex, colUpdatedM).setValue(new Date().toISOString());
       return;
     }
 
@@ -588,11 +609,16 @@ function upsertRow(sheet, type, id, payload) {
 
     sheet.getRange(lastRow + 1, 1, 1, rowValues.length).setValues([rowValues]);
   } else if (type === 'shopee_order' || type === 'shopee_orders') {
+    var colStatusS = findColIdx(rawHeaders, ['status'], 8);
+    var colWorkerS = findColIdx(rawHeaders, ['worker', 'petugas'], 9);
+    var colWoS = findColIdx(rawHeaders, ['work_order', 'wo'], 10);
+    var colNotesS = findColIdx(rawHeaders, ['catatan', 'clue', 'notes'], 11);
+
     if (rowIndex > -1) {
-      if (payload.status) sheet.getRange(rowIndex, 8).setValue(payload.status);
-      if (payload.worker_id !== undefined) sheet.getRange(rowIndex, 9).setValue(payload.worker_id);
-      if (payload.work_order !== undefined) sheet.getRange(rowIndex, 10).setValue(payload.work_order);
-      if (payload.notes !== undefined) sheet.getRange(rowIndex, 11).setValue(payload.notes);
+      if (payload.status && colStatusS) sheet.getRange(rowIndex, colStatusS).setValue(payload.status);
+      if (payload.worker_id !== undefined && colWorkerS) sheet.getRange(rowIndex, colWorkerS).setValue(payload.worker_id);
+      if (payload.work_order !== undefined && colWoS) sheet.getRange(rowIndex, colWoS).setValue(payload.work_order);
+      if (payload.notes !== undefined && colNotesS) sheet.getRange(rowIndex, colNotesS).setValue(payload.notes);
       return;
     }
 
