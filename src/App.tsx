@@ -15,6 +15,7 @@ import ToastContainer from './components/ToastContainer';
 import { Product, Language, Order } from './types';
 import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected } from './lib/supabase';
 import { TRANSLATIONS } from './lib/translations';
+import { initGlobalAutoSync } from './utils/autoSyncManager';
 import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -158,6 +159,11 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const servicesSectionRef = useRef<HTMLDivElement>(null);
+
+  // Global Automatic Sync for ANY device (Runs on startup without manual clicks)
+  useEffect(() => {
+    initGlobalAutoSync();
+  }, []);
 
   // Sync translation to localStorage
   const handleLangChange = (lang: Language) => {

@@ -994,7 +994,22 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(err => console.error(err));
     }, 30000);
-    return () => clearInterval(interval);
+
+    const handleAutoSynced = () => {
+      // Refresh without full page loading indicator
+      dbGetProducts(10000, true).then(prodsData => setProducts(prodsData)).catch(console.error);
+      dbGetOrders(10000, true).then(ordsData => setOrders(ordsData)).catch(console.error);
+      dbGetShopeeOrders(10000, true).then(shopeeData => setShopeeOrders(shopeeData)).catch(console.error);
+      dbGetMapsReviews(10000, true).then(mapsData => setMapsReviews(mapsData)).catch(console.error);
+      dbGetDashboardStats().then(statsData => setStats(statsData)).catch(console.error);
+    };
+
+    window.addEventListener('gm_spreadsheet_data_synced', handleAutoSynced);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('gm_spreadsheet_data_synced', handleAutoSynced);
+    };
   }, []);
 
   useEffect(() => {

@@ -681,9 +681,11 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     };
     window.addEventListener('adminshp-logout', handleLogoutEvent);
     window.addEventListener('adminshp-refresh', handleRefreshEvent);
+    window.addEventListener('gm_spreadsheet_data_synced', handleRefreshEvent);
     return () => {
       window.removeEventListener('adminshp-logout', handleLogoutEvent);
       window.removeEventListener('adminshp-refresh', handleRefreshEvent);
+      window.removeEventListener('gm_spreadsheet_data_synced', handleRefreshEvent);
     };
   }, [isAuthenticated, currentAdminUser]);
 

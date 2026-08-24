@@ -460,17 +460,23 @@ function doPost(e) {
 
 function getSheetForType(doc, type) {
   var sheetName = "";
-  if (type === 'maps_review' || type === 'batch_maps_reviews') {
-    var existing = doc.getSheetByName("Target Maps Reviews") || 
+  if (type === 'maps_review' || type === 'batch_maps_reviews' || type === 'maps_orders') {
+    var existing = doc.getSheetByName("maps_orders") ||
+                   doc.getSheetByName("Target Maps Reviews") || 
                    doc.getSheetByName("GM_db") || 
                    doc.getSheetByName("Maps Reviews") || 
                    doc.getSheetByName("Sheet1");
     if (existing) return existing;
-    sheetName = "Target Maps Reviews";
+    sheetName = "maps_orders";
+  } else if (type === 'shopee_order' || type === 'shopee_orders') {
+    var existing = doc.getSheetByName("shopee_orders") ||
+                   doc.getSheetByName("Pesanan Shopee");
+    if (existing) return existing;
+    sheetName = "shopee_orders";
   } else if (type === 'order') {
+    var existing = doc.getSheetByName("Layanan Umum (General)");
+    if (existing) return existing;
     sheetName = "Layanan Umum (General)";
-  } else if (type === 'shopee_order') {
-    sheetName = "Pesanan Shopee";
   } else {
     return doc.getSheets()[0];
   }
@@ -485,7 +491,7 @@ function getSheetForType(doc, type) {
 
 function setupSheetHeaders(sheet, type) {
   var headers = [];
-  if (type === 'maps_review' || type === 'batch_maps_reviews') {
+  if (type === 'maps_review' || type === 'batch_maps_reviews' || type === 'maps_orders') {
     headers = [
       "row_id", "TANGGAL", "KLIEN", "STORE", "TIPE REVIEW", 
       "TARGET LINK", "INPUT PROGRES AKUN", "CLUE", "LINK BUKTI", 
@@ -497,17 +503,18 @@ function setupSheetHeaders(sheet, type) {
       "Nama Layanan", "Link Target", "Target No HP (Spam)", 
       "Jumlah (Qty)", "Total Harga", "Status Pembayaran", "Catatan"
     ];
-  } else if (type === 'shopee_order') {
+  } else if (type === 'shopee_order' || type === 'shopee_orders') {
     headers = [
-      "ID Pesanan", "Tanggal", "Nama Toko", "Nama Pembeli", 
-      "Tipe Jasa", "Jumlah (Qty)", "Target Link", "Status Kerja", "Catatan"
+      "row_id", "TANGGAL", "NAMA TOKO", "PEMBELI", 
+      "TIPE JASA", "QTY", "TARGET LINK", "STATUS KERJA", "WORKER", "WORK ORDER", "CATATAN", "ADMIN BY"
     ];
   }
   
   sheet.appendRow(headers);
   var range = sheet.getRange(1, 1, 1, headers.length);
   range.setFontWeight("bold");
-  range.setBackground("#f1f5f9");
+  range.setBackground("#0f172a");
+  range.setFontColor("#ffffff");
   sheet.setFrozenRows(1);
 }
 
@@ -526,21 +533,35 @@ function deleteRowById(sheet, id) {
 
 function upsertRow(sheet, type, id, payload) {
   if (!payload) return;
+  var targetId = String(payload.id || payload.row_id || id || '').trim();
   var lastRow = sheet.getLastRow();
   var rowIndex = -1;
   
-  if (lastRow >= 2) {
+  if (lastRow >= 2 && targetId) {
     var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
     for (var i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]).trim() === String(id).trim()) {
+      if (String(ids[i][0]).trim() === targetId) {
         rowIndex = i + 2;
         break;
       }
     }
   }
   
-  var rowValues = [];
-  if (type === 'maps_review') {
+  if (type === 'maps_review' || type === 'maps_orders') {
+    if (rowIndex > -1) {
+      // Direct column update for existing row
+      if (payload.status) sheet.getRange(rowIndex, 10).setValue(payload.status);
+      if (payload.reviewer_accounts !== undefined) {
+        var acc = Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts);
+        sheet.getRange(rowIndex, 7).setValue(acc);
+      }
+      if (payload.notes !== undefined) sheet.getRange(rowIndex, 8).setValue(payload.notes);
+      if (payload.proof_link !== undefined) sheet.getRange(rowIndex, 9).setValue(payload.proof_link);
+      if (payload.target_count) sheet.getRange(rowIndex, 12).setValue(Number(payload.target_count));
+      sheet.getRange(rowIndex, 11).setValue(new Date().toISOString());
+      return;
+    }
+
     var accountsFormatted = '[]';
     if (payload.reviewer_accounts_json) {
       accountsFormatted = payload.reviewer_accounts_json;
@@ -550,8 +571,8 @@ function upsertRow(sheet, type, id, payload) {
       accountsFormatted = payload.reviewer_accounts;
     }
 
-    rowValues = [
-      payload.id || id,
+    var rowValues = [
+      targetId || ('map-' + Date.now().toString().slice(-6)),
       payload.created_at || new Date().toISOString(),
       payload.client_name || "",
       payload.store_name || "MP",
@@ -564,23 +585,19 @@ function upsertRow(sheet, type, id, payload) {
       payload.updated_at || new Date().toISOString(),
       Number(payload.target_count || payload.target_review || 1)
     ];
-  } else if (type === 'order') {
-    rowValues = [
-      payload.id || id,
-      payload.created_at || new Date().toISOString(),
-      payload.buyer_name || "",
-      payload.whatsapp || "",
-      payload.service_name || "",
-      payload.target_link || "",
-      payload.target_phone || "",
-      Number(payload.quantity || 1),
-      Number(payload.total_price || 0),
-      payload.payment_status || "PENDING",
-      payload.notes || ""
-    ];
-  } else if (type === 'shopee_order') {
-    rowValues = [
-      payload.id || id,
+
+    sheet.getRange(lastRow + 1, 1, 1, rowValues.length).setValues([rowValues]);
+  } else if (type === 'shopee_order' || type === 'shopee_orders') {
+    if (rowIndex > -1) {
+      if (payload.status) sheet.getRange(rowIndex, 8).setValue(payload.status);
+      if (payload.worker_id !== undefined) sheet.getRange(rowIndex, 9).setValue(payload.worker_id);
+      if (payload.work_order !== undefined) sheet.getRange(rowIndex, 10).setValue(payload.work_order);
+      if (payload.notes !== undefined) sheet.getRange(rowIndex, 11).setValue(payload.notes);
+      return;
+    }
+
+    var shpRow = [
+      targetId || ('shp-' + Date.now().toString().slice(-6)),
       payload.created_at || new Date().toISOString(),
       payload.store_name || "",
       payload.buyer_name || "",
@@ -588,16 +605,13 @@ function upsertRow(sheet, type, id, payload) {
       Number(payload.quantity || 1),
       payload.target_link || "",
       payload.status || "PROGRESS",
-      payload.notes || ""
+      payload.worker_id || "",
+      payload.work_order || "",
+      payload.notes || "",
+      payload.created_by || "Admin"
     ];
-  }
-  
-  if (rowValues.length > 0) {
-    if (rowIndex > -1) {
-      sheet.getRange(rowIndex, 1, 1, rowValues.length).setValues([rowValues]);
-    } else {
-      sheet.getRange(lastRow + 1, 1, 1, rowValues.length).setValues([rowValues]);
-    }
+
+    sheet.getRange(lastRow + 1, 1, 1, shpRow.length).setValues([shpRow]);
   }
 }
 

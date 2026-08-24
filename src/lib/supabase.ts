@@ -195,33 +195,20 @@ export function blacklistClientMapsReview(id: string) {
   }
 }
 
-// Helpers for mapping status values like 'READY' or 'SUDAH DIREKAP' to/from Supabase to avoid CHECK constraints
-export function serializeStatusAndNotes(notes: string | undefined, status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' | undefined): { status: 'PENDING' | 'PROGRESS' | 'DONE'; notes: string } {
+// Helpers for clean status and notes serialization
+export function serializeStatusAndNotes(
+  notes: string | undefined, 
+  status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' | undefined
+): { status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE'; notes: string } {
   let cleanNotes = (notes || '').trim();
-  // Strip any existing metadata tags
   cleanNotes = cleanNotes.replace(/\[STATUS:(READY|SUDAH DIREKAP|PENDING|PROGRESS|DONE)\]/g, '').trim();
-
-  let dbStatus: 'PENDING' | 'PROGRESS' | 'DONE' = 'PENDING';
-  if (status === 'READY') {
-    dbStatus = 'PROGRESS';
-    cleanNotes = cleanNotes ? `${cleanNotes}\n[STATUS:READY]` : '[STATUS:READY]';
-  } else if (status === 'SUDAH DIREKAP') {
-    dbStatus = 'PROGRESS';
-    cleanNotes = cleanNotes ? `${cleanNotes}\n[STATUS:SUDAH DIREKAP]` : '[STATUS:SUDAH DIREKAP]';
-  } else if (status === 'PROGRESS') {
-    dbStatus = 'PROGRESS';
-  } else if (status === 'DONE') {
-    dbStatus = 'DONE';
-  } else if (status === 'PENDING') {
-    dbStatus = 'PENDING';
-  }
-
-  return { status: dbStatus, notes: cleanNotes };
+  const finalStatus: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' = status || 'PROGRESS';
+  return { status: finalStatus, notes: cleanNotes };
 }
 
 export function deserializeStatusAndNotes<T extends { notes?: string; status?: any }>(item: T): T {
   if (!item) return item;
-  let status = item.status || 'PENDING';
+  let status = item.status || 'PROGRESS';
   let notes = item.notes || '';
 
   if (typeof notes === 'string') {
@@ -231,6 +218,12 @@ export function deserializeStatusAndNotes<T extends { notes?: string; status?: a
     } else if (notes.includes('[STATUS:SUDAH DIREKAP]')) {
       status = 'SUDAH DIREKAP';
       notes = notes.replace(/\[STATUS:SUDAH DIREKAP\]/g, '').trim();
+    } else if (notes.includes('[STATUS:DONE]')) {
+      status = 'DONE';
+      notes = notes.replace(/\[STATUS:DONE\]/g, '').trim();
+    } else if (notes.includes('[STATUS:PENDING]')) {
+      status = 'PENDING';
+      notes = notes.replace(/\[STATUS:PENDING\]/g, '').trim();
     }
   }
 
