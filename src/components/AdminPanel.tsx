@@ -275,7 +275,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'order' | 'product' } | null>(null);
   
   // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'keuangan' | 'settings'
-  const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'keuangan' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'keuangan' | 'settings'>('shopee_orders');
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
 
   // Settings view nested tab states
@@ -1786,8 +1786,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
               const completedOpPercentage = totalOpOrders > 0 ? Math.round((completedCount / totalOpOrders) * 100) : 0;
 
               return (
-                <div id="stats-operational-overview" className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xs mb-8">
-                  <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                <div id="stats-operational-overview" className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-4 sm:p-6 md:p-8 shadow-xs mb-6 sm:mb-8">
+                  <div className="flex flex-wrap items-center justify-between gap-4 mb-4 sm:mb-6">
                     <div>
                       <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
                         <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -1796,64 +1796,64 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                     {/* Web Orders */}
-                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400">
-                          <ShoppingBag className="h-4 w-4" />
+                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 shrink-0">
+                          <ShoppingBag className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Web Orders</span>
+                        <span className="text-[10px] sm:text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">Web Orders</span>
                       </div>
                       <div>
-                        <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                        <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 block">
                           {orders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
                         </span>
                       </div>
                     </div>
 
                     {/* Shopee Orders */}
-                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400">
-                          <ShoppingCart className="h-4 w-4" />
+                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 shrink-0">
+                          <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Shopee Orders</span>
+                        <span className="text-[10px] sm:text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">Shopee Orders</span>
                       </div>
                       <div>
-                        <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                        <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 block">
                           {shopeeOrders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
                         </span>
                       </div>
                     </div>
 
                     {/* On Progress Orders */}
-                    <div className="bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400">
-                          <Clock className="h-4 w-4 animate-pulse" />
+                    <div className="bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400 shrink-0">
+                          <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
                         </div>
-                        <span className="text-[11px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider">On Progress Orders</span>
+                        <span className="text-[10px] sm:text-[11px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider truncate">On Progress</span>
                       </div>
                       <div>
-                        <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                        <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 block">
                           {onProgressCount} <span className="text-xs font-bold text-amber-600 dark:text-amber-400">proses</span>
                         </span>
                       </div>
                     </div>
 
                     {/* Completed Orders */}
-                    <div className="bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400">
-                          <CheckCircle2 className="h-4 w-4" />
+                    <div className="bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+                          <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">Completed Orders</span>
+                        <span className="text-[10px] sm:text-[11px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wider truncate">Completed</span>
                       </div>
                       <div>
-                        <span className="text-2xl font-black text-slate-900 dark:text-slate-100 block">
+                        <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 block">
                           {completedCount}
-                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">({completedOpPercentage}%)</span>
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-1.5">({completedOpPercentage}%)</span>
                         </span>
                         <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block mt-0.5">
                           Khusus status "DONE"
@@ -1865,73 +1865,69 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
               );
             })()}
 
-            {/* Tab Navigations */}
-            <div className="flex items-center border-b border-slate-200 mb-6">
-              <button
-                onClick={() => {
-                  isTabClicking.current = true;
-                  setActiveTab('orders');
-                  window.history.pushState(null, '', '/admin');
-                  window.dispatchEvent(new PopStateEvent('popstate'));
-                  setTimeout(() => { isTabClicking.current = false; }, 50);
-                }}
-                className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                  activeTab === 'orders'
-                    ? 'border-blue-600 text-blue-600 font-black'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-                id="tab-orders"
-              >
-                <ShoppingBag className="h-4 w-4" />
-                <span>{currentLang === 'id' ? 'Pesanan Web' : 'Web Orders'}</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
-                  {orders.length}
-                </span>
-              </button>
+            {/* Tab Navigations - Responsive Horizontal Scroll without Breaking Mobile View */}
+            <div className="w-full overflow-x-auto no-scrollbar scrollbar-none border-b border-slate-200 dark:border-slate-800 mb-6 pb-0.5">
+              <div className="flex items-center gap-1 sm:gap-2 min-w-max">
+                {/* 1. Shopee Orders */}
+                <button
+                  onClick={() => {
+                    isTabClicking.current = true;
+                    setActiveTab('shopee_orders');
+                    window.history.pushState(null, '', '/admin');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                    setTimeout(() => { isTabClicking.current = false; }, 50);
+                  }}
+                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
+                    activeTab === 'shopee_orders'
+                      ? 'border-blue-600 text-blue-600 font-black'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                  id="tab-shopee-orders"
+                >
+                  <ShoppingCart className="h-4 w-4 shrink-0 text-orange-500" />
+                  <span>{currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders'}</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  isTabClicking.current = true;
-                  setActiveTab('shopee_orders');
-                  window.history.pushState(null, '', '/admin');
-                  window.dispatchEvent(new PopStateEvent('popstate'));
-                  setTimeout(() => { isTabClicking.current = false; }, 50);
-                }}
-                className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                  activeTab === 'shopee_orders'
-                    ? 'border-blue-600 text-blue-600 font-black'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-                id="tab-shopee-orders"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                <span>{currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders'}</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-mono">
-                  {shopeeOrders.length}
-                </span>
-              </button>
+                {/* 2. Review Orders */}
+                <button
+                  onClick={() => {
+                    isTabClicking.current = true;
+                    setActiveTab('maps_reviews');
+                    window.history.pushState(null, '', '/admin');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                    setTimeout(() => { isTabClicking.current = false; }, 50);
+                  }}
+                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
+                    activeTab === 'maps_reviews'
+                      ? 'border-blue-600 text-blue-600 font-black'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                  id="tab-maps-reviews"
+                >
+                  <Star className="h-4 w-4 shrink-0 text-yellow-500" />
+                  <span>Review Orders</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  isTabClicking.current = true;
-                  setActiveTab('maps_reviews');
-                  window.history.pushState(null, '', '/admin');
-                  window.dispatchEvent(new PopStateEvent('popstate'));
-                  setTimeout(() => { isTabClicking.current = false; }, 50);
-                }}
-                className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-                  activeTab === 'maps_reviews'
-                    ? 'border-blue-600 text-blue-600 font-black'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-                id="tab-maps-reviews"
-              >
-                <Star className="h-4 w-4" />
-                <span>Review Orders</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-mono">
-                  {mapsReviews.length}
-                </span>
-              </button>
+                {/* 3. Web Orders */}
+                <button
+                  onClick={() => {
+                    isTabClicking.current = true;
+                    setActiveTab('orders');
+                    window.history.pushState(null, '', '/admin');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                    setTimeout(() => { isTabClicking.current = false; }, 50);
+                  }}
+                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
+                    activeTab === 'orders'
+                      ? 'border-blue-600 text-blue-600 font-black'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                  id="tab-orders"
+                >
+                  <ShoppingBag className="h-4 w-4 shrink-0" />
+                  <span>{currentLang === 'id' ? 'Pesanan Web' : 'Web Orders'}</span>
+                </button>
+              </div>
             </div>
           </>
         )}

@@ -1325,29 +1325,31 @@ Format Chat : ${data.notes || '-'}`;
       </div>
 
       {/* Tab Switches */}
-      <div className="flex border-b border-slate-100 mb-8 gap-3">
-        <button
-          onClick={() => setActiveTab('shopee')}
-          className={`flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
-            activeTab === 'shopee'
-              ? 'border-orange-500 text-orange-600'
-              : 'border-transparent text-slate-400 hover:text-slate-750'
-          }`}
-        >
-          <Sparkles className="h-4 w-4" />
-          <span>SOSMED & SPAM WA</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('maps')}
-          className={`flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
-            activeTab === 'maps'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-400 hover:text-slate-750'
-          }`}
-        >
-          <MapPin className="h-4 w-4" />
-          <span>G MAPS & REVIEW APPS</span>
-        </button>
+      <div className="w-full overflow-x-auto no-scrollbar scrollbar-none border-b border-slate-100 mb-8 pb-0.5">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-max">
+          <button
+            onClick={() => setActiveTab('shopee')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
+              activeTab === 'shopee'
+                ? 'border-orange-500 text-orange-600 font-black'
+                : 'border-transparent text-slate-400 hover:text-slate-750'
+            }`}
+          >
+            <Sparkles className="h-4 w-4 shrink-0" />
+            <span>SOSMED & SPAM WA</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('maps')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
+              activeTab === 'maps'
+                ? 'border-blue-600 text-blue-600 font-black'
+                : 'border-transparent text-slate-400 hover:text-slate-750'
+            }`}
+          >
+            <MapPin className="h-4 w-4 shrink-0" />
+            <span>G MAPS & REVIEW APPS</span>
+          </button>
+        </div>
       </div>
 
       {/* Tab contents */}

@@ -3,7 +3,7 @@
  * Allows setting custom QRIS image (as Base64 Data URL) and metadata in LocalStorage.
  */
 
-const FALLBACK_QRIS_IMAGE = 'https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/logo-qris/WhatsApp%20Image%202026-06-27%20at%2000.36.32.jpeg';
+const FALLBACK_QRIS_IMAGE = '/favicon.svg';
 
 export interface QrisConfig {
   imageUrl: string;
