@@ -27,8 +27,22 @@ const MOCK_ORDERS_TO_SEED: Order[] = [];
 const DEFAULT_SUPABASE_URL = 'https://deimhhnkpucajdsgoafd.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlaW1oaG5rcHVjYWpkc2dvYWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1OTE1NTUsImV4cCI6MjEwMzE2NzU1NX0.Db5ngiDca1enJzXmwJqdm5eai3dQpagVvNqjwjrR6ro';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+export function sanitizeSupabaseKey(key: string | undefined): string {
+  if (!key) return '';
+  const trimmed = key.trim();
+  const parts = trimmed.split('.');
+  if (parts.length > 3) {
+    // If concatenated JWTs exist, take the first valid 3-part JWT
+    return parts.slice(0, 3).join('.');
+  }
+  return trimmed;
+}
+
+const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+
+const supabaseUrl = (rawSupabaseUrl || '').trim();
+const supabaseAnonKey = sanitizeSupabaseKey(rawSupabaseAnonKey);
 
 const checkValidUrl = (url: string | undefined): boolean => {
   if (!url) return false;
