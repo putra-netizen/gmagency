@@ -25,8 +25,11 @@ export function isDummyOrder(o: any): boolean {
 const MOCK_ORDERS_TO_SEED: Order[] = [];
 
 // Check if Supabase keys are configured in environment
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const DEFAULT_SUPABASE_URL = 'https://deimhhnkpucajdsgoafd.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlaW1oaG5rcHVjYWpkc2dvYWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1OTE1NTUsImV4cCI6MjEwMzE2NzU1NX0.Db5ngiDca1enJzXmwJqdm5eai3dQpagVvNqjwjrR6ro';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
 const checkValidUrl = (url: string | undefined): boolean => {
   if (!url) return false;
@@ -37,16 +40,31 @@ const checkValidUrl = (url: string | undefined): boolean => {
   }
 };
 
-export const isSupabaseConfigured = false;
-export const supabase: any = null;
-let supabaseFailed = true;
+export const isSupabaseConfigured = checkValidUrl(supabaseUrl) && Boolean(supabaseAnonKey);
+export const supabase: any = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
+let supabaseFailed = false;
 
 export function isSupabaseQuotaError(err: any): boolean {
-  return false;
+  if (!err) return false;
+  if (err.status === 402 || err.statusCode === 402 || err.code === '402') return true;
+  if (err.status === 401 || err.status === 403) return true;
+  const str = typeof err === 'string' 
+    ? err 
+    : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${err.status || ''} ${err.statusText || ''} ${JSON.stringify(err)}`;
+  return (
+    str.includes('exceed_egress_quota') ||
+    str.includes('restricted') ||
+    str.includes('spend caps') ||
+    str.includes('upgrade their plan') ||
+    str.includes('Payment Required') ||
+    str.includes('402') ||
+    str.includes('quota') ||
+    str.includes('Failed to fetch')
+  );
 }
 
 export function dbIsSupabaseConnected(): boolean {
-  return false;
+  return isSupabaseConfigured && !supabaseFailed;
 }
 
 // In-memory cache for fetchAllSupabaseRows to reduce Egress

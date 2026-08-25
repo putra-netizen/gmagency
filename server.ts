@@ -24,8 +24,14 @@ import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus, MapsReview, ShopeeOrder } from './src/types';
 import { createClient } from '@supabase/supabase-js';
 
-const isSupabaseConfigured = false;
-const supabase = null;
+const DEFAULT_SUPABASE_URL = 'https://deimhhnkpucajdsgoafd.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlaW1oaG5rcHVjYWpkc2dvYWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1OTE1NTUsImV4cCI6MjEwMzE2NzU1NX0.Db5ngiDca1enJzXmwJqdm5eai3dQpagVvNqjwjrR6ro';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+
+const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 // Track if Supabase failed or reached quota limit on server
 let serverSupabaseFailed = false;
@@ -1673,20 +1679,41 @@ app.post('/api/sheets/sync-from-url', async (req, res) => {
 // 5.3 PUSH SINGLE RECORD KE GOOGLE SPREADSHEET VIA APPS SCRIPT WEBHOOK
 app.post('/api/sheets/push-single', async (req, res) => {
   try {
-    const { webhookUrl, type, action, payload } = req.body;
+    const { webhookUrl, type, action, payload, no_order, status, statusBaru, sheet_name } = req.body;
     const url = (webhookUrl || '').trim();
     if (!url || !url.startsWith('http')) {
       return res.status(400).json({ error: 'URL Webhook Google Apps Script tidak valid.' });
     }
 
+    const item = payload || req.body;
+    const effectiveNoOrder = no_order || item.no_order || item.id || item.row_id || (item.payload && (item.payload.id || item.payload.no_order));
+    const effectiveStatus = status || statusBaru || item.status || item.statusBaru || item.status_pembayaran || (item.payload && (item.payload.status || item.payload.payment_status));
+    const effectiveSheet = sheet_name || item.sheet_name || item.sheet || (type === 'shopee_order' || type === 'shopee_orders' ? 'shopee_orders' : (type === 'maps_review' || type === 'maps_orders' ? 'maps_orders' : 'orders'));
+
+    const postBody = {
+      no_order: effectiveNoOrder,
+      id: effectiveNoOrder,
+      row_id: effectiveNoOrder,
+      status: effectiveStatus,
+      statusBaru: effectiveStatus,
+      status_pembayaran: effectiveStatus,
+      sheet_name: effectiveSheet,
+      sheet: effectiveSheet,
+      type: type || 'maps_orders',
+      action: action || 'update',
+      notes: item.notes || (item.payload && item.payload.notes) || '',
+      reviewer_accounts: item.reviewer_accounts || (item.payload && item.payload.reviewer_accounts) || '',
+      proof_link: item.proof_link || (item.payload && item.payload.proof_link) || '',
+      worker_id: item.worker_id || (item.payload && item.payload.worker_id) || '',
+      work_order: item.work_order || (item.payload && item.payload.work_order) || '',
+      target_count: item.target_count || (item.payload && item.payload.target_count),
+      payload: item
+    };
+
     const gRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: type || 'maps_reviews',
-        action: action || 'update',
-        payload: payload || req.body
-      })
+      body: JSON.stringify(postBody)
     });
 
     const text = await gRes.text();

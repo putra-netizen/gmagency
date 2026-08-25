@@ -209,13 +209,34 @@ export async function triggerDirectSheetsSync(
     ? (Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts))
     : '[]';
 
+  const sheetName = type === 'shopee_order' ? 'shopee_orders' : (type === 'maps_review' ? 'maps_orders' : 'orders');
+  const noOrder = payload.id || payload.no_order || payload.row_id;
+  const status = payload.status || payload.payment_status || payload.statusBaru;
+
   const body = {
+    // Root level fields directly consumed by Apps Script doPost
+    no_order: noOrder,
+    id: noOrder,
+    row_id: noOrder,
+    status: status,
+    statusBaru: status,
+    status_pembayaran: status,
+    sheet_name: sheetName,
+    sheet: sheetName,
     type,
     action,
-    id: payload.id,
     timestamp: new Date().toISOString(),
+    notes: payload.notes || '',
+    reviewer_accounts: payload.reviewer_accounts,
+    proof_link: payload.proof_link || '',
+    worker_id: payload.worker_id || '',
+    work_order: payload.work_order || '',
+    target_count: payload.target_count,
     payload: {
       ...payload,
+      no_order: noOrder,
+      id: noOrder,
+      status: status,
       reviewer_accounts_json: accountsFormatted,
       reviewer_accounts_str: payload.reviewer_accounts
         ? (Array.isArray(payload.reviewer_accounts) 
@@ -225,35 +246,43 @@ export async function triggerDirectSheetsSync(
     }
   };
 
-  // Try server proxy first for reliable execution and logging
+  // Try server proxy first for reliable execution and logging (no CORS issue)
   try {
-    if (type === 'maps_review') {
-      const proxyRes = await fetch('/api/sheets/push-batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          webhookUrl: url,
-          reviews: [payload]
-        })
-      });
-      if (proxyRes.ok) {
-        const json = await proxyRes.json();
-        if (json && json.success) return true;
-      }
+    const proxyRes = await fetch('/api/sheets/push-single', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        webhookUrl: url,
+        type,
+        action,
+        payload: body,
+        no_order: noOrder,
+        status: status,
+        statusBaru: status,
+        sheet_name: sheetName
+      })
+    });
+    if (proxyRes.ok) {
+      const json = await proxyRes.json();
+      if (json && json.success) return true;
     }
   } catch (proxyErr) {
     console.warn('Proxy push notice:', proxyErr);
   }
 
   // Direct browser fetch
-  await fetch(url, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (directErr) {
+    console.warn('Direct fetch error:', directErr);
+  }
 
   return true;
 }
@@ -393,196 +422,242 @@ var SPREADSHEET_ID = ""; // Kosongkan jika script terpasang langsung di Spreadsh
 
 function doGet(e) {
   try {
-    var doc = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = getSheetForType(doc, 'maps_review');
-    var lastRow = Math.max(0, sheet.getLastRow() - 1);
+    var ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+    var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : "";
+    var sheet = sheetName ? ss.getSheetByName(sheetName) : (ss.getSheetByName("maps_orders") || ss.getSheetByName("KELOLADATA") || ss.getSheets()[0]);
     
-    return ContentService.createTextOutput(JSON.stringify({
-      status: "online",
-      message: "GM Agency Apps Script Web App aktif dan siap menerima data!",
-      total_rows: lastRow,
-      timestamp: new Date().toISOString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    if (!sheet) return jsonResponse({ ok: false, error: "Sheet tidak ditemukan" });
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow < 2) return jsonResponse([]);
+
+    var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    var statusColIndex = findColumnIndex(headers, ["status", "status_kerja", "status_pembayaran"]);
+    var noOrderColIndex = findColumnIndex(headers, ["no_order", "id", "row_id", "id_pesanan"]);
+
+    var orders = [];
+    values.forEach(function (row) {
+      var noOrder = noOrderColIndex > 0 ? row[noOrderColIndex - 1] : row[0];
+      if (!noOrder) return;
+
+      var obj = {};
+      headers.forEach(function (h, i) {
+        var key = String(h).trim().toLowerCase().replace(/[\\s\\/]+/g, "_");
+        if (key) obj[key] = row[i];
+      });
+      if (statusColIndex > 0) {
+        obj.status = row[statusColIndex - 1];
+        obj.status_pembayaran = row[statusColIndex - 1];
+      }
+      obj.id = String(noOrder);
+      obj.no_order = String(noOrder);
+      orders.push(obj);
+    });
+
+    return jsonResponse(orders);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({
-      status: "error",
-      message: err.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    return jsonResponse({ ok: false, error: err.toString() });
   }
 }
 
 function doPost(e) {
   try {
     if (!e || !e.postData || !e.postData.contents) {
-      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "No post data received" }))
-                           .setMimeType(ContentService.MimeType.JSON);
+      return jsonResponse({ ok: false, error: "No post data received" });
     }
 
-    var content = e.postData.contents;
-    var data = JSON.parse(content);
-    
-    var doc = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
-    
-    var type = data.type || 'maps_review'; 
-    var action = data.action || 'sync_all'; 
-    var id = data.id;
-    var payload = data.payload;
-    
-    // 1. Batch Sync Semua Maps Reviews
-    if (type === 'batch_maps_reviews' && data.reviews) {
-      var sheet = getSheetForType(doc, 'maps_review');
-      batchSyncMapsReviews(sheet, data.reviews);
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Batch sync berhasil", count: data.reviews.length }))
-                           .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    // 2. Ping Test
-    if (type === 'test' || action === 'ping') {
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Ping OK" }))
-                           .setMimeType(ContentService.MimeType.JSON);
+    var payload = JSON.parse(e.postData.contents);
+    var ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+
+    // 1. Ambil nomor order / id dan status baru dari root atau nested payload
+    var noOrder = payload.no_order || payload.id || payload.row_id || (payload.payload && (payload.payload.no_order || payload.payload.id || payload.payload.row_id));
+    var statusBaru = payload.status || payload.statusBaru || payload.status_pembayaran || (payload.payload && (payload.payload.status || payload.payload.payment_status));
+
+    // Handle Ping Test
+    if (payload.type === 'test' || payload.action === 'ping') {
+      return jsonResponse({ ok: true, status: "success", message: "Ping OK" });
     }
 
-    var sheet = getSheetForType(doc, type);
-    
-    if (action === 'delete') {
-      deleteRowById(sheet, id);
-    } else {
-      upsertRow(sheet, type, id, payload);
+    // Handle Batch Sync
+    if ((payload.type === 'batch_maps_reviews' || payload.action === 'sync_all') && (payload.reviews || Array.isArray(payload.payload))) {
+      var bReviews = payload.reviews || payload.payload;
+      var bSheet = ss.getSheetByName("maps_orders") || ss.getSheets()[0];
+      batchSyncMapsReviews(bSheet, bReviews);
+      return jsonResponse({ ok: true, status: "success", message: "Batch sync berhasil", count: bReviews.length });
     }
+
+    if (!noOrder) {
+      return jsonResponse({ ok: false, error: "no_order atau id wajib diisi" });
+    }
+
+    // 2. Tentukan sheet yang tepat
+    var sheet = null;
+    var targetSheetName = payload.sheet_name || payload.sheet || (payload.type === 'shopee_order' || payload.type === 'shopee_orders' ? 'shopee_orders' : (payload.type === 'maps_review' || payload.type === 'maps_orders' ? 'maps_orders' : ''));
     
-    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
-                         .setMimeType(ContentService.MimeType.JSON);
+    if (targetSheetName) {
+      sheet = ss.getSheetByName(targetSheetName);
+    }
+
+    // Jika sheet belum ditentukan, cari sheet yang memiliki no_order tersebut
+    if (!sheet) {
+      var allSheets = ss.getSheets();
+      for (var s = 0; s < allSheets.length; s++) {
+        var curSheet = allSheets[s];
+        if (curSheet.getLastRow() >= 2) {
+          var curHeaders = curSheet.getRange(1, 1, 1, curSheet.getLastColumn()).getValues()[0];
+          var curNoOrderCol = findColumnIndex(curHeaders, ["no_order", "id", "row_id", "id_pesanan"]);
+          if (curNoOrderCol === -1) curNoOrderCol = 1;
+          var curValues = curSheet.getRange(2, curNoOrderCol, curSheet.getLastRow() - 1, 1).getValues();
+          for (var cv = 0; cv < curValues.length; cv++) {
+            if (String(curValues[cv][0]).trim() === String(noOrder).trim()) {
+              sheet = curSheet;
+              break;
+            }
+          }
+        }
+        if (sheet) break;
+      }
+    }
+
+    if (!sheet) {
+      sheet = ss.getSheetByName("maps_orders") || ss.getSheetByName("KELOLADATA") || ss.getSheets()[0];
+    }
+
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    var headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+    var statusColIndex = findColumnIndex(headers, ["status", "status_kerja", "status_pembayaran"]);
+    var noOrderColIndex = findColumnIndex(headers, ["no_order", "id", "row_id", "id_pesanan"]);
+    if (noOrderColIndex === -1) noOrderColIndex = 1;
+
+    // 3. Cari baris berdasarkan no_order
+    var rowIndex = -1;
+    if (lastRow >= 2) {
+      var noOrderValues = sheet.getRange(2, noOrderColIndex, lastRow - 1, 1).getValues();
+      for (var i = 0; i < noOrderValues.length; i++) {
+        if (String(noOrderValues[i][0]).trim() === String(noOrder).trim()) {
+          rowIndex = i + 2;
+          break;
+        }
+      }
+    }
+
+    if (rowIndex === -1) {
+      // Jika baris belum ada dan action bukan delete, tambahkan row baru
+      if (payload.action !== 'delete') {
+        upsertRow(sheet, payload.type || 'maps_review', noOrder, payload.payload || payload);
+        return jsonResponse({ ok: true, success: true, message: "Row baru ditambahkan", no_order: noOrder, status: statusBaru });
+      }
+      return jsonResponse({ ok: false, error: "no_order tidak ditemukan: " + noOrder });
+    }
+
+    // 4. Update data kolom pada baris yang ditemukan
+    if (statusBaru && statusColIndex > 0) {
+      sheet.getRange(rowIndex, statusColIndex).setValue(statusBaru);
+    }
+
+    // Update kolom catatan/clue jika dikirim
+    var pNotes = payload.notes !== undefined ? payload.notes : (payload.payload && payload.payload.notes);
+    if (pNotes !== undefined) {
+      var notesCol = findColumnIndex(headers, ["clue", "catatan", "notes"]);
+      if (notesCol > 0) sheet.getRange(rowIndex, notesCol).setValue(pNotes);
+    }
+
+    // Update kolom link bukti jika dikirim
+    var pProof = payload.proof_link !== undefined ? payload.proof_link : (payload.payload && payload.payload.proof_link);
+    if (pProof !== undefined) {
+      var proofCol = findColumnIndex(headers, ["link_bukti", "bukti", "proof"]);
+      if (proofCol > 0) sheet.getRange(rowIndex, proofCol).setValue(pProof);
+    }
+
+    // Update akun reviewer jika dikirim
+    var pAcc = payload.reviewer_accounts !== undefined ? payload.reviewer_accounts : (payload.payload && payload.payload.reviewer_accounts);
+    if (pAcc !== undefined) {
+      var accCol = findColumnIndex(headers, ["input_progres_akun", "akun", "account", "reviewer_accounts", "progres"]);
+      if (accCol > 0) {
+        var accStr = Array.isArray(pAcc) ? JSON.stringify(pAcc) : String(pAcc);
+        sheet.getRange(rowIndex, accCol).setValue(accStr);
+      }
+    }
+
+    // Update worker jika dikirim
+    var pWorker = payload.worker_id !== undefined ? payload.worker_id : (payload.payload && payload.payload.worker_id);
+    if (pWorker !== undefined) {
+      var workerCol = findColumnIndex(headers, ["worker", "petugas"]);
+      if (workerCol > 0) sheet.getRange(rowIndex, workerCol).setValue(pWorker);
+    }
+
+    // Update work order jika dikirim
+    var pWo = payload.work_order !== undefined ? payload.work_order : (payload.payload && payload.payload.work_order);
+    if (pWo !== undefined) {
+      var woCol = findColumnIndex(headers, ["work_order", "wo"]);
+      if (woCol > 0) sheet.getRange(rowIndex, woCol).setValue(pWo);
+    }
+
+    // Update target count jika dikirim
+    var pTarget = payload.target_count || (payload.payload && payload.payload.target_count);
+    if (pTarget) {
+      var targetCol = findColumnIndex(headers, ["target_akun", "target_count", "target", "qty"]);
+      if (targetCol > 0) sheet.getRange(rowIndex, targetCol).setValue(Number(pTarget));
+    }
+
+    // Update timestamp
+    var updatedCol = findColumnIndex(headers, ["updated_at", "tanggal_update", "date"]);
+    if (updatedCol > 0) {
+      sheet.getRange(rowIndex, updatedCol).setValue(new Date().toISOString());
+    }
+
+    return jsonResponse({ ok: true, success: true, no_order: noOrder, status: statusBaru, row: rowIndex });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
-                         .setMimeType(ContentService.MimeType.JSON);
+    return jsonResponse({ ok: false, error: err.toString() });
   }
 }
 
-function getSheetForType(doc, type) {
-  var sheetName = "";
-  if (type === 'maps_review' || type === 'batch_maps_reviews' || type === 'maps_orders') {
-    var existing = doc.getSheetByName("maps_orders") ||
-                   doc.getSheetByName("Target Maps Reviews") || 
-                   doc.getSheetByName("GM_db") || 
-                   doc.getSheetByName("Maps Reviews") || 
-                   doc.getSheetByName("Sheet1");
-    if (existing) return existing;
-    sheetName = "maps_orders";
-  } else if (type === 'shopee_order' || type === 'shopee_orders') {
-    var existing = doc.getSheetByName("shopee_orders") ||
-                   doc.getSheetByName("Pesanan Shopee");
-    if (existing) return existing;
-    sheetName = "shopee_orders";
-  } else if (type === 'order') {
-    var existing = doc.getSheetByName("Layanan Umum (General)");
-    if (existing) return existing;
-    sheetName = "Layanan Umum (General)";
-  } else {
-    return doc.getSheets()[0];
-  }
+// Cari index kolom berdasarkan nama header (case-insensitive & array matching)
+function findColumnIndex(headers, targetKeys) {
+  if (!headers || !headers.length) return -1;
+  if (!Array.isArray(targetKeys)) targetKeys = [targetKeys];
   
-  var sheet = doc.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = doc.insertSheet(sheetName);
-    setupSheetHeaders(sheet, type);
-  }
-  return sheet;
-}
-
-function setupSheetHeaders(sheet, type) {
-  var headers = [];
-  if (type === 'maps_review' || type === 'batch_maps_reviews' || type === 'maps_orders') {
-    headers = [
-      "row_id", "TANGGAL", "KLIEN", "STORE", "TIPE REVIEW", 
-      "TARGET LINK", "INPUT PROGRES AKUN", "CLUE", "LINK BUKTI", 
-      "STATUS", "updated_at", "TARGET AKUN"
-    ];
-  } else if (type === 'order') {
-    headers = [
-      "ID Pesanan", "Tanggal", "Nama Pembeli", "No WhatsApp", 
-      "Nama Layanan", "Link Target", "Target No HP (Spam)", 
-      "Jumlah (Qty)", "Total Harga", "Status Pembayaran", "Catatan"
-    ];
-  } else if (type === 'shopee_order' || type === 'shopee_orders') {
-    headers = [
-      "row_id", "TANGGAL", "NAMA TOKO", "PEMBELI", 
-      "TIPE JASA", "QTY", "TARGET LINK", "STATUS KERJA", "WORKER", "WORK ORDER", "CATATAN", "ADMIN BY"
-    ];
-  }
-  
-  sheet.appendRow(headers);
-  var range = sheet.getRange(1, 1, 1, headers.length);
-  range.setFontWeight("bold");
-  range.setBackground("#0f172a");
-  range.setFontColor("#ffffff");
-  sheet.setFrozenRows(1);
-}
-
-function deleteRowById(sheet, id) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return;
-  
-  var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-  for (var i = 0; i < ids.length; i++) {
-    if (String(ids[i][0]).trim() === String(id).trim()) {
-      sheet.deleteRow(i + 2);
-      break;
+  for (var k = 0; k < targetKeys.length; k++) {
+    var search = String(targetKeys[k]).trim().toLowerCase().replace(/[\\s\\/]+/g, "_");
+    for (var i = 0; i < headers.length; i++) {
+      var key = String(headers[i] || '').trim().toLowerCase().replace(/[\\s\\/]+/g, "_");
+      if (key === search || key.indexOf(search) !== -1 || search.indexOf(key) !== -1) {
+        return i + 1;
+      }
     }
   }
+  return -1;
 }
 
-function findColIdx(headers, aliases, fallback) {
-  if (!headers || !headers.length) return fallback;
-  for (var a = 0; a < aliases.length; a++) {
-    var search = aliases[a].toLowerCase();
-    for (var h = 0; h < headers.length; h++) {
-      var headerText = String(headers[h] || '').toLowerCase().trim();
-      if (headerText.indexOf(search) !== -1) return h + 1;
-    }
-  }
-  return fallback;
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function upsertRow(sheet, type, id, payload) {
   if (!payload) return;
   var targetId = String(payload.id || payload.row_id || id || '').trim();
   var lastRow = sheet.getLastRow();
-  var rowIndex = -1;
   
-  if (lastRow >= 2 && targetId) {
-    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-    for (var i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]).trim() === targetId) {
-        rowIndex = i + 2;
-        break;
-      }
-    }
-  }
-
-  var rawHeaders = sheet.getLastColumn() > 0 ? sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] : [];
-  
-  if (type === 'maps_review' || type === 'maps_orders') {
-    var colStatusM = findColIdx(rawHeaders, ['status'], 10);
-    var colAccountsM = findColIdx(rawHeaders, ['input progres', 'akun', 'account', 'progres'], 7);
-    var colNotesM = findColIdx(rawHeaders, ['clue', 'catatan', 'notes'], 8);
-    var colProofM = findColIdx(rawHeaders, ['link bukti', 'bukti', 'proof'], 9);
-    var colTargetM = findColIdx(rawHeaders, ['target akun', 'target count', 'target', 'qty'], 12);
-    var colUpdatedM = findColIdx(rawHeaders, ['updated_at', 'tanggal', 'date'], 11);
-
-    if (rowIndex > -1) {
-      // Direct column update for existing row using dynamic header indices
-      if (payload.status && colStatusM) sheet.getRange(rowIndex, colStatusM).setValue(payload.status);
-      if (payload.reviewer_accounts !== undefined && colAccountsM) {
-        var acc = Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts);
-        sheet.getRange(rowIndex, colAccountsM).setValue(acc);
-      }
-      if (payload.notes !== undefined && colNotesM) sheet.getRange(rowIndex, colNotesM).setValue(payload.notes);
-      if (payload.proof_link !== undefined && colProofM) sheet.getRange(rowIndex, colProofM).setValue(payload.proof_link);
-      if (payload.target_count && colTargetM) sheet.getRange(rowIndex, colTargetM).setValue(Number(payload.target_count));
-      if (colUpdatedM) sheet.getRange(rowIndex, colUpdatedM).setValue(new Date().toISOString());
-      return;
-    }
-
+  if (type === 'shopee_order' || type === 'shopee_orders') {
+    var shpRow = [
+      targetId || ('shp-' + Date.now().toString().slice(-6)),
+      payload.created_at || new Date().toISOString(),
+      payload.store_name || "",
+      payload.buyer_name || "",
+      payload.service_type || "SPAM_WA",
+      Number(payload.quantity || 1),
+      payload.target_link || "",
+      payload.status || "PROGRESS",
+      payload.worker_id || "",
+      payload.work_order || "",
+      payload.notes || "",
+      payload.created_by || "Admin"
+    ];
+    sheet.appendRow(shpRow);
+  } else {
     var accountsFormatted = '[]';
     if (payload.reviewer_accounts_json) {
       accountsFormatted = payload.reviewer_accounts_json;
@@ -606,92 +681,16 @@ function upsertRow(sheet, type, id, payload) {
       payload.updated_at || new Date().toISOString(),
       Number(payload.target_count || payload.target_review || 1)
     ];
-
-    sheet.getRange(lastRow + 1, 1, 1, rowValues.length).setValues([rowValues]);
-  } else if (type === 'shopee_order' || type === 'shopee_orders') {
-    var colStatusS = findColIdx(rawHeaders, ['status'], 8);
-    var colWorkerS = findColIdx(rawHeaders, ['worker', 'petugas'], 9);
-    var colWoS = findColIdx(rawHeaders, ['work_order', 'wo'], 10);
-    var colNotesS = findColIdx(rawHeaders, ['catatan', 'clue', 'notes'], 11);
-
-    if (rowIndex > -1) {
-      if (payload.status && colStatusS) sheet.getRange(rowIndex, colStatusS).setValue(payload.status);
-      if (payload.worker_id !== undefined && colWorkerS) sheet.getRange(rowIndex, colWorkerS).setValue(payload.worker_id);
-      if (payload.work_order !== undefined && colWoS) sheet.getRange(rowIndex, colWoS).setValue(payload.work_order);
-      if (payload.notes !== undefined && colNotesS) sheet.getRange(rowIndex, colNotesS).setValue(payload.notes);
-      return;
-    }
-
-    var shpRow = [
-      targetId || ('shp-' + Date.now().toString().slice(-6)),
-      payload.created_at || new Date().toISOString(),
-      payload.store_name || "",
-      payload.buyer_name || "",
-      payload.service_type || "SPAM_WA",
-      Number(payload.quantity || 1),
-      payload.target_link || "",
-      payload.status || "PROGRESS",
-      payload.worker_id || "",
-      payload.work_order || "",
-      payload.notes || "",
-      payload.created_by || "Admin"
-    ];
-
-    sheet.getRange(lastRow + 1, 1, 1, shpRow.length).setValues([shpRow]);
+    sheet.appendRow(rowValues);
   }
 }
 
-/**
- * High-Speed Batch Synchronization (Takes < 1 second for thousands of rows)
- */
 function batchSyncMapsReviews(sheet, reviews) {
   if (!reviews || !Array.isArray(reviews) || reviews.length === 0) return;
-  
-  var headers = [
-    "row_id", "TANGGAL", "KLIEN", "STORE", "TIPE REVIEW", 
-    "TARGET LINK", "INPUT PROGRES AKUN", "CLUE", "LINK BUKTI", 
-    "STATUS", "updated_at", "TARGET AKUN"
-  ];
-
-  var allRows = [];
   for (var r = 0; r < reviews.length; r++) {
     var item = reviews[r];
-    var accountsFormatted = '[]';
-    if (item.reviewer_accounts_json) {
-      accountsFormatted = item.reviewer_accounts_json;
-    } else if (Array.isArray(item.reviewer_accounts)) {
-      accountsFormatted = JSON.stringify(item.reviewer_accounts);
-    } else if (typeof item.reviewer_accounts === 'string') {
-      accountsFormatted = item.reviewer_accounts;
-    }
-
-    allRows.push([
-      item.id || '',
-      item.created_at || new Date().toISOString(),
-      item.client_name || '',
-      item.store_name || 'MP',
-      item.review_type || 'G_MAPS',
-      item.maps_link || '',
-      accountsFormatted,
-      item.notes || '',
-      item.proof_link || '',
-      item.status || 'PROGRESS',
-      item.updated_at || new Date().toISOString(),
-      Number(item.target_count || item.target_review || 1)
-    ]);
+    upsertRow(sheet, 'maps_review', item.id, item);
   }
-
-  // Instant 1-call matrix overwrite
-  sheet.clearContents();
-  var matrix = [headers].concat(allRows);
-  sheet.getRange(1, 1, matrix.length, headers.length).setValues(matrix);
-  
-  // Format Header
-  var headerRange = sheet.getRange(1, 1, 1, headers.length);
-  headerRange.setFontWeight('bold');
-  headerRange.setBackground('#0f172a');
-  headerRange.setFontColor('#ffffff');
-  sheet.setFrozenRows(1);
 }
 `;
 }

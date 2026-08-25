@@ -777,134 +777,169 @@ function doGet(e) {
 // 3. POST WEBHOOK: MENERIMA INSERT / UPDATE DARI WEB ADMIN KE SPREADSHEET
 function doPost(e) {
   try {
-    var contents = e.postData ? JSON.parse(e.postData.contents) : {};
+    if (!e || !e.postData || !e.postData.contents) {
+      return jsonResponse({ ok: false, error: "No post data received" });
+    }
+    var contents = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var action = contents.action || 'update';
     var type = contents.type || 'maps_orders';
     var payload = contents.payload || contents.reviews || contents;
 
-    if (type === 'shopee_orders' || (contents.order_type && contents.order_type !== 'G_MAPS')) {
-      var sheetShp = ss.getSheetByName('shopee_orders') || ss.insertSheet('shopee_orders');
-      if (action === 'sync_all' && Array.isArray(payload)) {
-        // Bulk update/append
-        var existingData = sheetShp.getLastRow() > 1 ? sheetShp.getRange(2, 1, sheetShp.getLastRow() - 1, 1).getValues() : [];
-        var existingIds = {};
-        for (var i = 0; i < existingData.length; i++) existingIds[String(existingData[i][0])] = i + 2;
+    // Ambil no_order dan status langsung dari root atau payload
+    var noOrder = contents.no_order || contents.id || contents.row_id || (payload && (payload.no_order || payload.id || payload.row_id));
+    var statusBaru = contents.status || contents.statusBaru || contents.status_pembayaran || (payload && (payload.status || payload.statusBaru || payload.payment_status));
 
-        for (var k = 0; k < payload.length; k++) {
-          var item = payload[k];
-          var rowId = String(item.id || item.row_id || '');
-          var rowData = [
-            rowId, item.created_at || new Date().toISOString(), item.store_name || '', item.buyer_name || '',
-            item.service_type || 'SPAM_WA', item.quantity || 1, item.target_link || '', item.status || 'PROGRESS',
-            item.worker_id || '', item.work_order || '', item.notes || '', item.created_by || 'Admin'
-          ];
-          if (existingIds[rowId]) {
-            sheetShp.getRange(existingIds[rowId], 1, 1, rowData.length).setValues([rowData]);
-          } else {
-            sheetShp.appendRow(rowData);
-          }
-        }
-      } else {
-        var shpHeaders = sheetShp.getLastColumn() > 0 ? sheetShp.getRange(1, 1, 1, sheetShp.getLastColumn()).getValues()[0] : [];
-        function findShpCol(searchTerms, fallback) {
-          for (var st = 0; st < searchTerms.length; st++) {
-            var term = searchTerms[st].toLowerCase();
-            for (var sh = 0; sh < shpHeaders.length; sh++) {
-              if (String(shpHeaders[sh] || '').toLowerCase().indexOf(term) !== -1) return sh + 1;
-            }
-          }
-          return fallback;
-        }
-        var colStatusShp = findShpCol(['status'], 8);
-        var colWorkerShp = findShpCol(['worker', 'petugas'], 9);
-        var colWoShp = findShpCol(['work_order', 'wo'], 10);
-        var colNotesShp = findShpCol(['catatan', 'clue', 'notes'], 11);
+    if (action === 'ping' || type === 'test') {
+      return jsonResponse({ ok: true, status: "success", message: "Ping OK" });
+    }
 
-        // Single update
-        var sId = String(payload.id || payload.row_id || '');
-        if (sId && sheetShp.getLastRow() > 1) {
-          var sData = sheetShp.getRange(2, 1, sheetShp.getLastRow() - 1, 1).getValues();
-          for (var si = 0; si < sData.length; si++) {
-            if (String(sData[si][0]) === sId) {
-              var sRow = si + 2;
-              if (payload.status && colStatusShp) sheetShp.getRange(sRow, colStatusShp).setValue(payload.status);
-              if (payload.worker_id && colWorkerShp) sheetShp.getRange(sRow, colWorkerShp).setValue(payload.worker_id);
-              if (payload.work_order && colWoShp) sheetShp.getRange(sRow, colWoShp).setValue(payload.work_order);
-              if (payload.notes && colNotesShp) sheetShp.getRange(sRow, colNotesShp).setValue(payload.notes);
+    // Tentukan sheet target
+    var targetSheetName = contents.sheet_name || contents.sheet || (type === 'shopee_orders' || type === 'shopee_order' ? 'shopee_orders' : (type === 'maps_orders' || type === 'maps_review' ? 'maps_orders' : ''));
+    var sheet = targetSheetName ? ss.getSheetByName(targetSheetName) : null;
+
+    if (!sheet && noOrder) {
+      var allSheets = ss.getSheets();
+      for (var s = 0; s < allSheets.length; s++) {
+        var curSheet = allSheets[s];
+        if (curSheet.getLastRow() >= 2) {
+          var curHeaders = curSheet.getRange(1, 1, 1, curSheet.getLastColumn()).getValues()[0];
+          var curNoCol = findColumnIndex(curHeaders, ["no_order", "id", "row_id", "id_pesanan"]);
+          if (curNoCol === -1) curNoCol = 1;
+          var curVals = curSheet.getRange(2, curNoCol, curSheet.getLastRow() - 1, 1).getValues();
+          for (var cv = 0; cv < curVals.length; cv++) {
+            if (String(curVals[cv][0]).trim() === String(noOrder).trim()) {
+              sheet = curSheet;
               break;
             }
           }
         }
-      }
-    } else {
-      // Maps Orders
-      var sheetMaps = ss.getSheetByName('maps_orders') || ss.insertSheet('maps_orders');
-      var mapsHeaders = sheetMaps.getLastColumn() > 0 ? sheetMaps.getRange(1, 1, 1, sheetMaps.getLastColumn()).getValues()[0] : [];
-      function findMapsCol(searchTerms, fallback) {
-        for (var st = 0; st < searchTerms.length; st++) {
-          var term = searchTerms[st].toLowerCase();
-          for (var mh = 0; mh < mapsHeaders.length; mh++) {
-            if (String(mapsHeaders[mh] || '').toLowerCase().indexOf(term) !== -1) return mh + 1;
-          }
-        }
-        return fallback;
-      }
-      var colStatusMaps = findMapsCol(['status'], 10);
-      var colAccountsMaps = findMapsCol(['input progres', 'akun', 'account', 'progres'], 7);
-      var colNotesMaps = findMapsCol(['clue', 'catatan', 'notes'], 8);
-      var colProofMaps = findMapsCol(['link bukti', 'bukti', 'proof'], 9);
-      var colTargetMaps = findMapsCol(['target akun', 'target count', 'target', 'qty'], 12);
-      var colUpdatedMaps = findMapsCol(['updated_at', 'tanggal', 'date'], 11);
-
-      if (action === 'sync_all' && Array.isArray(payload)) {
-        var mExisting = sheetMaps.getLastRow() > 1 ? sheetMaps.getRange(2, 1, sheetMaps.getLastRow() - 1, 1).getValues() : [];
-        var mExistingIds = {};
-        for (var mi = 0; mi < mExisting.length; mi++) mExistingIds[String(mExisting[mi][0])] = mi + 2;
-
-        for (var mk = 0; mk < payload.length; mk++) {
-          var mItem = payload[mk];
-          var mRowId = String(mItem.id || mItem.row_id || '');
-          var mAccounts = mItem.reviewer_accounts_json || (Array.isArray(mItem.reviewer_accounts) ? JSON.stringify(mItem.reviewer_accounts) : String(mItem.reviewer_accounts || '[]'));
-          var mRowData = [
-            mRowId, mItem.created_at || new Date().toISOString(), mItem.client_name || '', mItem.store_name || 'MP',
-            mItem.review_type || 'G_MAPS', mItem.maps_link || '', mAccounts, mItem.notes || '', mItem.proof_link || '',
-            mItem.status || 'PROGRESS', new Date().toISOString(), Number(mItem.target_count || 1)
-          ];
-          if (mExistingIds[mRowId]) {
-            sheetMaps.getRange(mExistingIds[mRowId], 1, 1, mRowData.length).setValues([mRowData]);
-          } else {
-            sheetMaps.appendRow(mRowData);
-          }
-        }
-      } else {
-        var mId = String(payload.id || payload.row_id || '');
-        if (mId && sheetMaps.getLastRow() > 1) {
-          var allM = sheetMaps.getRange(2, 1, sheetMaps.getLastRow() - 1, 1).getValues();
-          for (var ri = 0; ri < allM.length; ri++) {
-            if (String(allM[ri][0]) === mId) {
-              var targetRow = ri + 2;
-              if (payload.status && colStatusMaps) sheetMaps.getRange(targetRow, colStatusMaps).setValue(payload.status);
-              if (payload.reviewer_accounts && colAccountsMaps) {
-                var accStr = Array.isArray(payload.reviewer_accounts) ? JSON.stringify(payload.reviewer_accounts) : String(payload.reviewer_accounts);
-                sheetMaps.getRange(targetRow, colAccountsMaps).setValue(accStr);
-              }
-              if (payload.notes && colNotesMaps) sheetMaps.getRange(targetRow, colNotesMaps).setValue(payload.notes);
-              if (payload.proof_link && colProofMaps) sheetMaps.getRange(targetRow, colProofMaps).setValue(payload.proof_link);
-              if (payload.target_count && colTargetMaps) sheetMaps.getRange(targetRow, colTargetMaps).setValue(Number(payload.target_count));
-              if (colUpdatedMaps) sheetMaps.getRange(targetRow, colUpdatedMaps).setValue(new Date().toISOString());
-              break;
-            }
-          }
-        }
+        if (sheet) break;
       }
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ success: true, message: "Berhasil disinkronkan ke Sheet" }))
-      .setMimeType(ContentService.MimeType.JSON);
+    if (!sheet) {
+      sheet = (type === 'shopee_orders' || type === 'shopee_order') 
+        ? (ss.getSheetByName('shopee_orders') || ss.insertSheet('shopee_orders'))
+        : (ss.getSheetByName('maps_orders') || ss.insertSheet('maps_orders'));
+    }
+
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    var headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+    var statusColIndex = findColumnIndex(headers, ["status", "status_kerja", "status_pembayaran"]);
+    var noOrderColIndex = findColumnIndex(headers, ["no_order", "id", "row_id", "id_pesanan"]);
+    if (noOrderColIndex === -1) noOrderColIndex = 1;
+
+    // Handle Bulk sync
+    if (action === 'sync_all' && Array.isArray(payload)) {
+      for (var k = 0; k < payload.length; k++) {
+        var item = payload[k];
+        var rId = String(item.id || item.row_id || '');
+        if (rId) upsertSingleRow(sheet, headers, rId, item);
+      }
+      return jsonResponse({ ok: true, success: true, message: "Bulk sync berhasil" });
+    }
+
+    // Handle Single Update by no_order
+    if (noOrder && lastRow >= 2) {
+      var noOrderValues = sheet.getRange(2, noOrderColIndex, lastRow - 1, 1).getValues();
+      var rowIndex = -1;
+      for (var i = 0; i < noOrderValues.length; i++) {
+        if (String(noOrderValues[i][0]).trim() === String(noOrder).trim()) {
+          rowIndex = i + 2;
+          break;
+        }
+      }
+
+      if (rowIndex !== -1) {
+        if (statusBaru && statusColIndex > 0) {
+          sheet.getRange(rowIndex, statusColIndex).setValue(statusBaru);
+        }
+        var pNotes = contents.notes !== undefined ? contents.notes : (payload && payload.notes);
+        if (pNotes !== undefined) {
+          var colNotes = findColumnIndex(headers, ["clue", "catatan", "notes"]);
+          if (colNotes > 0) sheet.getRange(rowIndex, colNotes).setValue(pNotes);
+        }
+        var pProof = contents.proof_link !== undefined ? contents.proof_link : (payload && payload.proof_link);
+        if (pProof !== undefined) {
+          var colProof = findColumnIndex(headers, ["link_bukti", "bukti", "proof"]);
+          if (colProof > 0) sheet.getRange(rowIndex, colProof).setValue(pProof);
+        }
+        var pAcc = contents.reviewer_accounts !== undefined ? contents.reviewer_accounts : (payload && payload.reviewer_accounts);
+        if (pAcc !== undefined) {
+          var colAcc = findColumnIndex(headers, ["input_progres_akun", "akun", "account", "reviewer_accounts", "progres"]);
+          if (colAcc > 0) {
+            var accStr = Array.isArray(pAcc) ? JSON.stringify(pAcc) : String(pAcc);
+            sheet.getRange(rowIndex, colAcc).setValue(accStr);
+          }
+        }
+        var pWorker = contents.worker_id !== undefined ? contents.worker_id : (payload && payload.worker_id);
+        if (pWorker !== undefined) {
+          var colWorker = findColumnIndex(headers, ["worker", "petugas"]);
+          if (colWorker > 0) sheet.getRange(rowIndex, colWorker).setValue(pWorker);
+        }
+        var pWo = contents.work_order !== undefined ? contents.work_order : (payload && payload.work_order);
+        if (pWo !== undefined) {
+          var colWo = findColumnIndex(headers, ["work_order", "wo"]);
+          if (colWo > 0) sheet.getRange(rowIndex, colWo).setValue(pWo);
+        }
+        var colUpd = findColumnIndex(headers, ["updated_at", "tanggal_update", "date"]);
+        if (colUpd > 0) sheet.getRange(rowIndex, colUpd).setValue(new Date().toISOString());
+
+        return jsonResponse({ ok: true, success: true, no_order: noOrder, status: statusBaru, row: rowIndex });
+      }
+    }
+
+    // If row not found and action isn't delete, append
+    if (noOrder && action !== 'delete') {
+      upsertSingleRow(sheet, headers, noOrder, payload || contents);
+      return jsonResponse({ ok: true, success: true, message: "Row baru ditambahkan", no_order: noOrder, status: statusBaru });
+    }
+
+    return jsonResponse({ ok: false, error: "no_order tidak ditemukan: " + noOrder });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return jsonResponse({ ok: false, error: err.toString() });
+  }
+}
+
+function findColumnIndex(headers, targetKeys) {
+  if (!headers || !headers.length) return -1;
+  if (!Array.isArray(targetKeys)) targetKeys = [targetKeys];
+  for (var k = 0; k < targetKeys.length; k++) {
+    var search = String(targetKeys[k]).trim().toLowerCase().replace(/[\\s\\/]+/g, "_");
+    for (var i = 0; i < headers.length; i++) {
+      var key = String(headers[i] || '').trim().toLowerCase().replace(/[\\s\\/]+/g, "_");
+      if (key === search || key.indexOf(search) !== -1 || search.indexOf(key) !== -1) {
+        return i + 1;
+      }
+    }
+  }
+  return -1;
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function upsertSingleRow(sheet, headers, rowId, item) {
+  var sName = sheet.getName();
+  if (sName === 'shopee_orders' || sName.toLowerCase().indexOf('shp') !== -1) {
+    var shpRow = [
+      rowId, item.created_at || new Date().toISOString(), item.store_name || '', item.buyer_name || '',
+      item.service_type || 'SPAM_WA', Number(item.quantity || 1), item.target_link || '', item.status || 'PROGRESS',
+      item.worker_id || '', item.work_order || '', item.notes || '', item.created_by || 'Admin'
+    ];
+    sheet.appendRow(shpRow);
+  } else {
+    var acc = item.reviewer_accounts_json || (Array.isArray(item.reviewer_accounts) ? JSON.stringify(item.reviewer_accounts) : String(item.reviewer_accounts || '[]'));
+    var mRow = [
+      rowId, item.created_at || new Date().toISOString(), item.client_name || '', item.store_name || 'MP',
+      item.review_type || 'G_MAPS', item.maps_link || '', acc, item.notes || '', item.proof_link || '',
+      item.status || 'PROGRESS', new Date().toISOString(), Number(item.target_count || 1)
+    ];
+    sheet.appendRow(mRow);
   }
 }
 
