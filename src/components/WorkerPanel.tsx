@@ -8,7 +8,6 @@ import { Order, Language } from '../types';
 import { dbGetOrders, dbUpdateOrder } from '../lib/supabase';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { toast } from '../utils/toast';
-import { getOfflineQueueCount, processOfflineQueue } from '../utils/sheetsSyncHelper';
 import { 
   Database, 
   Lock, 
@@ -50,37 +49,6 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-
-  // Offline queue state
-  const [pendingQueueCount, setPendingQueueCount] = useState<number>(() => getOfflineQueueCount());
-  const [isSyncingQueue, setIsSyncingQueue] = useState(false);
-
-  useEffect(() => {
-    const handleQueueChange = () => {
-      setPendingQueueCount(getOfflineQueueCount());
-    };
-    window.addEventListener('gm_offline_queue_changed', handleQueueChange);
-    return () => window.removeEventListener('gm_offline_queue_changed', handleQueueChange);
-  }, []);
-
-  const handleManualFlushQueue = async () => {
-    setIsSyncingQueue(true);
-    try {
-      const res = await processOfflineQueue();
-      if (res.processed > 0) {
-        toast.success(`Berhasil mengunggah ${res.processed} data dari antrean ke Spreadsheet!`);
-      } else if (res.remaining === 0) {
-        toast.info('Semua data sudah tersinkronisasi ke Spreadsheet.');
-      } else {
-        toast.warn('Sedang mencoba menghubungkan ke Spreadsheet...');
-      }
-      setPendingQueueCount(getOfflineQueueCount());
-    } catch (e) {
-      toast.error('Gagal sinkronisasi antrean.');
-    } finally {
-      setIsSyncingQueue(false);
-    }
-  };
 
   // Done modal/form states
   const [selectedDoneOrder, setSelectedDoneOrder] = useState<Order | null>(null);
@@ -361,7 +329,7 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
         </div>
       </div>
 
-      {/* Offline-First & Maintenance Resilience Banner */}
+      {/* Cloud Connected Storage Banner */}
       <div className="mb-6 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-emerald-500/10 border border-blue-500/20 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-blue-500/20">
@@ -370,34 +338,17 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                Offline-First Storage Aktif
+                Cloud Database Supabase Aktif
               </span>
               <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
-                Penyimpanan Aman
+                Tersinkronisasi Realtime
               </span>
             </div>
             <p className="text-xs text-slate-600 mt-0.5">
-              Semua input, ambil tugas, dan upload bukti worker <strong>langsung tersimpan otomatis di database lokal</strong>. Jika spreadsheet/koneksi sedang maintenance, data akan otomatis diunggah begitu sistem siap!
+              Semua status pengerjaan, ambil tugas, dan bukti selesai tersinkronisasi langsung ke database.
             </p>
           </div>
         </div>
-
-        {pendingQueueCount > 0 && (
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-xl border border-amber-200 flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" />
-              <span>{pendingQueueCount} antrean lokal</span>
-            </span>
-            <button
-              onClick={handleManualFlushQueue}
-              disabled={isSyncingQueue}
-              className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
-            >
-              <Zap className={`h-3.5 w-3.5 ${isSyncingQueue ? 'animate-spin' : ''}`} />
-              <span>Sync Sekarang</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {fetchError && (

@@ -1,13 +1,14 @@
 /**
- * GM Agency - Automatic Global Synchronization Manager
+ * GM Agency - Automatic Supabase Background Sync Manager
  * 
- * Ensures that EVERY device that opens the app (PC, Android, iPhone, tablet)
- * automatically pulls the latest data from the Google Spreadsheet (maps_orders & shopee_orders)
- * without needing any manual button clicks.
+ * Automatically pulls and synchronizes real-time data ONLY from Supabase tables:
+ * - maps_orders
+ * - shopee_orders
+ * 
+ * Fully embedded in the web background without requiring any manual sync buttons.
  */
 
-import { DEFAULT_SHEET_URL, syncAllTablesFromSpreadsheetUrl } from './spreadsheetIntegration';
-import { processOfflineQueue, getOfflineQueueCount } from './sheetsSyncHelper';
+import { dbGetMapsReviews, dbGetShopeeOrders } from '../lib/supabase';
 
 let isAutoSyncing = false;
 let lastSyncTimestamp = 0;
@@ -29,8 +30,8 @@ export async function performGlobalAutoSync(force: boolean = false): Promise<boo
     return false;
   }
 
-  // Debounce: don't auto-sync if we just synced less than 10 seconds ago unless forced
-  if (!force && now - lastSyncTimestamp < 10000) {
+  // Debounce: minimum 8 seconds between background fetches
+  if (!force && now - lastSyncTimestamp < 8000) {
     return false;
   }
 
@@ -38,35 +39,30 @@ export async function performGlobalAutoSync(force: boolean = false): Promise<boo
   isAutoSyncing = true;
 
   try {
-    const savedUrl = localStorage.getItem('gm_sheets_pull_url') || DEFAULT_SHEET_URL;
-    
-    // 1. Process any pending offline queue items first
-    if (getOfflineQueueCount() > 0) {
-      await processOfflineQueue().catch(e => console.warn('Offline queue process notice:', e));
-    }
+    // Exclusively fetch maps_orders and shopee_orders from Supabase
+    const [mapsData, shopeeData] = await Promise.all([
+      dbGetMapsReviews(20000, true).catch(() => []),
+      dbGetShopeeOrders(20000, true).catch(() => [])
+    ]);
 
-    // 2. Perform silent background sync from Google Spreadsheet
-    const result = await syncAllTablesFromSpreadsheetUrl(savedUrl);
-    if (result && result.success) {
-      lastSyncTimestamp = Date.now();
-      try {
-        localStorage.setItem(STORAGE_LAST_AUTO_SYNC, String(lastSyncTimestamp));
-      } catch {}
+    lastSyncTimestamp = Date.now();
+    try {
+      localStorage.setItem(STORAGE_LAST_AUTO_SYNC, String(lastSyncTimestamp));
+    } catch {}
 
-      // Dispatch global events so active panels immediately refresh without page reload
-      window.dispatchEvent(new CustomEvent('gm_spreadsheet_data_synced', {
-        detail: {
-          totalSynced: result.totalSynced,
-          totalMaps: result.totalMaps,
-          totalShopee: result.totalShopee,
-          timestamp: lastSyncTimestamp
-        }
-      }));
+    // Dispatch real-time events to all active dashboard views & panels
+    const eventDetail = {
+      totalMaps: mapsData.length,
+      totalShopee: shopeeData.length,
+      timestamp: lastSyncTimestamp
+    };
 
-      return true;
-    }
+    window.dispatchEvent(new CustomEvent('gm_supabase_data_synced', { detail: eventDetail }));
+    window.dispatchEvent(new CustomEvent('gm_spreadsheet_data_synced', { detail: eventDetail }));
+
+    return true;
   } catch (err) {
-    console.warn('Auto-sync notice (offline or checking fallback):', err);
+    console.warn('Background Supabase sync notice:', err);
   } finally {
     isAutoSyncing = false;
   }
@@ -75,34 +71,34 @@ export async function performGlobalAutoSync(force: boolean = false): Promise<boo
 }
 
 /**
- * Initializes auto-sync on app boot for ANY device
+ * Initializes continuous background auto-sync for maps_orders & shopee_orders
  */
 export function initGlobalAutoSync(): void {
   if (typeof window === 'undefined') return;
 
-  // 1. Initial sync immediately upon opening / page load
+  // 1. Initial background fetch upon opening / mounting
   setTimeout(() => {
     performGlobalAutoSync(true);
   }, 1000);
 
-  // 2. Sync when user switches back to the tab / device wakes up
+  // 2. Fetch when user switches back to tab or device wakes up
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       performGlobalAutoSync(false);
     }
   });
 
-  // 3. Sync when device regains network connectivity
+  // 3. Fetch when device reconnects to internet
   window.addEventListener('online', () => {
     performGlobalAutoSync(true);
   });
 
-  // 4. Background polling every 30 seconds for live continuous sync
+  // 4. Background continuous polling every 15 seconds
   if (!autoSyncIntervalId) {
     autoSyncIntervalId = setInterval(() => {
       if (!document.hidden && navigator.onLine) {
         performGlobalAutoSync(false);
       }
-    }, 30000);
+    }, 15000);
   }
 }

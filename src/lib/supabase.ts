@@ -8,7 +8,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Product, Order, DashboardStats, ShopeeOrder, MapsReview } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
-import { triggerSheetsSync } from '../utils/sheetsSyncHelper';
 
 export function isDummyOrder(o: any): boolean {
   if (!o) return true;
@@ -47,19 +46,15 @@ let supabaseFailed = false;
 export function isSupabaseQuotaError(err: any): boolean {
   if (!err) return false;
   if (err.status === 402 || err.statusCode === 402 || err.code === '402') return true;
-  if (err.status === 401 || err.status === 403) return true;
   const str = typeof err === 'string' 
     ? err 
     : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${err.status || ''} ${err.statusText || ''} ${JSON.stringify(err)}`;
   return (
     str.includes('exceed_egress_quota') ||
-    str.includes('restricted') ||
     str.includes('spend caps') ||
     str.includes('upgrade their plan') ||
     str.includes('Payment Required') ||
-    str.includes('402') ||
-    str.includes('quota') ||
-    str.includes('Failed to fetch')
+    str.includes('402')
   );
 }
 
@@ -69,7 +64,7 @@ export function dbIsSupabaseConnected(): boolean {
 
 // In-memory cache for fetchAllSupabaseRows to reduce Egress
 const supabaseQueryCache = new Map<string, { timestamp: number; data: any[] }>();
-const CACHE_TTL_MS = 60000; // 60 seconds cache TTL to drastically reduce egress
+const CACHE_TTL_MS = 5000; // 5 seconds cache TTL for snappy real-time data
 
 export function clearSupabaseCache(table?: string) {
   if (table) {
@@ -93,7 +88,7 @@ export async function fetchAllSupabaseRows<T = any>(
   orderBy: string = 'created_at',
   ascending: boolean = false,
   forceRefresh: boolean = false,
-  limit: number = 10000
+  limit: number = 50000
 ): Promise<T[]> {
   if (!client || supabaseFailed) return [];
 
@@ -108,7 +103,7 @@ export async function fetchAllSupabaseRows<T = any>(
 
   let allRows: T[] = [];
   let page = 0;
-  const pageSize = Math.min(1000, maxRows); // 1000 rows per request (90% fewer API calls than 100)
+  const pageSize = Math.min(1000, maxRows); // 1000 rows per request
   let hasMore = true;
 
   while (hasMore && allRows.length < maxRows) {
@@ -128,8 +123,7 @@ export async function fetchAllSupabaseRows<T = any>(
         }
         supabaseFailed = true;
       } else {
-        console.warn(`Supabase fetch warning on table ${table}:`, error.message || error);
-        supabaseFailed = true;
+        console.warn(`Supabase fetch notice on table ${table}:`, error.message || error);
       }
       return [];
     }
@@ -621,22 +615,45 @@ function deleteLocalStorageMapsReview(id: string) {
 
 // --- DB OPERATION ADAPTERS ---
 
-// 1. PRODUCTS
-export async function dbGetProducts(limit: number = 500, forceRefresh: boolean = false): Promise<Product[]> {
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const data = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true, forceRefresh, limit);
-      
-      if (data && data.length > 0) {
-        localStorage.setItem('gmsolution_seeded_products', 'true');
-        return data;
-      }
-    } catch (err) {
-      console.warn('Supabase products exception, falling back to Local/API:', err);
+// Helper to query Supabase with primary table name and alternative fallback table name
+async function fetchSupabaseTableWithFallback<T = any>(
+  primaryTable: string,
+  fallbackTable: string,
+  orderBy: string = 'created_at',
+  ascending: boolean = false,
+  forceRefresh: boolean = false,
+  limit: number = 50000
+): Promise<T[]> {
+  if (!isSupabaseConfigured || !supabase || supabaseFailed) return [];
+
+  // Try primary table first
+  try {
+    const data = await fetchAllSupabaseRows<T>(supabase, primaryTable, orderBy, ascending, forceRefresh, limit);
+    if (data && data.length > 0) return data;
+  } catch (err: any) {
+    if (isSupabaseQuotaError(err)) {
       supabaseFailed = true;
+      return [];
     }
   }
 
+  // If primary returned empty or error, try fallback table
+  if (fallbackTable && fallbackTable !== primaryTable) {
+    try {
+      const data = await fetchAllSupabaseRows<T>(supabase, fallbackTable, orderBy, ascending, forceRefresh, limit);
+      if (data && data.length > 0) return data;
+    } catch (err: any) {
+      if (isSupabaseQuotaError(err)) {
+        supabaseFailed = true;
+      }
+    }
+  }
+
+  return [];
+}
+
+// 1. PRODUCTS (Managed locally via Express API and LocalStorage)
+export async function dbGetProducts(limit: number = 500, _forceRefresh: boolean = false): Promise<Product[]> {
   return safeFetch<Product[]>(
     `/api/products?limit=${limit}`,
     undefined,
@@ -659,41 +676,6 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
     created_at: product.created_at || new Date().toISOString()
   };
 
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .insert([newProduct])
-        .select()
-        .single();
-      
-      if (!error && data) {
-        clearSupabaseCache('products');
-        return data as Product;
-      }
-      
-      if (error) {
-        console.warn('Supabase create product failed, trying retry without target_type:', error);
-        const { target_type, ...productNoTarget } = newProduct;
-        const retryResult = await supabase
-          .from('products')
-          .insert([productNoTarget])
-          .select()
-          .single();
-          
-        if (!retryResult.error && retryResult.data) {
-          clearSupabaseCache('products');
-          return retryResult.data as Product;
-        }
-        console.warn('Supabase create product retry warning, falling back to Local/API:', retryResult.error || error);
-        supabaseFailed = true;
-      }
-    } catch (err) {
-      console.warn('Supabase create product exception, falling back to Local/API:', err);
-      supabaseFailed = true;
-    }
-  }
-
   try {
     const response = await fetch('/api/products', {
       method: 'POST',
@@ -709,7 +691,7 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
       }
     }
   } catch (err) {
-    console.warn('Failed to save to local Express API, saving to LocalStorage only:', err);
+    console.warn('Failed to save product to local API, saving to LocalStorage only:', err);
   }
 
   updateLocalStorageProduct(newProduct);
@@ -717,48 +699,6 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
 }
 
 export async function dbUpdateProduct(id: string, product: Partial<Product>): Promise<Product> {
-  clearSupabaseCache('products');
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .update(product)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (!error && data) {
-        clearSupabaseCache('products');
-        const result = data as Product;
-        updateLocalStorageProduct(result);
-        return result;
-      }
-      
-      if (error) {
-        console.warn('Supabase update product failed, trying retry without target_type:', error);
-        const { target_type, ...productNoTarget } = product;
-        const retryResult = await supabase
-          .from('products')
-          .update(productNoTarget)
-          .eq('id', id)
-          .select()
-          .single();
-          
-        if (!retryResult.error && retryResult.data) {
-          clearSupabaseCache('products');
-          const result = retryResult.data as Product;
-          updateLocalStorageProduct(result);
-          return result;
-        }
-        console.warn('Supabase update product retry warning, falling back to Local/API:', retryResult.error || error);
-        supabaseFailed = true;
-      }
-    } catch (err) {
-      console.warn('Supabase update product exception, falling back to Local/API:', err);
-      supabaseFailed = true;
-    }
-  }
-
   try {
     const response = await fetch(`/api/products/${id}`, {
       method: 'PUT',
@@ -790,13 +730,12 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
       localStorage.setItem('gmsolution_local_products', JSON.stringify(list));
     } catch (e) {
       console.warn('Failed to save updated products list to localStorage:', e);
-      // Attempt to sanitize other products to free up space
       try {
         const sanitized = sanitizeLocalProductsList(list);
         localStorage.setItem('gmsolution_local_products', JSON.stringify(sanitized));
       } catch (retryErr) {
         console.error('Failed to save even after sanitizing:', retryErr);
-        throw new Error('Storage is completely full. We pruned old heavy images, but still cannot save. Please try clearing browser cache.');
+        throw new Error('Storage is completely full. Please try clearing browser cache.');
       }
     }
     return updated;
@@ -805,23 +744,6 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
 }
 
 export async function dbDeleteProduct(id: string): Promise<boolean> {
-  clearSupabaseCache('products');
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id);
-      
-      if (!error) return true;
-      console.warn('Supabase delete product warning, falling back to Local/API:', error);
-      supabaseFailed = true;
-    } catch (err) {
-      console.warn('Supabase delete product exception, falling back to Local/API:', err);
-      supabaseFailed = true;
-    }
-  }
-
   try {
     const response = await fetch(`/api/products/${id}`, {
       method: 'DELETE',
@@ -845,37 +767,9 @@ export async function dbDeleteProduct(id: string): Promise<boolean> {
 }
 
 
-// 2. ORDERS
-export async function dbGetOrders(limit: number = 10000, forceRefresh: boolean = false): Promise<Order[]> {
+// 2. ORDERS (Managed locally via Express API and LocalStorage)
+export async function dbGetOrders(limit: number = 10000, _forceRefresh: boolean = false): Promise<Order[]> {
   const deletedOrders = getClientDeletedOrders();
-
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      // Delete dummy seed orders from Supabase if they exist
-      await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
-
-      const data = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false, forceRefresh, limit);
-      
-      if (data && data.length > 0) {
-        localStorage.setItem('gmsolution_seeded_orders', 'true');
-        const orders = (data as Order[]).map(o => {
-          if (!o.product_name) {
-            const matchedProduct = INITIAL_PRODUCTS.find(p => p.id === o.product_id);
-            return {
-              ...o,
-              product_name: matchedProduct ? matchedProduct.name : 'Layanan'
-            };
-          }
-          return o;
-        });
-        return orders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
-      }
-    } catch (err) {
-      console.warn('Supabase orders exception, falling back to Local/API:', err);
-      supabaseFailed = true;
-    }
-  }
-
   const res = await safeFetch<Order[]>(
     `/api/orders?limit=${limit}`,
     undefined,
@@ -902,35 +796,11 @@ export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
     created_at: orderData.created_at || new Date().toISOString()
   };
 
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([completeOrder])
-        .select()
-        .single();
-      
-      if (!error && data) {
-        clearSupabaseCache('orders');
-        const result = data as Order;
-        triggerSheetsSync('order', 'insert', result);
-        return result;
-      }
-      if (error) {
-        console.warn('Supabase create order warning, falling back to Local/API:', error);
-        supabaseFailed = true;
-      }
-    } catch (err) {
-      console.warn('Supabase create order exception, falling back to Local/API:', err);
-      supabaseFailed = true;
-    }
-  }
-
   try {
     const response = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData),
+      body: JSON.stringify(completeOrder),
     });
     if (response.ok) {
       const contentType = response.headers.get('content-type');
@@ -938,7 +808,6 @@ export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
         const data = await response.json();
         updateLocalStorageOrder(data);
         const result = data as Order;
-        triggerSheetsSync('order', 'insert', result);
         return result;
       }
     }
@@ -947,38 +816,10 @@ export async function dbCreateOrder(orderData: Partial<Order>): Promise<Order> {
   }
 
   updateLocalStorageOrder(completeOrder);
-  triggerSheetsSync('order', 'insert', completeOrder);
   return completeOrder;
 }
 
 export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Promise<Order> {
-  clearSupabaseCache('orders');
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .update(orderData)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (!error && data) {
-        clearSupabaseCache('orders');
-        const result = data as Order;
-        updateLocalStorageOrder(result);
-        triggerSheetsSync('order', 'update', result);
-        return result;
-      }
-      if (error) {
-        console.warn('Supabase update order warning, falling back to Local/API:', error);
-        supabaseFailed = true;
-      }
-    } catch (err) {
-      console.warn('Supabase update order exception, falling back to Local/API:', err);
-      supabaseFailed = true;
-    }
-  }
-
   try {
     const response = await fetch(`/api/orders/${id}`, {
       method: 'PUT',
@@ -991,7 +832,6 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
         const data = await response.json();
         updateLocalStorageOrder(data);
         const result = data as Order;
-        triggerSheetsSync('order', 'update', result);
         return result;
       }
     }
@@ -1008,43 +848,15 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
     } as Order;
     list[index] = updated;
     updateLocalStorageOrder(updated);
-    triggerSheetsSync('order', 'update', updated);
     return updated;
   }
   throw new Error('Order not found in local storage fallback');
 }
 
 export async function dbDeleteOrder(id: string): Promise<boolean> {
-  clearSupabaseCache('orders');
-  // Add to client-side blacklist immediately
   blacklistClientOrder(id);
-
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      // 1. Mark as deleted using UPDATE first (highly robust, works with existing RLS update policies)
-      await supabase
-        .from('orders')
-        .update({ created_by: '__DELETED__' })
-        .eq('id', id);
-
-      // 2. Try to physically delete
-      const { error } = await supabase
-        .from('orders')
-        .delete()
-        .eq('id', id);
-      
-      if (error) {
-        console.warn('Supabase physical delete order warning (this is fine, row is marked deleted):', error);
-      }
-    } catch (err) {
-      console.warn('Supabase delete order exception:', err);
-    }
-  }
-
-  // Always delete from local storage to keep client state synchronized
   deleteLocalStorageOrder(id);
 
-  // Always notify the server-side API to keep db.json in sync
   try {
     await fetch(`/api/orders/${id}`, {
       method: 'DELETE',
@@ -1053,77 +865,12 @@ export async function dbDeleteOrder(id: string): Promise<boolean> {
     console.warn('Failed to delete order via API:', err);
   }
 
-  triggerSheetsSync('order', 'delete', { id });
   return true;
 }
 
 
 // 3. STATS
 export async function dbGetDashboardStats(): Promise<DashboardStats> {
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      let productsData = await fetchAllSupabaseRows<Product>(supabase, 'products', 'created_at', true);
-      let ordersData = await fetchAllSupabaseRows<Order>(supabase, 'orders', 'created_at', false);
-
-      if (!productsData || productsData.length === 0) {
-        const hasSeeded = localStorage.getItem('gmsolution_seeded_products');
-        if (!hasSeeded) {
-          console.log('Stats: products empty. Seeding...');
-          const { data: seeded } = await supabase.from('products').insert(INITIAL_PRODUCTS).select();
-          if (seeded) {
-            productsData = seeded;
-            localStorage.setItem('gmsolution_seeded_products', 'true');
-          }
-        }
-      } else {
-        localStorage.setItem('gmsolution_seeded_products', 'true');
-      }
-
-      localStorage.setItem('gmsolution_seeded_orders', 'true');
-
-      const products = productsData || [];
-      const rawOrders = (ordersData || []) as Order[];
-      const deletedOrders = getClientDeletedOrders();
-      const orders = rawOrders.filter(o => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
-
-      const totalOrders = orders.length;
-      const totalRevenue = orders
-        .filter(o => o.payment_status === 'PAID')
-        .reduce((sum, o) => sum + (o.total_price || 0), 0);
-      
-      const pendingOrders = orders.filter(o => o.payment_status === 'PENDING').length;
-      const completedOrders = orders.filter(o => o.payment_status === 'PAID').length;
-
-      const revenueMap: Record<string, number> = {};
-      orders
-        .filter(o => o.payment_status === 'PAID')
-        .forEach(o => {
-          revenueMap[o.product_name] = (revenueMap[o.product_name] || 0) + (o.total_price || 0);
-        });
-      
-      const revenueByProduct = Object.entries(revenueMap).map(([name, value]) => ({
-        name,
-        value
-      }));
-
-      const recentOrders = [...orders]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 10);
-
-      return {
-        totalOrders,
-        totalRevenue,
-        pendingOrders,
-        completedOrders,
-        revenueByProduct,
-        recentOrders
-      };
-    } catch (e) {
-      console.warn('Failed to compute Supabase stats, falling back to Local/API:', e);
-      supabaseFailed = true;
-    }
-  }
-
   try {
     const products = await dbGetProducts();
     const orders = await dbGetOrders();
@@ -1175,20 +922,13 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
 }
 
 
-// 4. SHOPEE ORDERS
-export async function dbGetShopeeOrders(limit: number = 10000, forceRefresh: boolean = false): Promise<ShopeeOrder[]> {
+// 4. SHOPEE ORDERS (Targeting Supabase table 'shopee-orders' & fallback 'shopee_orders')
+export async function dbGetShopeeOrders(limit: number = 50000, forceRefresh: boolean = false): Promise<ShopeeOrder[]> {
   const deletedShopee = getClientDeletedShopeeOrders();
   let list: ShopeeOrder[] = [];
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const data = await fetchAllSupabaseRows<ShopeeOrder>(supabase, 'shopee_orders', 'created_at', false, forceRefresh, limit);
-      if (data && Array.isArray(data) && data.length > 0) {
-        list = data;
-      }
-    } catch (err) {
-      console.warn('Supabase shopee orders exception, falling back to Local/API:', err);
-      supabaseFailed = true;
-    }
+    list = await fetchSupabaseTableWithFallback<ShopeeOrder>('shopee-orders', 'shopee_orders', 'created_at', false, forceRefresh, limit);
   }
 
   if (list.length === 0) {
@@ -1201,7 +941,11 @@ export async function dbGetShopeeOrders(limit: number = 10000, forceRefresh: boo
   }
 
   const filtered = list.filter(o => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
-  return filtered.map(deserializeStatusAndNotes);
+  const deserialized = filtered.map(deserializeStatusAndNotes);
+  try {
+    localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(deserialized));
+  } catch {}
+  return deserialized;
 }
 
 export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
@@ -1231,24 +975,22 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
   };
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('shopee_orders')
-        .insert([dbOrder])
-        .select()
-        .single();
-      if (!error && data) {
-        const result = deserializeStatusAndNotes(data as ShopeeOrder);
-        triggerSheetsSync('shopee_order', 'insert', result);
-        return result;
+    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+      try {
+        const { data, error } = await supabase
+          .from(tbl)
+          .insert([dbOrder])
+          .select()
+          .single();
+        if (!error && data) {
+          clearSupabaseCache(tbl);
+          const result = deserializeStatusAndNotes(data as ShopeeOrder);
+          updateLocalStorageShopeeOrder(result);
+          return result;
+        }
+      } catch (err) {
+        if (isSupabaseQuotaError(err)) supabaseFailed = true;
       }
-      if (error) {
-        console.warn('Supabase create shopee_order warning, falling back to Local/API:', error);
-        supabaseFailed = true;
-      }
-    } catch (err) {
-      console.warn('Supabase create shopee_order exception, falling back to Local/API:', err);
-      supabaseFailed = true;
     }
   }
 
@@ -1264,7 +1006,6 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
         const data = await response.json();
         updateLocalStorageShopeeOrder(data);
         const result = deserializeStatusAndNotes(data as ShopeeOrder);
-        triggerSheetsSync('shopee_order', 'insert', result);
         return result;
       }
     }
@@ -1273,24 +1014,17 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
   }
 
   updateLocalStorageShopeeOrder(dbOrder);
-  triggerSheetsSync('shopee_order', 'insert', completeOrder);
   return completeOrder;
 }
 
 export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
+  clearSupabaseCache('shopee-orders');
   clearSupabaseCache('shopee_orders');
   let currentItem: ShopeeOrder | null = null;
   const list = getLocalShopeeOrders();
   const ex = list.find(o => o.id === id);
   if (ex) {
     currentItem = deserializeStatusAndNotes(ex);
-  }
-
-  if (!currentItem && isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data } = await supabase.from('shopee_orders').select('*').eq('id', id).maybeSingle();
-      if (data) currentItem = deserializeStatusAndNotes(data);
-    } catch {}
   }
 
   const finalData = { ...orderData };
@@ -1303,27 +1037,23 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
   }
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('shopee_orders')
-        .update(finalData)
-        .eq('id', id)
-        .select()
-        .single();
-      if (!error && data) {
-        clearSupabaseCache('shopee_orders');
-        const result = deserializeStatusAndNotes(data as ShopeeOrder);
-        updateLocalStorageShopeeOrder(result);
-        triggerSheetsSync('shopee_order', 'update', result);
-        return result;
+    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+      try {
+        const { data, error } = await supabase
+          .from(tbl)
+          .update(finalData)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && data) {
+          clearSupabaseCache(tbl);
+          const result = deserializeStatusAndNotes(data as ShopeeOrder);
+          updateLocalStorageShopeeOrder(result);
+          return result;
+        }
+      } catch (err) {
+        if (isSupabaseQuotaError(err)) supabaseFailed = true;
       }
-      if (error) {
-        console.warn('Supabase update shopee_order warning, falling back to Local/API:', error);
-        supabaseFailed = true;
-      }
-    } catch (err) {
-      console.warn('Supabase update shopee_order exception, falling back to Local/API:', err);
-      supabaseFailed = true;
     }
   }
 
@@ -1339,7 +1069,6 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
         const data = await response.json();
         updateLocalStorageShopeeOrder(data);
         const result = deserializeStatusAndNotes(data as ShopeeOrder);
-        triggerSheetsSync('shopee_order', 'update', result);
         return result;
       }
     }
@@ -1354,42 +1083,34 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
     } as ShopeeOrder;
     updateLocalStorageShopeeOrder(updated);
     const result = deserializeStatusAndNotes(updated);
-    triggerSheetsSync('shopee_order', 'update', result);
     return result;
   }
   throw new Error('Shopee order not found in local storage fallback');
 }
 
 export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
+  clearSupabaseCache('shopee-orders');
   clearSupabaseCache('shopee_orders');
-  // Add to client-side blacklist immediately
   blacklistClientShopeeOrder(id);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      // 1. Mark as deleted using UPDATE first (highly robust)
-      await supabase
-        .from('shopee_orders')
-        .update({ created_by: '__DELETED__' })
-        .eq('id', id);
+    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+      try {
+        await supabase
+          .from(tbl)
+          .update({ created_by: '__DELETED__' })
+          .eq('id', id);
 
-      // 2. Try to physically delete
-      const { error } = await supabase
-        .from('shopee_orders')
-        .delete()
-        .eq('id', id);
-      if (error) {
-        console.warn('Supabase physical delete shopee_order warning (row is marked deleted):', error);
-      }
-    } catch (err) {
-      console.warn('Supabase delete shopee_order exception:', err);
+        await supabase
+          .from(tbl)
+          .delete()
+          .eq('id', id);
+      } catch {}
     }
   }
 
-  // Always delete from local storage to keep client state synchronized
   deleteLocalStorageShopeeOrder(id);
 
-  // Always notify the server-side API to keep db.json in sync
   try {
     await fetch(`/api/shopee_orders/${id}`, {
       method: 'DELETE'
@@ -1398,24 +1119,19 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
     console.warn('Failed to delete Shopee order via API:', err);
   }
 
-  triggerSheetsSync('shopee_order', 'delete', { id });
   return true;
 }
 
 
-// 5. MAPS REVIEWS
-export async function dbGetMapsReviews(limit: number = 10000, forceRefresh: boolean = false): Promise<MapsReview[]> {
+// 5. MAPS REVIEWS / MAPS ORDERS (Targeting Supabase table 'maps_order' & fallback 'maps_orders', 'maps_reviews')
+export async function dbGetMapsReviews(limit: number = 50000, forceRefresh: boolean = false): Promise<MapsReview[]> {
   const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const data = await fetchAllSupabaseRows<MapsReview>(supabase, 'maps_reviews', 'created_at', false, forceRefresh, limit);
-      if (data && Array.isArray(data) && data.length > 0) {
-        list = data.map(normalizeMapsReview);
-      }
-    } catch (err) {
-      console.warn('Supabase maps reviews exception, falling back to Local/API:', err);
-      supabaseFailed = true;
+    list = await fetchSupabaseTableWithFallback<MapsReview>('maps_order', 'maps_orders', 'created_at', false, forceRefresh, limit);
+    if (list.length === 0) {
+      list = await fetchSupabaseTableWithFallback<MapsReview>('maps_reviews', 'maps_order', 'created_at', false, forceRefresh, limit);
     }
   }
 
@@ -1434,7 +1150,6 @@ export async function dbGetMapsReviews(limit: number = 10000, forceRefresh: bool
   const filtered = list.filter(o => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
   const finalNormalized = filtered.map(normalizeMapsReview);
 
-  // Sync to local storage as fallback cache
   try {
     localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(finalNormalized));
   } catch {}
@@ -1472,25 +1187,22 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
   };
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('maps_reviews')
-        .insert([dbReview])
-        .select()
-        .single();
-      if (!error && data) {
-        const result = normalizeMapsReview(data);
-        updateLocalStorageMapsReview(result);
-        triggerSheetsSync('maps_review', 'insert', result);
-        return result;
+    for (const tbl of ['maps_order', 'maps_orders', 'maps_reviews']) {
+      try {
+        const { data, error } = await supabase
+          .from(tbl)
+          .insert([dbReview])
+          .select()
+          .single();
+        if (!error && data) {
+          clearSupabaseCache(tbl);
+          const result = normalizeMapsReview(data);
+          updateLocalStorageMapsReview(result);
+          return result;
+        }
+      } catch (err) {
+        if (isSupabaseQuotaError(err)) supabaseFailed = true;
       }
-      if (error) {
-        console.warn('Supabase create maps_review warning, falling back to Local/API:', error);
-        supabaseFailed = true;
-      }
-    } catch (err) {
-      console.warn('Supabase create maps_review exception, falling back to Local/API:', err);
-      supabaseFailed = true;
     }
   }
 
@@ -1506,7 +1218,6 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
         const data = await response.json();
         const result = normalizeMapsReview(data);
         updateLocalStorageMapsReview(result);
-        triggerSheetsSync('maps_review', 'insert', result);
         return result;
       }
     }
@@ -1516,24 +1227,18 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
 
   const localResult = normalizeMapsReview(dbReview);
   updateLocalStorageMapsReview(localResult);
-  triggerSheetsSync('maps_review', 'insert', localResult);
   return localResult;
 }
 
 export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsReview>): Promise<MapsReview> {
+  clearSupabaseCache('maps_order');
+  clearSupabaseCache('maps_orders');
   clearSupabaseCache('maps_reviews');
   let currentItem: MapsReview | null = null;
   const list = getLocalMapsReviews().map(normalizeMapsReview);
   const ex = list.find(r => r.id === id);
   if (ex) {
     currentItem = ex;
-  }
-
-  if (!currentItem && isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data } = await supabase.from('maps_reviews').select('*').eq('id', id).maybeSingle();
-      if (data) currentItem = normalizeMapsReview(data);
-    } catch {}
   }
 
   const finalData: any = { ...reviewData };
@@ -1550,30 +1255,26 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
   }
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('maps_reviews')
-        .update(finalData)
-        .eq('id', id)
-        .select()
-        .single();
-      if (!error && data) {
-        clearSupabaseCache('maps_reviews');
-        const result = normalizeMapsReview(data);
-        if (Array.isArray(finalData.reviewer_accounts) && finalData.reviewer_accounts.length > result.reviewer_accounts.length) {
-          result.reviewer_accounts = finalData.reviewer_accounts;
+    for (const tbl of ['maps_order', 'maps_orders', 'maps_reviews']) {
+      try {
+        const { data, error } = await supabase
+          .from(tbl)
+          .update(finalData)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && data) {
+          clearSupabaseCache(tbl);
+          const result = normalizeMapsReview(data);
+          if (Array.isArray(finalData.reviewer_accounts) && finalData.reviewer_accounts.length > result.reviewer_accounts.length) {
+            result.reviewer_accounts = finalData.reviewer_accounts;
+          }
+          updateLocalStorageMapsReview(result);
+          return result;
         }
-        updateLocalStorageMapsReview(result);
-        triggerSheetsSync('maps_review', 'update', result);
-        return result;
+      } catch (err) {
+        if (isSupabaseQuotaError(err)) supabaseFailed = true;
       }
-      if (error) {
-        console.warn('Supabase update maps_review warning, falling back to Local/API:', error);
-        supabaseFailed = true;
-      }
-    } catch (err) {
-      console.warn('Supabase update maps_review exception, falling back to Local/API:', err);
-      supabaseFailed = true;
     }
   }
 
@@ -1592,7 +1293,6 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
           result.reviewer_accounts = finalData.reviewer_accounts;
         }
         updateLocalStorageMapsReview(result);
-        triggerSheetsSync('maps_review', 'update', result);
         return result;
       }
     }
@@ -1606,7 +1306,6 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
       ...finalData
     });
     updateLocalStorageMapsReview(updated);
-    triggerSheetsSync('maps_review', 'update', updated);
     return updated;
   }
 
@@ -1616,40 +1315,33 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
     ...finalData
   });
   updateLocalStorageMapsReview(fallback);
-  triggerSheetsSync('maps_review', 'update', fallback);
   return fallback;
 }
 
 export async function dbDeleteMapsReview(id: string): Promise<boolean> {
+  clearSupabaseCache('maps_order');
+  clearSupabaseCache('maps_orders');
   clearSupabaseCache('maps_reviews');
-  // Add to client-side blacklist immediately
   blacklistClientMapsReview(id);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    try {
-      // 1. Mark as deleted using UPDATE first (highly robust)
-      await supabase
-        .from('maps_reviews')
-        .update({ created_by: '__DELETED__' })
-        .eq('id', id);
+    for (const tbl of ['maps_order', 'maps_orders', 'maps_reviews']) {
+      try {
+        await supabase
+          .from(tbl)
+          .update({ created_by: '__DELETED__' })
+          .eq('id', id);
 
-      // 2. Try to physically delete
-      const { error } = await supabase
-        .from('maps_reviews')
-        .delete()
-        .eq('id', id);
-      if (error) {
-        console.warn('Supabase physical delete maps_review warning (row is marked deleted):', error);
-      }
-    } catch (err) {
-      console.warn('Supabase delete maps_review exception:', err);
+        await supabase
+          .from(tbl)
+          .delete()
+          .eq('id', id);
+      } catch {}
     }
   }
 
-  // Always delete from local storage to keep client state synchronized
   deleteLocalStorageMapsReview(id);
 
-  // Always notify the server-side API to keep db.json in sync
   try {
     await fetch(`/api/maps_reviews/${id}`, {
       method: 'DELETE'
@@ -1658,7 +1350,6 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
     console.warn('Failed to delete Maps review via API:', err);
   }
 
-  triggerSheetsSync('maps_review', 'delete', { id });
   return true;
 }
 

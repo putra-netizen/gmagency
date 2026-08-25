@@ -57,12 +57,7 @@ import {
   generateMapsReviewsCsv, 
   downloadCsvFile,
   parseAccountsList
-} from '../utils/spreadsheetIntegration';
-import { 
-  triggerBatchMapsReviewsSync, 
-  getOfflineQueueCount, 
-  processOfflineQueue 
-} from '../utils/sheetsSyncHelper';
+} from '../utils/csvExport';
 
 interface AdminShpPanelProps {
   currentLang: 'id' | 'en';
@@ -403,41 +398,9 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [shopeeOrders, setShopeeOrders] = useState<ShopeeOrder[]>([]);
   const [mapsReviews, setMapsReviews] = useState<MapsReview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSyncingAllSheets, setIsSyncingAllSheets] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'maps_review' } | null>(null);
   const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
-
-  // Offline queue state
-  const [pendingQueueCount, setPendingQueueCount] = useState<number>(() => getOfflineQueueCount());
-  const [isSyncingQueue, setIsSyncingQueue] = useState(false);
-
-  useEffect(() => {
-    const handleQueueChange = () => {
-      setPendingQueueCount(getOfflineQueueCount());
-    };
-    window.addEventListener('gm_offline_queue_changed', handleQueueChange);
-    return () => window.removeEventListener('gm_offline_queue_changed', handleQueueChange);
-  }, []);
-
-  const handleManualFlushQueue = async () => {
-    setIsSyncingQueue(true);
-    try {
-      const res = await processOfflineQueue();
-      if (res.processed > 0) {
-        toast.success(`Berhasil mengunggah ${res.processed} data antrean ke Spreadsheet!`);
-      } else if (res.remaining === 0) {
-        toast.info('Semua data sudah tersinkronisasi ke Spreadsheet.');
-      } else {
-        toast.warn('Sedang mencoba menghubungkan ke Spreadsheet...');
-      }
-      setPendingQueueCount(getOfflineQueueCount());
-    } catch (e) {
-      toast.error('Gagal sinkronisasi antrean.');
-    } finally {
-      setIsSyncingQueue(false);
-    }
-  };
 
   // Form Collapse States
   // 'REPORT' | 'SPAM' | null
@@ -1179,27 +1142,6 @@ Format Chat : ${data.notes || '-'}`;
     }
   };
 
-  const handleSyncAllMapsReviewsToSheets = async () => {
-    if (mapsReviews.length === 0) {
-      toast.error('Tidak ada data Maps Review untuk disinkronkan.');
-      return;
-    }
-    setIsSyncingAllSheets(true);
-    try {
-      const success = await triggerBatchMapsReviewsSync(mapsReviews);
-      if (success) {
-        toast.success(`Berhasil menyinkronkan ${mapsReviews.length} data ke Spreadsheet!`);
-      } else {
-        toast.error('Gagal menyinkronkan. Pastikan URL Webhook aktif.');
-      }
-    } catch (err) {
-      console.error('Error syncing all to sheets:', err);
-      toast.error('Terjadi kendala saat sinkronisasi.');
-    } finally {
-      setIsSyncingAllSheets(false);
-    }
-  };
-
   // Render Login Portal if not authenticated
   if (!isAuthenticated) {
     return (
@@ -1363,7 +1305,7 @@ Format Chat : ${data.notes || '-'}`;
             </span>
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Google Sheets Sync</span>
+              <span>Supabase Database Active</span>
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight font-sans">
@@ -1374,61 +1316,12 @@ Format Chat : ${data.notes || '-'}`;
           </p>
         </div>
 
-        {/* Offline Queue Indicator & Quick Sync */}
         <div className="flex flex-wrap items-center gap-3">
-          {pendingQueueCount > 0 ? (
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-2xl text-xs font-bold text-amber-800 shadow-xs">
-              <Clock className="h-4 w-4 text-amber-600 animate-pulse" />
-              <span>{pendingQueueCount} Data di Antrean Lokal</span>
-              <button
-                onClick={handleManualFlushQueue}
-                disabled={isSyncingQueue}
-                className="ml-2 flex items-center gap-1.5 bg-amber-600 text-white px-2.5 py-1 rounded-xl text-[11px] font-black uppercase hover:bg-amber-700 transition-all cursor-pointer shadow-xs disabled:opacity-50"
-              >
-                <Zap className={`h-3 w-3 ${isSyncingQueue ? 'animate-spin' : ''}`} />
-                <span>Upload Ke Sheet</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-2xl text-xs font-bold text-emerald-800 shadow-xs">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              <span>Semua Data Tersinkronisasi</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Offline-First Storage Alert Banner */}
-      <div className="mb-6 rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-emerald-500/10 border border-orange-500/20 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-orange-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-orange-500/20">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                Offline-First Storage Terpasang
-              </span>
-              <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-200">
-                100% Anti Hilang
-              </span>
-            </div>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Input order, review maps, dan akun worker <strong>langsung tersimpan otomatis di penyimpanan lokal</strong>. Anda dan worker bisa terus kerja tanpa kendala meski spreadsheet sedang maintenance!
-            </p>
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-2xl text-xs font-bold text-emerald-800 shadow-xs">
+            <ShieldCheck className="h-4 w-4 text-emerald-600" />
+            <span>Supabase Cloud Connected</span>
           </div>
         </div>
-
-        {pendingQueueCount > 0 && (
-          <button
-            onClick={handleManualFlushQueue}
-            disabled={isSyncingQueue}
-            className="flex items-center gap-1.5 rounded-xl bg-orange-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-orange-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
-          >
-            <Zap className={`h-3.5 w-3.5 ${isSyncingQueue ? 'animate-spin' : ''}`} />
-            <span>Sinkronkan {pendingQueueCount} Antrean Sekarang</span>
-          </button>
-        )}
       </div>
 
       {/* Tab Switches */}
@@ -1784,9 +1677,24 @@ Format Chat : ${data.notes || '-'}`;
                       Daftar Antrean Order Shopee Manual
                     </h3>
                   </div>
-                  <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                    {filteredShopeeOrders.length} / {shopeeOrders.length} Pesanan
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const csv = generateShopeeOrdersCsv(filteredShopeeOrders);
+                        downloadCsvFile(csv, `Shopee_Orders_${new Date().toISOString().slice(0, 10)}.csv`);
+                        toast.success('File CSV Shopee Orders berhasil diunduh');
+                      }}
+                      title="Download data Shopee Orders dalam format CSV"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold border border-slate-200 transition-all cursor-pointer shadow-xs active:scale-95"
+                    >
+                      <Download className="h-3.5 w-3.5 text-slate-600" />
+                      <span>Export CSV</span>
+                    </button>
+                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                      {filteredShopeeOrders.length} / {shopeeOrders.length} Pesanan
+                    </span>
+                  </div>
                 </div>
 
                 {/* Search & Sort Bar for Shopee Manual Orders */}
@@ -2270,13 +2178,16 @@ Format Chat : ${data.notes || '-'}`;
                        <div className="flex items-center gap-2">
                          <button
                            type="button"
-                           onClick={handleSyncAllMapsReviewsToSheets}
-                           disabled={isSyncingAllSheets}
-                           title="Kirim ulang / Sinkronkan seluruh data Maps Review saat ini ke Google Spreadsheet"
-                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold border border-emerald-200 transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                           onClick={() => {
+                             const csv = generateMapsReviewsCsv(filteredMapsReviews);
+                             downloadCsvFile(csv, `Maps_Orders_${new Date().toISOString().slice(0, 10)}.csv`);
+                             toast.success('File CSV Maps Orders berhasil diunduh');
+                           }}
+                           title="Download data Maps Orders dalam format CSV"
+                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold border border-slate-200 transition-all cursor-pointer shadow-xs active:scale-95"
                          >
-                           <RefreshCw className={`h-3.5 w-3.5 text-emerald-600 ${isSyncingAllSheets ? 'animate-spin' : ''}`} />
-                           <span>{isSyncingAllSheets ? 'Menyinkronkan...' : 'Sinkronkan Semua ke Sheet'}</span>
+                           <Download className="h-3.5 w-3.5 text-slate-600" />
+                           <span>Export CSV</span>
                          </button>
                          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
                            {filteredMapsReviews.length} / {mapsReviews.length} Data

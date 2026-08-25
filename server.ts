@@ -39,19 +39,15 @@ let serverSupabaseFailed = false;
 function isSupabaseQuotaError(err: any): boolean {
   if (!err) return false;
   if (err.status === 402 || err.statusCode === 402 || err.code === '402') return true;
-  if (err.status === 401 || err.status === 403) return true;
   const str = typeof err === 'string' 
     ? err 
     : `${err.message || ''} ${err.details || ''} ${err.hint || ''} ${err.code || ''} ${err.status || ''} ${err.statusText || ''} ${JSON.stringify(err)}`;
   return (
     str.includes('exceed_egress_quota') ||
-    str.includes('restricted') ||
     str.includes('spend caps') ||
     str.includes('upgrade their plan') ||
     str.includes('Payment Required') ||
-    str.includes('402') ||
-    str.includes('quota') ||
-    str.includes('Failed to fetch')
+    str.includes('402')
   );
 }
 
@@ -173,7 +169,7 @@ function writeDatabase(data: any) {
 
 // Server-side in-memory cache for Supabase queries to reduce egress & API overhead
 const serverSupabaseCache = new Map<string, { timestamp: number; data: any[] }>();
-const SERVER_CACHE_TTL_MS = 60000; // 60 seconds TTL
+const SERVER_CACHE_TTL_MS = 5000; // 5 seconds TTL
 
 function clearServerSupabaseCache(table?: string) {
   if (table) {
@@ -195,8 +191,8 @@ async function fetchAllSupabaseRows<T = any>(
   table: string,
   orderBy: string = 'created_at',
   ascending: boolean = false,
-  limit: number = 10000,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  limit: number = 50000
 ): Promise<T[]> {
   if (!client || serverSupabaseFailed) return [];
 
@@ -254,34 +250,46 @@ async function fetchAllSupabaseRows<T = any>(
 
 // --- API ROUTES ---
 
-// 1. PRODUCTS API
-app.get('/api/products', async (req, res) => {
-  const limit = Number(req.query.limit) || 500;
-  if (supabase && !serverSupabaseFailed) {
+// Helper to query Supabase with fallback table names on server
+async function fetchServerSupabaseWithFallback<T = any>(
+  client: any,
+  primaryTable: string,
+  fallbackTable: string,
+  orderBy: string = 'created_at',
+  ascending: boolean = false,
+  forceRefresh: boolean = false,
+  limit: number = 50000
+): Promise<T[]> {
+  if (!client || serverSupabaseFailed) return [];
+
+  try {
+    const data = await fetchAllSupabaseRows<T>(client, primaryTable, orderBy, ascending, forceRefresh, limit);
+    if (data && data.length > 0) return data;
+  } catch (err: any) {
+    if (isSupabaseQuotaError(err)) {
+      serverSupabaseFailed = true;
+      return [];
+    }
+  }
+
+  if (fallbackTable && fallbackTable !== primaryTable) {
     try {
-      const data = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true, limit);
-      if (data) {
-        if (data.length === 0) {
-          console.log('Server auto-seeding products table in Supabase...');
-          await supabase.from('products').insert(INITIAL_PRODUCTS);
-          clearServerSupabaseCache('products');
-          const seeded = await fetchAllSupabaseRows(supabase, 'products', 'created_at', true, limit);
-          if (seeded) return res.json(seeded);
-        } else {
-          return res.json(data);
-        }
-      }
-    } catch (err) {
+      const data = await fetchAllSupabaseRows<T>(client, fallbackTable, orderBy, ascending, forceRefresh, limit);
+      if (data && data.length > 0) return data;
+    } catch (err: any) {
       if (isSupabaseQuotaError(err)) {
         serverSupabaseFailed = true;
-      } else {
-        console.warn('Supabase products fetch exception, using local JSON DB:', (err as any)?.message || err);
       }
     }
   }
 
+  return [];
+}
+
+// 1. PRODUCTS API (Managed locally via db.json)
+app.get('/api/products', async (req, res) => {
   const db = readDatabase();
-  res.json(db.products);
+  res.json(db.products || INITIAL_PRODUCTS);
 });
 
 app.post('/api/products', async (req, res) => {
@@ -298,43 +306,8 @@ app.post('/api/products', async (req, res) => {
     created_at: new Date().toISOString()
   };
 
-  if (supabase && !serverSupabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .insert([newProduct])
-        .select()
-        .single();
-      
-      if (!error && data) {
-        clearServerSupabaseCache('products');
-        return res.status(201).json(data);
-      }
-      
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      } else {
-        console.warn('Supabase product insert with target_type failed, trying without target_type:', error?.message || error);
-        const { target_type, ...newProductNoTargetType } = newProduct;
-        const retryResult = await supabase
-          .from('products')
-          .insert([newProductNoTargetType])
-          .select()
-          .single();
-          
-        if (!retryResult.error && retryResult.data) {
-          clearServerSupabaseCache('products');
-          return res.status(201).json(retryResult.data);
-        }
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
-    }
-  }
-
   const db = readDatabase();
+  if (!db.products) db.products = [];
   db.products.push(newProduct);
   writeDatabase(db);
   res.status(201).json(newProduct);
@@ -342,57 +315,6 @@ app.post('/api/products', async (req, res) => {
 
 app.put('/api/products/:id', async (req, res) => {
   const { id } = req.params;
-
-  if (supabase && !serverSupabaseFailed) {
-    try {
-      const updateData = {
-        name: req.body.name,
-        name_en: req.body.name_en,
-        description: req.body.description,
-        description_en: req.body.description_en,
-        price: req.body.price !== undefined ? Number(req.body.price) : undefined,
-        image_url: req.body.image_url,
-        whatsapp_number: req.body.whatsapp_number,
-        target_type: req.body.target_type
-      };
-      // Clean undefined fields
-      Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
-
-      const { data, error } = await supabase
-        .from('products')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (!error && data) {
-        clearServerSupabaseCache('products');
-        return res.json(data);
-      }
-      
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      } else {
-        const { target_type, ...updateDataNoTargetType } = updateData;
-        const retryResult = await supabase
-          .from('products')
-          .update(updateDataNoTargetType)
-          .eq('id', id)
-          .select()
-          .single();
-
-        if (!retryResult.error && retryResult.data) {
-          clearServerSupabaseCache('products');
-          return res.json(retryResult.data);
-        }
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
-    }
-  }
-
   const db = readDatabase();
   const index = db.products.findIndex((p: Product) => p.id === id);
 
@@ -417,27 +339,6 @@ app.put('/api/products/:id', async (req, res) => {
 
 app.delete('/api/products/:id', async (req, res) => {
   const { id } = req.params;
-
-  if (supabase && !serverSupabaseFailed) {
-    try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id);
-      if (!error) {
-        clearServerSupabaseCache('products');
-        return res.json({ success: true, message: 'Product deleted' });
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
-    }
-  }
-
   const db = readDatabase();
   const initialLength = db.products.length;
   db.products = db.products.filter((p: Product) => p.id !== id);
@@ -450,30 +351,12 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-// 2. ORDERS API
+// 2. ORDERS API (Managed locally via db.json)
 app.get('/api/orders', async (req, res) => {
-  const limit = Number(req.query.limit) || 10000;
   const db = readDatabase();
   const deletedOrders = db.deleted_orders || [];
 
-  if (supabase && !serverSupabaseFailed) {
-    try {
-      // Purge dummy orders from Supabase if present
-      await supabase.from('orders').delete().in('id', ['ord-1001', 'ord-1002', 'ord-1003', 'ord-1004', 'ord-1005']);
-
-      const data = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false, limit);
-      if (data) {
-        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o));
-        return res.json(filtered);
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
-    }
-  }
-
-  const sortedOrders = [...db.orders]
+  const sortedOrders = [...(db.orders || [])]
     .filter((o: Order) => o.created_by !== '__DELETED__' && !deletedOrders.includes(o.id) && !isDummyOrder(o))
     .sort((a: Order, b: Order) => 
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -483,83 +366,37 @@ app.get('/api/orders', async (req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   const { product_id, buyer_name, phone_number, notes, target_link, target_spam_phone, quantity } = req.body;
+  const db = readDatabase();
 
   let productPrice = 0;
   let productName = 'Produk';
 
-  if (supabase && !serverSupabaseFailed) {
-    try {
-      const { data: prod, error: prodError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', product_id)
-        .single();
-      if (!prodError && prod) {
-        productPrice = prod.price;
-        productName = prod.name;
-      }
-      if (isSupabaseQuotaError(prodError)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
-    }
-  }
-
-  if (productPrice === 0) {
-    const db = readDatabase();
-    const product = db.products.find((p: Product) => p.id === product_id);
-    if (product) {
-      productPrice = product.price;
-      productName = product.name;
-    } else {
-      return res.status(404).json({ error: 'Product not found' });
-    }
+  const product = (db.products || INITIAL_PRODUCTS).find((p: Product) => p.id === product_id);
+  if (product) {
+    productPrice = product.price;
+    productName = product.name;
   }
 
   const qty = Number(quantity) || 1;
   const totalPrice = productPrice * qty;
-  const orderId = 'ord-' + Date.now().toString().slice(-6);
+  const orderId = req.body.id || ('ord-' + Date.now().toString().slice(-6));
 
   const newOrder: Order = {
     id: orderId,
-    product_id,
+    product_id: product_id || '',
     product_name: productName,
-    buyer_name,
-    phone_number,
+    buyer_name: buyer_name || '',
+    phone_number: phone_number || '',
     notes: notes || '',
     target_link: target_link || '',
     target_spam_phone: target_spam_phone || '',
     quantity: qty,
     total_price: totalPrice,
-    payment_status: 'PENDING',
-    created_at: new Date().toISOString()
+    payment_status: req.body.payment_status || 'PENDING',
+    created_at: req.body.created_at || new Date().toISOString()
   };
 
-  if (supabase && !serverSupabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([newOrder])
-        .select()
-        .single();
-      if (!error && data) {
-        clearServerSupabaseCache('orders');
-        return res.status(201).json(data);
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
-    }
-  }
-
-  const db = readDatabase();
+  if (!db.orders) db.orders = [];
   db.orders.push(newOrder);
   writeDatabase(db);
   res.status(201).json(newOrder);
@@ -567,47 +404,8 @@ app.post('/api/orders', async (req, res) => {
 
 app.put('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
-
-  if (supabase && !serverSupabaseFailed) {
-    try {
-      const updateData = {
-        payment_status: req.body.payment_status,
-        buyer_name: req.body.buyer_name,
-        phone_number: req.body.phone_number,
-        notes: req.body.notes,
-        target_link: req.body.target_link,
-        target_spam_phone: req.body.target_spam_phone,
-        quantity: req.body.quantity !== undefined ? Number(req.body.quantity) : undefined,
-        total_price: req.body.total_price !== undefined ? Number(req.body.total_price) : undefined,
-        worker_id: req.body.worker_id,
-        worker_status: req.body.worker_status,
-        worker_proof_url: req.body.worker_proof_url
-      };
-      Object.keys(updateData).forEach(key => (updateData as any)[key] === undefined && delete (updateData as any)[key]);
-
-      const { data, error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (!error && data) {
-        clearServerSupabaseCache('orders');
-        return res.json(data);
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
-    }
-  }
-
   const db = readDatabase();
-  const index = db.orders.findIndex((o: Order) => o.id === id);
+  const index = (db.orders || []).findIndex((o: Order) => o.id === id);
 
   if (index !== -1) {
     db.orders[index] = {
@@ -640,35 +438,14 @@ app.put('/api/orders/:id', async (req, res) => {
 
 app.delete('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
-
-  if (supabase && !serverSupabaseFailed) {
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .delete()
-        .eq('id', id);
-      if (!error) {
-        clearServerSupabaseCache('orders');
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
-    }
-  }
-
   const db = readDatabase();
   
-  // Track in blacklist so it never reappears on GET
   if (!db.deleted_orders) db.deleted_orders = [];
   if (!db.deleted_orders.includes(id)) {
     db.deleted_orders.push(id);
   }
 
-  db.orders = db.orders.filter((o: Order) => o.id !== id);
+  db.orders = (db.orders || []).filter((o: Order) => o.id !== id);
   writeDatabase(db);
 
   res.json({ success: true, message: 'Order deleted and blacklisted' });
@@ -676,19 +453,16 @@ app.delete('/api/orders/:id', async (req, res) => {
 
 // --- SHOPEE ORDERS API ---
 app.get('/api/shopee_orders', async (req, res) => {
-  const limit = Number(req.query.limit) || 10000;
+  const limit = Number(req.query.limit) || 50000;
+  const forceRefresh = req.query.refresh === 'true';
   const db = readDatabase();
   const deletedShopee = db.deleted_shopee_orders || [];
 
   if (supabase && !serverSupabaseFailed) {
-    try {
-      const data = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, limit);
-      if (data && data.length > 0) {
-        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
-        return res.json(filtered);
-      }
-    } catch (err) {
-      serverSupabaseFailed = true;
+    const data = await fetchServerSupabaseWithFallback(supabase, 'shopee-orders', 'shopee_orders', 'created_at', false, forceRefresh, limit);
+    if (data && data.length > 0) {
+      const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
+      return res.json(filtered);
     }
   }
 
@@ -698,29 +472,24 @@ app.get('/api/shopee_orders', async (req, res) => {
 
 app.post('/api/shopee_orders', async (req, res) => {
   const newOrder = {
-    id: 'shp-' + Date.now().toString().slice(-6),
+    id: req.body.id || ('shp-' + Date.now().toString().slice(-6)),
     ...req.body,
-    created_at: new Date().toISOString()
+    created_at: req.body.created_at || new Date().toISOString()
   };
 
   if (supabase && !serverSupabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('shopee_orders')
-        .insert([newOrder])
-        .select()
-        .single();
-      if (!error && data) {
-        clearServerSupabaseCache('shopee_orders');
-        return res.status(201).json(data);
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
+    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+      try {
+        const { data, error } = await supabase
+          .from(tbl)
+          .insert([newOrder])
+          .select()
+          .single();
+        if (!error && data) {
+          clearServerSupabaseCache(tbl);
+          return res.status(201).json(data);
+        }
+      } catch {}
     }
   }
 
@@ -735,29 +504,24 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('shopee_orders')
-        .update(req.body)
-        .eq('id', id)
-        .select()
-        .single();
-      if (!error && data) {
-        clearServerSupabaseCache('shopee_orders');
-        return res.json(data);
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
+    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+      try {
+        const { data, error } = await supabase
+          .from(tbl)
+          .update(req.body)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && data) {
+          clearServerSupabaseCache(tbl);
+          return res.json(data);
+        }
+      } catch {}
     }
   }
 
   const db = readDatabase();
-  const idx = db.shopee_orders.findIndex((o: any) => o.id === id);
+  const idx = (db.shopee_orders || []).findIndex((o: any) => o.id === id);
   if (idx !== -1) {
     db.shopee_orders[idx] = {
       ...db.shopee_orders[idx],
@@ -781,21 +545,14 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
-    try {
-      const { error } = await supabase
-        .from('shopee_orders')
-        .delete()
-        .eq('id', id);
-      if (!error) {
-        clearServerSupabaseCache('shopee_orders');
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
+    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+      try {
+        await supabase
+          .from(tbl)
+          .delete()
+          .eq('id', id);
+        clearServerSupabaseCache(tbl);
+      } catch {}
     }
   }
 
@@ -844,23 +601,20 @@ function parseServerReviewerAccounts(input: any): string[] {
 
 // --- MAPS REVIEWS API ---
 app.get('/api/maps_reviews', async (req, res) => {
-  const limit = Number(req.query.limit) || 10000;
+  const limit = Number(req.query.limit) || 50000;
+  const forceRefresh = req.query.refresh === 'true';
   const db = readDatabase();
   const deletedMaps = db.deleted_maps_reviews || [];
 
   if (supabase && !serverSupabaseFailed) {
-    try {
-      const data = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, limit);
-      if (data && data.length > 0) {
-        const normalized = data.map((item: any) => ({
-          ...item,
-          reviewer_accounts: parseServerReviewerAccounts(item.reviewer_accounts)
-        }));
-        const filtered = normalized.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
-        return res.json(filtered);
-      }
-    } catch (err) {
-      serverSupabaseFailed = true;
+    const data = await fetchServerSupabaseWithFallback(supabase, 'maps_order', 'maps_reviews', 'created_at', false, forceRefresh, limit);
+    if (data && data.length > 0) {
+      const normalized = data.map((item: any) => ({
+        ...item,
+        reviewer_accounts: parseServerReviewerAccounts(item.reviewer_accounts)
+      }));
+      const filtered = normalized.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
+      return res.json(filtered);
     }
   }
 
@@ -877,35 +631,30 @@ app.post('/api/maps_reviews', async (req, res) => {
   const cleanAccounts = parseServerReviewerAccounts(req.body.reviewer_accounts);
 
   const newReview = {
-    id: 'map-' + Date.now().toString().slice(-6),
+    id: req.body.id || ('map-' + Date.now().toString().slice(-6)),
     ...req.body,
     reviewer_accounts: cleanAccounts,
     proof_link: req.body.proof_link || '',
     status: req.body.status || 'PENDING',
-    created_at: new Date().toISOString()
+    created_at: req.body.created_at || new Date().toISOString()
   };
 
   if (supabase && !serverSupabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('maps_reviews')
-        .insert([newReview])
-        .select()
-        .single();
-      if (!error && data) {
-        clearServerSupabaseCache('maps_reviews');
-        return res.status(201).json({
-          ...data,
-          reviewer_accounts: cleanAccounts
-        });
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
+    for (const tbl of ['maps_order', 'maps_reviews']) {
+      try {
+        const { data, error } = await supabase
+          .from(tbl)
+          .insert([newReview])
+          .select()
+          .single();
+        if (!error && data) {
+          clearServerSupabaseCache(tbl);
+          return res.status(201).json({
+            ...data,
+            reviewer_accounts: cleanAccounts
+          });
+        }
+      } catch {}
     }
   }
 
@@ -925,36 +674,31 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
   }
 
   if (supabase && !serverSupabaseFailed) {
-    try {
-      const { data, error } = await supabase
-        .from('maps_reviews')
-        .update(updatePayload)
-        .eq('id', id)
-        .select()
-        .single();
-      if (!error && data) {
-        clearServerSupabaseCache('maps_reviews');
-        let accounts = parseServerReviewerAccounts(data.reviewer_accounts);
-        if (reqAccounts && reqAccounts.length > accounts.length) {
-          accounts = reqAccounts;
+    for (const tbl of ['maps_order', 'maps_reviews']) {
+      try {
+        const { data, error } = await supabase
+          .from(tbl)
+          .update(updatePayload)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!error && data) {
+          clearServerSupabaseCache(tbl);
+          let accounts = parseServerReviewerAccounts(data.reviewer_accounts);
+          if (reqAccounts && reqAccounts.length > accounts.length) {
+            accounts = reqAccounts;
+          }
+          return res.json({
+            ...data,
+            reviewer_accounts: accounts
+          });
         }
-        return res.json({
-          ...data,
-          reviewer_accounts: accounts
-        });
-      }
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
-      }
+      } catch {}
     }
   }
 
   const db = readDatabase();
-  const idx = db.maps_reviews.findIndex((o: any) => o.id === id);
+  const idx = (db.maps_reviews || []).findIndex((o: any) => o.id === id);
   if (idx !== -1) {
     db.maps_reviews[idx] = {
       ...db.maps_reviews[idx],
@@ -1161,7 +905,7 @@ app.get('/api/sheets/export-csv', async (req, res) => {
       let data: any[] = [];
       if (supabase && !serverSupabaseFailed) {
         try {
-          const sData = await fetchAllSupabaseRows(supabase, 'maps_reviews', 'created_at', false, 20000, true);
+          const sData = await fetchAllSupabaseRows(supabase, 'maps_order', 'created_at', false, true, 50000);
           if (sData && sData.length > 0) {
             data = sData;
           }
@@ -1233,7 +977,7 @@ app.get('/api/sheets/export-csv', async (req, res) => {
       let data: any[] = [];
       if (supabase && !serverSupabaseFailed) {
         try {
-          const sData = await fetchAllSupabaseRows(supabase, 'shopee_orders', 'created_at', false, 20000, true);
+          const sData = await fetchAllSupabaseRows(supabase, 'shopee-orders', 'created_at', false, true, 50000);
           if (sData && sData.length > 0) data = sData;
         } catch (e) {
           if (isSupabaseQuotaError(e)) serverSupabaseFailed = true;
@@ -1270,7 +1014,7 @@ app.get('/api/sheets/export-csv', async (req, res) => {
       let data: any[] = [];
       if (supabase && !serverSupabaseFailed) {
         try {
-          const sData = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false, 20000, true);
+          const sData = await fetchAllSupabaseRows(supabase, 'orders', 'created_at', false, true, 50000);
           if (sData && sData.length > 0) data = sData;
         } catch (e) {
           if (isSupabaseQuotaError(e)) serverSupabaseFailed = true;

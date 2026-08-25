@@ -127,16 +127,16 @@ export default function Navbar({
               ADMIN WORKING SPACE
             </span>
 
-            {/* Google Sheets Active indicator */}
+            {/* Supabase Active indicator */}
             <div 
               className="flex items-center gap-1 sm:gap-1.5 rounded-full px-2 py-0.5 sm:px-2.5 sm:py-1 text-[9px] sm:text-[11px] font-bold border transition-all bg-emerald-50 text-emerald-700 border-emerald-200"
-              title="Sistem Google Sheets Aktif"
-              id="sheets-status-pill"
+              title="Sistem Supabase Cloud Aktif"
+              id="supabase-status-pill"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="inline-block">
                 <span className="hidden sm:inline">DATABASE: </span>
-                GOOGLE SHEETS
+                SUPABASE
               </span>
             </div>
 
@@ -211,28 +211,6 @@ export default function Navbar({
                         </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
                           CRUD kelola produk & layanan
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* 3. SPREADSHEET HUB */}
-                    <button
-                      onClick={() => {
-                        setIsAdminMenuOpen(false);
-                        window.dispatchEvent(new CustomEvent('admin-navigate-sheets'));
-                      }}
-                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-teal-50/80 dark:hover:bg-teal-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-teal-200 dark:hover:border-teal-900/60 bg-slate-50/50 dark:bg-slate-800/30"
-                      id="menu-item-export-sheet"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 group-hover:scale-105 transition-transform shadow-xs">
-                        <FileSpreadsheet className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
-                          SPREADSHEET HUB
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                          Dual-Input Sync, Export & Apps Script
                         </div>
                       </div>
                     </button>
