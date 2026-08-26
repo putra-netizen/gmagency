@@ -465,7 +465,7 @@ export const MonthlyDateRangePicker: React.FC<MonthlyDateRangePickerProps> = ({
 
       {/* Popover / Calendar Modal */}
       {isOpen && (
-        <div className="absolute right-0 sm:right-auto sm:left-0 mt-2 w-[340px] md:w-[620px] bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 p-4 md:p-5 text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-[340px] md:max-w-[620px] bg-white rounded-2xl border border-slate-200 shadow-2xl z-[100] p-3.5 sm:p-4 md:p-5 text-slate-800 animate-in fade-in zoom-in-95 duration-150">
           
           {/* Header */}
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">

@@ -594,9 +594,11 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   }, [isAuthenticated, currentAdminUser]);
 
   // Fetch all initial data if authenticated
-  const loadData = async () => {
+  const loadData = async (silent: boolean = false) => {
     if (!isAuthenticated || !currentAdminUser) return;
-    setIsLoading(true);
+    if (!silent && shopeeOrders.length === 0 && mapsReviews.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const orders = await dbGetShopeeOrders();
       const reviews = await dbGetMapsReviews();
@@ -629,7 +631,7 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadData();
+      loadData(false);
     }
   }, [isAuthenticated, currentAdminUser]);
 
@@ -639,16 +641,19 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     };
     const handleRefreshEvent = () => {
       if (isAuthenticated) {
-        loadData();
+        // Silent reload so typing in forms is never interrupted by full loading spinner
+        loadData(true);
       }
     };
     window.addEventListener('adminshp-logout', handleLogoutEvent);
     window.addEventListener('adminshp-refresh', handleRefreshEvent);
     window.addEventListener('gm_spreadsheet_data_synced', handleRefreshEvent);
+    window.addEventListener('gm_supabase_data_synced', handleRefreshEvent);
     return () => {
       window.removeEventListener('adminshp-logout', handleLogoutEvent);
       window.removeEventListener('adminshp-refresh', handleRefreshEvent);
       window.removeEventListener('gm_spreadsheet_data_synced', handleRefreshEvent);
+      window.removeEventListener('gm_supabase_data_synced', handleRefreshEvent);
     };
   }, [isAuthenticated, currentAdminUser]);
 
@@ -1671,7 +1676,7 @@ Format Chat : ${data.notes || '-'}`;
               </div>
 
               {/* TABLE: LIST OF MANUAL SHOPEE ORDERS */}
-              <div ref={shopeeQueueRef} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden scroll-mt-24">
+              <div ref={shopeeQueueRef} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-visible scroll-mt-24">
                 <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <span className="h-2 w-2 rounded-full bg-orange-500" />
@@ -2169,7 +2174,7 @@ Format Chat : ${data.notes || '-'}`;
 
                  {/* TABLE PROGRESS & LIST (8 columns) */}
                  <div ref={mapsQueueRef} className="lg:col-span-8 space-y-4 scroll-mt-24">
-                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-visible">
                      <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                        <div className="flex items-center gap-2.5">
                          <span className="h-2 w-2 rounded-full bg-blue-500" />

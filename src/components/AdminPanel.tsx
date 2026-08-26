@@ -1877,14 +1877,13 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     window.dispatchEvent(new PopStateEvent('popstate'));
                     setTimeout(() => { isTabClicking.current = false; }, 50);
                   }}
-                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
+                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center cursor-pointer ${
                     activeTab === 'shopee_orders'
                       ? 'border-blue-600 text-blue-600 font-black'
                       : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
                   }`}
                   id="tab-shopee-orders"
                 >
-                  <ShoppingCart className="h-4 w-4 shrink-0 text-orange-500" />
                   <span>{currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders'}</span>
                 </button>
 
@@ -1897,14 +1896,13 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     window.dispatchEvent(new PopStateEvent('popstate'));
                     setTimeout(() => { isTabClicking.current = false; }, 50);
                   }}
-                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
+                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center cursor-pointer ${
                     activeTab === 'maps_reviews'
                       ? 'border-blue-600 text-blue-600 font-black'
                       : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
                   }`}
                   id="tab-maps-reviews"
                 >
-                  <Star className="h-4 w-4 shrink-0 text-yellow-500" />
                   <span>Review Orders</span>
                 </button>
 
@@ -1917,14 +1915,13 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     window.dispatchEvent(new PopStateEvent('popstate'));
                     setTimeout(() => { isTabClicking.current = false; }, 50);
                   }}
-                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer ${
+                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center cursor-pointer ${
                     activeTab === 'orders'
                       ? 'border-blue-600 text-blue-600 font-black'
                       : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
                   }`}
                   id="tab-orders"
                 >
-                  <ShoppingBag className="h-4 w-4 shrink-0" />
                   <span>{currentLang === 'id' ? 'Pesanan Web' : 'Web Orders'}</span>
                 </button>
               </div>
