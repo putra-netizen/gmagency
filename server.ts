@@ -37,11 +37,11 @@ function sanitizeSupabaseKey(key: string | undefined): string {
   return trimmed;
 }
 
-const rawSupabaseUrl = process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const rawSupabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+const rawSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const rawSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
 const supabaseUrl = (rawSupabaseUrl || '').trim();
-const supabaseAnonKey = sanitizeSupabaseKey(rawSupabaseAnonKey);
+const supabaseAnonKey = sanitizeSupabaseKey(rawSupabaseKey);
 
 const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey, {
