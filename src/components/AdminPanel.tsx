@@ -2792,7 +2792,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     {filteredShopeeOrders.length} Total
                   </span>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                     <colgroup>
                       <col className="w-[12%]" />
@@ -2993,6 +2993,198 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     </tbody>
                   </table>
                 </div>
+
+                {/* Mobile View for Shopee Orders */}
+                <div className="block md:hidden divide-y divide-slate-100 bg-white">
+                  {filteredShopeeOrders.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                      {searchShopee ? 'Tidak ada hasil pencarian yang cocok.' : 'Belum ada pesanan shopee manual dimasukkan.'}
+                    </div>
+                  ) : (
+                    paginatedShopeeOrders.map((order) => {
+                      const isSosmed = order.order_type === 'REPORT_ALL_SOSMED';
+                      return (
+                        <div key={order.id} className="p-4 space-y-3">
+                          {/* Top: ID, Date, Status */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="font-mono font-bold text-slate-900 text-sm block">{order.id}</span>
+                              <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                                {new Date(order.created_at).toLocaleDateString('id-ID', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${
+                                isSosmed 
+                                  ? 'bg-orange-50 text-orange-700 border border-orange-200' 
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}>
+                                {isSosmed ? 'REPORT' : 'SPAM WA'}
+                              </span>
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border ${
+                                order.status === 'DONE'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : order.status === 'PROGRESS'
+                                  ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                  : order.status === 'READY'
+                                  ? 'bg-white text-slate-700 border-slate-300'
+                                  : order.status === 'SUDAH DIREKAP'
+                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                  : 'bg-sky-50 text-sky-700 border-sky-200'
+                              }`}>
+                                {order.status || 'PENDING'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {order.created_by && (
+                            <div className="text-[9px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
+                              diinput oleh {getSlotIndicatorName(order.created_by)}
+                            </div>
+                          )}
+
+                          {/* Grid 2 Cols: Store Name & Buyer Name */}
+                          <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Store Name</span>
+                              <span className="font-bold text-slate-900 block truncate" title={order.store_name}>
+                                {order.store_name}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Buyer Name</span>
+                              <span className="font-semibold text-slate-800 block truncate" title={order.buyer_name}>
+                                {order.buyer_name}
+                              </span>
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Jenis Jasa</span>
+                              <span className="font-bold text-slate-800 uppercase block text-[10px]">{order.service_type}</span>
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Jumlah Slot</span>
+                              <span className="font-bold text-slate-700 font-mono text-[10px]">{order.quantity} Slot / Pcs</span>
+                            </div>
+                          </div>
+
+                          {/* Target */}
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Target</span>
+                            {order.target_link.startsWith('http') ? (
+                              <a 
+                                href={order.target_link} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline inline-flex items-center gap-1 font-mono text-xs font-semibold break-all"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                                <span>{order.target_link}</span>
+                              </a>
+                            ) : (
+                              <span className="font-mono text-slate-800 font-bold text-xs bg-slate-50 px-2 py-1 rounded border border-slate-100 block break-all">
+                                {order.target_link}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Notes if available */}
+                          {order.notes && (
+                            <div className="bg-amber-50/60 border border-amber-100 p-2 rounded-lg text-[11px] text-amber-800">
+                              <span className="font-bold uppercase text-[9px] text-amber-600 block">Catatan:</span>
+                              <p className="mt-0.5 leading-relaxed">{order.notes}</p>
+                            </div>
+                          )}
+
+                          {/* Format Text */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 text-[9px] uppercase font-bold">Format Pesanan</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(order.formatted_text);
+                                  setCopiedShopeeId(order.id);
+                                  setTimeout(() => setCopiedShopeeId(null), 2000);
+                                }}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg cursor-pointer"
+                              >
+                                {copiedShopeeId === order.id ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    <span className="text-emerald-700">Tersalin!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3 w-3" />
+                                    <span>Salin Format</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <pre className="font-mono text-[9px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 max-h-[80px] overflow-y-auto whitespace-pre-wrap select-all">
+                              {order.formatted_text}
+                            </pre>
+                          </div>
+
+                          {/* Work Order textarea */}
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Work Order</span>
+                            <DebouncedTextarea
+                              rows={2}
+                              placeholder="Input work order..."
+                              value={order.work_order || ''}
+                              onSave={val => handleUpdateShopeeWorkOrder(order.id, val)}
+                              className="w-full rounded-xl border border-slate-200 p-2 text-xs font-medium text-slate-800 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 font-sans resize-y min-h-[50px] bg-white"
+                            />
+                          </div>
+
+                          {/* Worker Assignment & Actions */}
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="text-[10px] font-bold text-slate-500 shrink-0">Worker:</span>
+                              <select
+                                value={order.worker_id || ''}
+                                onChange={e => handleUpdateShopeeWorker(order.id, e.target.value)}
+                                className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-orange-500 cursor-pointer bg-white"
+                              >
+                                <option value="">-- No Worker --</option>
+                                {['rehan', 'deky', 'panca', 'anggun', 'riyanto', 'bintang'].map(w => (
+                                  <option key={w} value={w}>{w.toUpperCase()}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-1.5 self-end sm:self-center">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditShopee(order)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer border border-blue-100"
+                                title="Edit Order"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteShopeeOrder(order.id)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors cursor-pointer border border-red-100"
+                                title="Hapus Order"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>Hapus</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
                 <Pagination
                   currentPage={pageShopee}
                   totalPages={Math.ceil(filteredShopeeOrders.length / ITEMS_PER_PAGE)}
@@ -3076,7 +3268,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                     {filteredMapsReviews.length} Total
                   </span>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                     <colgroup>
                       <col className="w-[10%]" />
@@ -3394,6 +3586,298 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile View for Maps & Review Reports */}
+                <div className="block md:hidden divide-y divide-slate-100 bg-white">
+                  {filteredMapsReviews.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                      {searchReview ? 'Tidak ada hasil pencarian yang cocok.' : 'Belum ada laporan review yang cocok / terdaftar.'}
+                    </div>
+                  ) : (
+                    paginatedMapsReviews.map((review) => {
+                      const doneCount = review.reviewer_accounts?.length || 0;
+                      const pct = Math.min(100, Math.round((doneCount / (review.target_count || 1)) * 100));
+                      const isFinished = review.status === 'DONE';
+
+                      return (
+                        <div key={review.id} className="p-4 space-y-3">
+                          {/* Top row */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="font-mono font-bold text-slate-900 text-sm block">
+                                {review.id.slice(0, 8)}...
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                                {new Date(review.created_at).toLocaleDateString('id-ID', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                                review.review_type === 'G_MAPS'
+                                  ? 'bg-red-50 text-red-700 border border-red-100'
+                                  : (review.review_type === 'TRIPAD' || (review.review_type as string) === 'TRIPADVISOR' || (review.review_type as string) === 'REVIEW_TRIPAD')
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                  : 'bg-violet-50 text-violet-700 border border-violet-100'
+                              }`}>
+                                {(review.review_type || 'G_MAPS').replace(/_/g, ' ')}
+                              </span>
+                              <select
+                                value={review.status || 'PENDING'}
+                                onChange={(e) => handleUpdateMapsStatus(review.id, e.target.value as any)}
+                                className={`rounded-md border px-2 py-0.5 text-[9px] font-bold outline-none cursor-pointer ${
+                                  review.status === 'DONE'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : review.status === 'PROGRESS'
+                                    ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                    : review.status === 'READY'
+                                    ? 'bg-white text-slate-700 border-slate-300'
+                                    : review.status === 'SUDAH DIREKAP'
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : 'bg-sky-50 text-sky-700 border-sky-200'
+                                }`}
+                              >
+                                <option value="PENDING">PENDING</option>
+                                <option value="PROGRESS">PROGRESS</option>
+                                <option value="READY">READY</option>
+                                <option value="SUDAH DIREKAP">SUDAH DIREKAP</option>
+                                <option value="DONE">DONE</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {review.created_by && (
+                            <div className="text-[9px] text-orange-600 font-bold bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
+                              diinput oleh {getSlotIndicatorName(review.created_by)}
+                            </div>
+                          )}
+
+                          {/* Store Name & Client Name */}
+                          <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100 grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Store Name</span>
+                              <span className="font-bold text-slate-900 block truncate" title={review.store_name}>
+                                {review.store_name}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Nama Klien</span>
+                              <span className="font-semibold text-slate-800 block truncate" title={review.client_name}>
+                                {review.client_name}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Target Link */}
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Target Link</span>
+                            {review.maps_link ? (
+                              <a
+                                href={review.maps_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline inline-flex items-center gap-1 font-mono text-xs font-semibold break-all"
+                              >
+                                <Link2 className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                                <span>{review.maps_link}</span>
+                              </a>
+                            ) : (
+                              <span className="text-slate-400 text-xs">-</span>
+                            )}
+                          </div>
+
+                          {/* Progress bar & Akun input */}
+                          <div className="space-y-2 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                            <div className="flex items-center justify-between text-xs font-bold text-slate-700 font-mono">
+                              <span>Target: {doneCount} / {review.target_count || 0} Ulasan</span>
+                              <span className={isFinished ? 'text-emerald-600' : 'text-blue-600'}>{pct}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  isFinished ? 'bg-emerald-500' : 'bg-blue-600'
+                                }`} 
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+
+                            {/* Add reviewer input */}
+                            <div className="flex gap-1.5 items-center pt-1">
+                              <input
+                                type="text"
+                                placeholder="Nama Akun Reviewer"
+                                value={tempAccountInput[review.id] || ''}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  if (val.endsWith(',') || val.endsWith('\n')) {
+                                    const cleanNames = val.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+                                    if (cleanNames.length > 0) {
+                                      const targetReview = mapsReviews.find(r => r.id === review.id);
+                                      if (targetReview) {
+                                        const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
+                                        const updatedAccounts = [...currentAccounts, ...cleanNames];
+                                        setMapsReviews(prev => prev.map(r => r.id === review.id ? { 
+                                          ...r, 
+                                          reviewer_accounts: updatedAccounts,
+                                          status: (r.status === 'PENDING' && updatedAccounts.length > 0) ? 'PROGRESS' : r.status
+                                        } : r));
+                                        setTempAccountInput(prev => ({ ...prev, [review.id]: '' }));
+                                        dbUpdateMapsReview(review.id, { reviewer_accounts: updatedAccounts }).catch(console.error);
+                                        return;
+                                      }
+                                    }
+                                  }
+                                  setTempAccountInput(prev => ({ ...prev, [review.id]: val }));
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddReviewerAccount(review.id);
+                                  }
+                                }}
+                                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 flex-grow font-sans bg-white min-w-0"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAddReviewerAccount(review.id)}
+                                className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg px-3 py-1.5 transition-all shrink-0 cursor-pointer flex items-center justify-center font-bold"
+                                title="Tambah Akun"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            {/* Scrollable grid for accounts */}
+                            {review.reviewer_accounts && review.reviewer_accounts.length > 0 ? (
+                              <div className="border border-slate-200 rounded-lg p-2 bg-white max-h-[90px] overflow-y-auto shadow-inner">
+                                <div className="grid grid-cols-2 gap-1">
+                                  {review.reviewer_accounts.map((acc, index) => (
+                                    <div key={index} className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-[9px] font-semibold text-slate-700">
+                                      <span className="truncate font-mono" title={`${index + 1}. ${acc}`}>
+                                        {index + 1}. {acc}
+                                      </span>
+                                      <button
+                                        onClick={() => handleRemoveReviewerAccount(review.id, index)}
+                                        className="text-red-500 hover:text-red-700 font-extrabold hover:bg-red-50 px-1 rounded transition-all cursor-pointer text-xs leading-none"
+                                        title="Hapus Akun"
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-400 italic py-1.5 text-center bg-white border border-dashed border-slate-200 rounded-lg">
+                                Belum ada ulasan akun diinput
+                              </div>
+                            )}
+
+                            {review.reviewer_accounts && review.reviewer_accounts.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleExportPDF(review)}
+                                className="w-full py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                              >
+                                <FileDown className="h-3.5 w-3.5 text-blue-600" />
+                                <span>Export PDF ({review.reviewer_accounts.length})</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Clue / Notes */}
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Clue / Catatan</span>
+                            <DebouncedTextarea
+                              rows={2}
+                              placeholder="Input clue/catatan..."
+                              value={review.notes || ''}
+                              onSave={(val) => handleUpdateNotes(review.id, val)}
+                              className="w-full rounded-xl border border-slate-200 bg-white p-2 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[50px]"
+                            />
+                          </div>
+
+                          {/* Link Bukti */}
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Link Bukti Pengerjaan</span>
+                            <DebouncedInput
+                              type="text"
+                              placeholder="Link bukti pengerjaan..."
+                              value={review.proof_link || ''}
+                              onSave={(val) => handleUpdateProofLink(review.id, val)}
+                              className="w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-emerald-500 text-slate-700 font-mono bg-white"
+                            />
+                            {review.proof_link && (
+                              <a
+                                href={review.proof_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-emerald-600 hover:underline font-mono inline-block mt-1 font-bold break-all"
+                              >
+                                Buka Bukti →
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const copypasta = `Link: ${review.maps_link}\nNama cust: ${review.client_name}\nNama st: ${review.store_name || '-'}\nclue: ${review.notes || '-'}`;
+                                navigator.clipboard.writeText(copypasta);
+                                setCopiedReviewId(review.id);
+                                setTimeout(() => setCopiedReviewId(null), 2000);
+                              }}
+                              className={`px-3 py-1.5 text-xs font-bold rounded-lg border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                copiedReviewId === review.id
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                              }`}
+                            >
+                              {copiedReviewId === review.id ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                  <span>Tersalin!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5 text-blue-600" />
+                                  <span>Salin Format</span>
+                                </>
+                              )}
+                            </button>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditMaps(review)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer border border-blue-100"
+                                title="Edit Laporan"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMapsReview(review.id)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors cursor-pointer border border-red-100"
+                                title="Hapus Laporan"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>Hapus</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
                 <Pagination
                   currentPage={pageReview}

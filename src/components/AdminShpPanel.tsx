@@ -154,18 +154,21 @@ const Pagination: React.FC<PaginationProps> = ({
 
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-slate-100 sm:px-6 mt-4">
-      <div className="flex justify-between flex-1 sm:hidden">
+      <div className="flex items-center justify-between flex-1 sm:hidden">
         <button
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
           disabled={currentPage === 1}
-          className="relative inline-flex items-center px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+          className="relative inline-flex items-center px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
         >
           Previous
         </button>
+        <span className="text-[11px] font-bold text-slate-600 font-mono">
+          {currentPage} / {totalPages}
+        </span>
         <button
           onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
           disabled={currentPage === totalPages}
-          className="relative ml-3 inline-flex items-center px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+          className="relative inline-flex items-center px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
         >
           Next
         </button>
@@ -1758,7 +1761,7 @@ Format Chat : ${data.notes || '-'}`;
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                     <colgroup>
                       <col className="w-[9%]" />
@@ -1968,6 +1971,211 @@ Format Chat : ${data.notes || '-'}`;
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile View for Shopee Orders */}
+                <div className="block md:hidden divide-y divide-slate-100 bg-white">
+                  {filteredShopeeOrders.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                      {searchShopee ? 'Tidak ada hasil pencarian yang cocok.' : 'Belum ada pesanan shopee manual dimasukkan.'}
+                    </div>
+                  ) : (
+                    paginatedShopeeOrders.map((order) => {
+                      const isSosmed = order.order_type === 'REPORT_ALL_SOSMED';
+                      return (
+                        <div key={order.id} className="p-4 space-y-3">
+                          {/* Header: ID, Date, Badges */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="font-mono font-bold text-slate-900 text-sm block">{order.id}</span>
+                              <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                                {new Date(order.created_at).toLocaleDateString('id-ID', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${
+                                isSosmed 
+                                  ? 'bg-orange-50 text-orange-700 border border-orange-200' 
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              }`}>
+                                {isSosmed ? 'REPORT' : 'SPAM WA'}
+                              </span>
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-md border ${
+                                order.status === 'DONE'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : order.status === 'PROGRESS'
+                                  ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                  : order.status === 'READY'
+                                  ? 'bg-white text-slate-700 border-slate-300'
+                                  : order.status === 'SUDAH DIREKAP'
+                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                  : 'bg-sky-50 text-sky-700 border-sky-200'
+                              }`}>
+                                {order.status || 'PENDING'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {order.created_by && (
+                            <div className={`text-[9px] font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1 border ${
+                              order.created_by === currentAdminUser 
+                                ? 'bg-slate-100 text-slate-600 border-slate-200' 
+                                : 'bg-violet-50 text-violet-700 border-violet-200'
+                            }`}>
+                              {order.created_by !== currentAdminUser && <Lock className="h-2.5 w-2.5 shrink-0 text-violet-500" />}
+                              <span>diinput oleh {getSlotIndicatorName(order.created_by)}</span>
+                            </div>
+                          )}
+
+                          {/* Grid 2 Columns: Store Name & Buyer Name */}
+                          <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Store Name</span>
+                              <span className="font-bold text-slate-900 block truncate" title={order.store_name}>
+                                {order.store_name}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Buyer Name</span>
+                              <span className="font-semibold text-slate-800 block truncate" title={order.buyer_name}>
+                                {order.buyer_name}
+                              </span>
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Jenis Jasa</span>
+                              <span className="font-bold text-slate-800 uppercase block text-[10px]">{order.service_type}</span>
+                            </div>
+                            <div className="mt-1">
+                              <span className="text-slate-400 block text-[9px] uppercase font-bold">Jumlah Slot</span>
+                              <span className="font-bold text-slate-700 font-mono text-[10px]">{order.quantity} Slot / Pcs</span>
+                            </div>
+                          </div>
+
+                          {/* Target Link / Nomor */}
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Target</span>
+                            {order.target_link.startsWith('http') ? (
+                              <a 
+                                href={order.target_link} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline inline-flex items-center gap-1 font-mono text-xs font-semibold break-all"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+                                <span>{order.target_link}</span>
+                              </a>
+                            ) : (
+                              <span className="font-mono text-slate-800 font-bold text-xs bg-slate-50 px-2 py-1 rounded border border-slate-100 block break-all">
+                                {order.target_link}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Notes if available */}
+                          {order.notes && (
+                            <div className="bg-amber-50/60 border border-amber-100 p-2 rounded-lg text-[11px] text-amber-800">
+                              <span className="font-bold uppercase text-[9px] text-amber-600 block">Catatan:</span>
+                              <p className="mt-0.5 leading-relaxed">{order.notes}</p>
+                            </div>
+                          )}
+
+                          {/* Formatted Text Box */}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 text-[9px] uppercase font-bold">Format Pesanan</span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(order.formatted_text, order.id)}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg cursor-pointer"
+                              >
+                                {copiedId === order.id ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    <span className="text-emerald-700">Tersalin!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3 w-3" />
+                                    <span>Salin Format</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <pre className="font-mono text-[9px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 max-h-[80px] overflow-y-auto whitespace-pre-wrap select-all">
+                              {order.formatted_text}
+                            </pre>
+                          </div>
+
+                          {/* Work Order textarea */}
+                          <div>
+                            <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Work Order</span>
+                            <DebouncedTextarea
+                              rows={2}
+                              placeholder="Input work order..."
+                              value={order.work_order || ''}
+                              onSave={val => handleUpdateWorkOrder(order.id, val)}
+                              disabled={order.created_by !== undefined && order.created_by !== currentAdminUser}
+                              className={`w-full rounded-xl border border-slate-200 p-2 text-xs font-medium text-slate-800 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 font-sans resize-y min-h-[50px] ${
+                                order.created_by && order.created_by !== currentAdminUser 
+                                  ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                  : 'bg-white'
+                              }`}
+                            />
+                          </div>
+
+                          {/* Worker Assignment & Actions */}
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="text-[10px] font-bold text-slate-500 shrink-0">Worker:</span>
+                              <select
+                                value={order.worker_id || ''}
+                                onChange={e => handleAssignWorker(order.id, e.target.value)}
+                                disabled={order.created_by !== undefined && order.created_by !== currentAdminUser}
+                                className={`flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-700 outline-none focus:border-orange-500 cursor-pointer ${
+                                  order.created_by && order.created_by !== currentAdminUser 
+                                    ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                    : 'bg-white'
+                                }`}
+                              >
+                                <option value="">-- No Worker --</option>
+                                {WORKERS.map(w => (
+                                  <option key={w} value={w}>{w.toUpperCase()}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {(!order.created_by || order.created_by === currentAdminUser) && (
+                              <div className="flex items-center justify-end gap-1.5 self-end sm:self-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditShopee(order)}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer border border-blue-100"
+                                  title="Edit Order"
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteShopeeOrder(order.id)}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors cursor-pointer border border-red-100"
+                                  title="Hapus Order"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <span>Hapus</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
                 <Pagination
                   currentPage={pageShopee}
@@ -2257,7 +2465,7 @@ Format Chat : ${data.notes || '-'}`;
                        </div>
                      </div>
  
-                     <div className="overflow-x-auto">
+                     <div className="hidden md:block overflow-x-auto">
                        <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                          <colgroup>
                            <col className="w-[14%]" />
@@ -2531,6 +2739,260 @@ Format Chat : ${data.notes || '-'}`;
                           )}
                         </tbody>
                       </table>
+                    </div>
+
+                    {/* Mobile View for Maps & Review Apps */}
+                    <div className="block md:hidden divide-y divide-slate-100 bg-white">
+                      {filteredMapsReviews.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                          {searchMaps ? 'Tidak ada hasil pencarian yang cocok.' : 'Belum ada data progres review dimasukkan.'}
+                        </div>
+                      ) : (
+                        paginatedMapsReviews.map((item) => {
+                          const doneCount = item.reviewer_accounts?.length || 0;
+                          const pct = Math.min(100, Math.round((doneCount / item.target_count) * 100));
+                          const isFinished = item.status === 'DONE';
+
+                          return (
+                            <div key={item.id} className="p-4 space-y-3">
+                              {/* Top row: Badges, Store Name, diinput oleh */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="bg-slate-900 text-white px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+                                      {item.store_name || '-'}
+                                    </span>
+                                    {item.review_type === 'TRIPAD' ? (
+                                      <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">Tripadvisor</span>
+                                    ) : item.review_type === 'REVIEW_APPS' ? (
+                                      <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">Review Apps</span>
+                                    ) : (
+                                      <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">G Maps</span>
+                                    )}
+                                  </div>
+                                  <h4 className="font-extrabold text-slate-900 text-sm">
+                                    {item.client_name}
+                                  </h4>
+                                </div>
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[9px] font-bold shrink-0 ${
+                                  isFinished
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : item.status === 'PROGRESS'
+                                    ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                                    : item.status === 'READY'
+                                    ? 'bg-white text-slate-700 border border-slate-300'
+                                    : item.status === 'SUDAH DIREKAP'
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                    : 'bg-sky-100 text-sky-800 border border-sky-200'
+                                }`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${
+                                    isFinished 
+                                      ? 'bg-emerald-500' 
+                                      : item.status === 'PROGRESS'
+                                      ? 'bg-orange-500 animate-pulse'
+                                      : item.status === 'READY'
+                                      ? 'bg-slate-400'
+                                      : item.status === 'SUDAH DIREKAP'
+                                      ? 'bg-purple-500'
+                                      : 'bg-sky-500 animate-pulse'
+                                  }`} />
+                                  <span>{item.status || 'PENDING'}</span>
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                                <span>ID: {item.id.slice(0, 8)}</span>
+                                <span>
+                                  {new Date(item.created_at).toLocaleDateString('id-ID', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+
+                              {item.created_by && (
+                                <div className={`text-[9px] font-bold px-2 py-0.5 rounded inline-flex items-center gap-1 border ${
+                                  item.created_by === currentAdminUser 
+                                    ? 'bg-slate-100 text-slate-600 border-slate-200' 
+                                    : 'bg-violet-50 text-violet-700 border-violet-200'
+                                }`}>
+                                  {item.created_by !== currentAdminUser && <Lock className="h-2.5 w-2.5 shrink-0 text-violet-500" />}
+                                  <span>diinput oleh {getSlotIndicatorName(item.created_by)}</span>
+                                </div>
+                              )}
+
+                              {/* Target Link */}
+                              <div>
+                                <span className="text-slate-400 block text-[9px] uppercase font-bold mb-0.5">Target Link</span>
+                                <a 
+                                  href={item.maps_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline inline-flex items-center gap-1 font-mono text-xs font-semibold break-all"
+                                >
+                                  {item.review_type === 'REVIEW_APPS' ? (
+                                    <ExternalLink className="h-3.5 w-3.5 shrink-0 text-purple-500" />
+                                  ) : item.review_type === 'TRIPAD' ? (
+                                    <ExternalLink className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                                  ) : (
+                                    <MapPin className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                                  )}
+                                  <span>{item.maps_link}</span>
+                                </a>
+                              </div>
+
+                              {/* Target Progress Bar */}
+                              <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-100 space-y-1.5">
+                                <div className="flex items-center justify-between text-xs font-bold text-slate-700 font-mono">
+                                  <span>Target: {doneCount} / {item.target_count} Ulasan</span>
+                                  <span className={isFinished ? 'text-emerald-600' : 'text-blue-600'}>{pct}%</span>
+                                </div>
+                                <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      isFinished ? 'bg-emerald-500' : 'bg-blue-600'
+                                    }`} 
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Reviewer Accounts Preview */}
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-slate-400 text-[9px] uppercase font-bold">
+                                    Daftar Akun Reviewer ({doneCount})
+                                  </span>
+                                  {item.reviewer_accounts && item.reviewer_accounts.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setScreenshotModalItem(item)}
+                                      className="py-0.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[9px] font-bold uppercase tracking-wider inline-flex items-center gap-1 border border-blue-200 cursor-pointer"
+                                    >
+                                      <FileDown className="h-3 w-3 text-blue-600" />
+                                      <span>Export PDF</span>
+                                    </button>
+                                  )}
+                                </div>
+                                {item.reviewer_accounts && item.reviewer_accounts.length > 0 ? (
+                                  <div className="border border-slate-200 rounded-xl p-2 bg-white max-h-[100px] overflow-y-auto">
+                                    <div className="grid grid-cols-2 gap-1">
+                                      {item.reviewer_accounts.map((acc, index) => (
+                                        <div key={index} className="bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 text-[9px] font-mono text-slate-700 truncate">
+                                          {index + 1}. {acc}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-slate-400 italic py-2 text-center bg-slate-50/60 border border-dashed border-slate-200 rounded-lg">
+                                    Belum ada ulasan akun diinput oleh Admin
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Clue / Notes */}
+                              <div>
+                                <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Clue / Catatan</span>
+                                <DebouncedTextarea
+                                  rows={2}
+                                  placeholder="Input clue/notes..."
+                                  value={item.notes || ''}
+                                  onSave={val => handleUpdateNotes(item.id, val)}
+                                  disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                  className={`w-full rounded-xl border border-slate-200 p-2 text-xs font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[50px] ${
+                                    item.created_by && item.created_by !== currentAdminUser 
+                                      ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                      : 'bg-white'
+                                  }`}
+                                />
+                              </div>
+
+                              {/* Link Bukti Pengerjaan */}
+                              <div>
+                                <span className="text-slate-400 block text-[9px] uppercase font-bold mb-1">Link Bukti Pengerjaan</span>
+                                <DebouncedInput
+                                  type="text"
+                                  placeholder="Link bukti pengerjaan..."
+                                  value={item.proof_link || ''}
+                                  onSave={val => handleUpdateProofLink(item.id, val)}
+                                  disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                  className={`w-full rounded-xl border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-emerald-500 text-slate-700 font-mono ${
+                                    item.created_by && item.created_by !== currentAdminUser 
+                                      ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                      : 'bg-white'
+                                  }`}
+                                />
+                                {item.proof_link && (
+                                  <a
+                                    href={item.proof_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-emerald-600 hover:underline font-mono inline-block mt-1 font-bold break-all"
+                                  >
+                                    Buka Bukti Pengerjaan →
+                                  </a>
+                                )}
+                              </div>
+
+                              {/* Actions footer */}
+                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const copypasta = `Link: ${item.maps_link}\nNama cust: ${item.client_name}\nNama st: ${item.store_name || '-'}\nclue: ${item.notes || '-'}`;
+                                    navigator.clipboard.writeText(copypasta);
+                                    setCopiedId(item.id);
+                                    setTimeout(() => setCopiedId(null), 2000);
+                                  }}
+                                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                    copiedId === item.id
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                  }`}
+                                >
+                                  {copiedId === item.id ? (
+                                    <>
+                                      <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                      <span>Tersalin!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="h-3.5 w-3.5 text-blue-600" />
+                                      <span>Salin Format</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                {(!item.created_by || item.created_by === currentAdminUser) && (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditMaps(item)}
+                                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer border border-blue-100"
+                                      title="Edit Target"
+                                    >
+                                      <Edit className="h-3.5 w-3.5" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMapsReview(item.id)}
+                                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors cursor-pointer border border-red-100"
+                                      title="Hapus Target"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <span>Hapus</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                     <Pagination
                       currentPage={pageMaps}
