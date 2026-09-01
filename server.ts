@@ -24,8 +24,8 @@ import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus, MapsReview, ShopeeOrder } from './src/types';
 import { createClient } from '@supabase/supabase-js';
 
-const DEFAULT_SUPABASE_URL = 'https://deimhhnkpucajdsgoafd.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlaW1oaG5rcHVjYWpkc2dvYWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1OTE1NTUsImV4cCI6MjEwMzE2NzU1NX0.Db5ngiDca1enJzXmwJqdm5eai3dQpagVvNqjwjrR6ro';
+const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
 
 function sanitizeSupabaseKey(key: string | undefined): string {
   if (!key) return '';
@@ -44,7 +44,13 @@ const supabaseUrl = (rawSupabaseUrl || '').trim();
 const supabaseAnonKey = sanitizeSupabaseKey(rawSupabaseAnonKey);
 
 const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
+const supabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  }
+}) : null;
 
 // Track if Supabase failed or reached quota limit on server
 let serverSupabaseFailed = false;
@@ -182,7 +188,7 @@ function writeDatabase(data: any) {
 
 // Server-side in-memory cache for Supabase queries to reduce egress & API overhead
 const serverSupabaseCache = new Map<string, { timestamp: number; data: any[] }>();
-const SERVER_CACHE_TTL_MS = 5000; // 5 seconds TTL
+const SERVER_CACHE_TTL_MS = 120000; // 120 seconds TTL (2 minutes)
 
 function clearServerSupabaseCache(table?: string) {
   if (table) {
@@ -231,29 +237,34 @@ async function fetchAllSupabaseRows<T = any>(
     if (orderBy) {
       query = query.order(orderBy, { ascending });
     }
-    const { data, error } = await query.range(from, to);
+    try {
+      const { data, error } = await query.range(from, to);
 
-    if (error) {
-      if (isSupabaseQuotaError(error)) {
-        if (!serverSupabaseFailed) {
-          console.warn('📦 Server: Supabase egress quota exceeded / project restricted. Seamlessly switching to local JSON database.');
+      if (error) {
+        if (isSupabaseQuotaError(error)) {
+          if (!serverSupabaseFailed) {
+            console.warn('📦 Server: Supabase egress quota exceeded / project restricted. Seamlessly switching to local JSON database.');
+          }
+          serverSupabaseFailed = true;
         }
-        serverSupabaseFailed = true;
-      } else {
-        console.warn(`Server: Supabase fetch warning on table ${table}:`, error.message || error);
+        return [];
       }
-      throw error;
-    }
 
-    if (data && data.length > 0) {
-      allRows = allRows.concat(data as T[]);
-      if (data.length < fetchSize || allRows.length >= maxRows) {
-        hasMore = false;
+      if (data && data.length > 0) {
+        allRows = allRows.concat(data as T[]);
+        if (data.length < fetchSize || allRows.length >= maxRows) {
+          hasMore = false;
+        } else {
+          page++;
+        }
       } else {
-        page++;
+        hasMore = false;
       }
-    } else {
-      hasMore = false;
+    } catch (fetchErr: any) {
+      if (isSupabaseQuotaError(fetchErr)) {
+        serverSupabaseFailed = true;
+      }
+      return [];
     }
   }
 
@@ -472,7 +483,7 @@ app.get('/api/shopee_orders', async (req, res) => {
   const deletedShopee = db.deleted_shopee_orders || [];
 
   if (supabase && !serverSupabaseFailed) {
-    const data = await fetchServerSupabaseWithFallback(supabase, 'shopee-orders', 'shopee_orders', 'created_at', false, forceRefresh, limit);
+    const data = await fetchServerSupabaseWithFallback(supabase, 'shopee_orders', 'shopee-orders', 'created_at', false, forceRefresh, limit);
     if (data && data.length > 0) {
       const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
       return res.json(filtered);
@@ -491,7 +502,7 @@ app.post('/api/shopee_orders', async (req, res) => {
   };
 
   if (supabase && !serverSupabaseFailed) {
-    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+    for (const tbl of ['shopee_orders', 'shopee-orders']) {
       try {
         const { data, error } = await supabase
           .from(tbl)
@@ -517,7 +528,7 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
-    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+    for (const tbl of ['shopee_orders', 'shopee-orders']) {
       try {
         const { data, error } = await supabase
           .from(tbl)
@@ -558,7 +569,7 @@ app.delete('/api/shopee_orders/:id', async (req, res) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
-    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+    for (const tbl of ['shopee_orders', 'shopee-orders']) {
       try {
         await supabase
           .from(tbl)
@@ -620,7 +631,7 @@ app.get('/api/maps_reviews', async (req, res) => {
   const deletedMaps = db.deleted_maps_reviews || [];
 
   if (supabase && !serverSupabaseFailed) {
-    const data = await fetchServerSupabaseWithFallback(supabase, 'maps_order', 'maps_reviews', 'created_at', false, forceRefresh, limit);
+    const data = await fetchServerSupabaseWithFallback(supabase, 'maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit);
     if (data && data.length > 0) {
       const normalized = data.map((item: any) => ({
         ...item,
@@ -653,7 +664,7 @@ app.post('/api/maps_reviews', async (req, res) => {
   };
 
   if (supabase && !serverSupabaseFailed) {
-    for (const tbl of ['maps_order', 'maps_reviews']) {
+    for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
         const { data, error } = await supabase
           .from(tbl)
@@ -687,7 +698,7 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
   }
 
   if (supabase && !serverSupabaseFailed) {
-    for (const tbl of ['maps_order', 'maps_reviews']) {
+    for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
         const { data, error } = await supabase
           .from(tbl)
@@ -742,17 +753,22 @@ app.delete('/api/maps_reviews/:id', async (req, res) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
-    try {
-      const { error } = await supabase
-        .from('maps_reviews')
-        .delete()
-        .eq('id', id);
-      if (isSupabaseQuotaError(error)) {
-        serverSupabaseFailed = true;
-      }
-    } catch (err) {
-      if (isSupabaseQuotaError(err)) {
-        serverSupabaseFailed = true;
+    for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
+      try {
+        const { error } = await supabase
+          .from(tbl)
+          .delete()
+          .eq('id', id);
+        if (!error) {
+          clearServerSupabaseCache(tbl);
+        }
+        if (isSupabaseQuotaError(error)) {
+          serverSupabaseFailed = true;
+        }
+      } catch (err) {
+        if (isSupabaseQuotaError(err)) {
+          serverSupabaseFailed = true;
+        }
       }
     }
   }
@@ -918,7 +934,7 @@ app.get('/api/sheets/export-csv', async (req, res) => {
       let data: any[] = [];
       if (supabase && !serverSupabaseFailed) {
         try {
-          const sData = await fetchAllSupabaseRows(supabase, 'maps_order', 'created_at', false, true, 50000);
+          const sData = await fetchServerSupabaseWithFallback(supabase, 'maps_orders', 'maps_order', 'created_at', false, true, 50000);
           if (sData && sData.length > 0) {
             data = sData;
           }
@@ -990,7 +1006,7 @@ app.get('/api/sheets/export-csv', async (req, res) => {
       let data: any[] = [];
       if (supabase && !serverSupabaseFailed) {
         try {
-          const sData = await fetchAllSupabaseRows(supabase, 'shopee-orders', 'created_at', false, true, 50000);
+          const sData = await fetchServerSupabaseWithFallback(supabase, 'shopee_orders', 'shopee-orders', 'created_at', false, true, 50000);
           if (sData && sData.length > 0) data = sData;
         } catch (e) {
           if (isSupabaseQuotaError(e)) serverSupabaseFailed = true;

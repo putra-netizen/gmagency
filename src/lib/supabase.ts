@@ -24,8 +24,8 @@ export function isDummyOrder(o: any): boolean {
 const MOCK_ORDERS_TO_SEED: Order[] = [];
 
 // Check if Supabase keys are configured in environment
-const DEFAULT_SUPABASE_URL = 'https://deimhhnkpucajdsgoafd.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlaW1oaG5rcHVjYWpkc2dvYWZkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1OTE1NTUsImV4cCI6MjEwMzE2NzU1NX0.Db5ngiDca1enJzXmwJqdm5eai3dQpagVvNqjwjrR6ro';
+const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
 
 export function sanitizeSupabaseKey(key: string | undefined): string {
   if (!key) return '';
@@ -54,7 +54,13 @@ const checkValidUrl = (url: string | undefined): boolean => {
 };
 
 export const isSupabaseConfigured = checkValidUrl(supabaseUrl) && Boolean(supabaseAnonKey);
-export const supabase: any = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
+export const supabase: any = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  }
+}) : null;
 let supabaseFailed = false;
 
 export function isSupabaseQuotaError(err: any): boolean {
@@ -78,12 +84,13 @@ export function dbIsSupabaseConnected(): boolean {
 
 // In-memory cache for fetchAllSupabaseRows to reduce Egress
 const supabaseQueryCache = new Map<string, { timestamp: number; data: any[] }>();
-const CACHE_TTL_MS = 5000; // 5 seconds cache TTL for snappy real-time data
+const CACHE_TTL_MS = 120000; // 120 seconds (2 minutes) cache TTL for efficient egress management
 
 export function clearSupabaseCache(table?: string) {
   if (table) {
+    const cleanTbl = table.replace(/-/g, '_');
     for (const key of supabaseQueryCache.keys()) {
-      if (key.startsWith(table + ':')) {
+      if (key.startsWith(table + ':') || key.startsWith(cleanTbl + ':')) {
         supabaseQueryCache.delete(key);
       }
     }
@@ -93,8 +100,29 @@ export function clearSupabaseCache(table?: string) {
 }
 
 /**
- * Helper to fetch rows from Supabase with limit and pagination.
- * Uses pagination with range(from, to) up to limit records.
+ * Merges newly fetched incremental rows with existing cached rows by unique ID.
+ */
+function mergeIncrementalRows<T extends { id?: string; created_at?: string }>(existingRows: T[], newRows: T[]): T[] {
+  if (!newRows || newRows.length === 0) return existingRows;
+  const map = new Map<string, T>();
+  // 1. Put all existing rows into map
+  for (const item of existingRows) {
+    if (item && item.id) {
+      map.set(item.id, item);
+    }
+  }
+  // 2. Overwrite / insert new rows
+  for (const item of newRows) {
+    if (item && item.id) {
+      map.set(item.id, item);
+    }
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * Helper to fetch rows from Supabase with smart incremental synchronization,
+ * memory caching, and fallback pagination.
  */
 export async function fetchAllSupabaseRows<T = any>(
   client: any,
@@ -102,19 +130,42 @@ export async function fetchAllSupabaseRows<T = any>(
   orderBy: string = 'created_at',
   ascending: boolean = false,
   forceRefresh: boolean = false,
-  limit: number = 50000
+  limit: number = 50000,
+  selectColumns: string = '*'
 ): Promise<T[]> {
   if (!client || supabaseFailed) return [];
 
   const maxRows = Math.max(1, Math.min(limit, 50000));
-  const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}`;
+  const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}:${selectColumns}`;
   const cached = supabaseQueryCache.get(cacheKey);
   const now = Date.now();
 
+  // 1. If cache is still valid within CACHE_TTL_MS and no forceRefresh, return immediately with 0 egress
   if (!forceRefresh && cached && (now - cached.timestamp < CACHE_TTL_MS)) {
     return cached.data as T[];
   }
 
+  // 2. Incremental Sync Strategy: If we already have existing cached data and this is a routine refresh,
+  // query only the most recent 100 records (delta) instead of re-downloading all ~4,000 rows.
+  if (!forceRefresh && cached && cached.data.length > 0) {
+    try {
+      let deltaQuery = client.from(table).select(selectColumns);
+      if (orderBy) {
+        deltaQuery = deltaQuery.order(orderBy, { ascending: false });
+      }
+      const { data: deltaRows, error: deltaErr } = await deltaQuery.limit(100);
+
+      if (!deltaErr && Array.isArray(deltaRows)) {
+        const merged = mergeIncrementalRows(cached.data as any[], deltaRows as any[]);
+        supabaseQueryCache.set(cacheKey, { timestamp: Date.now(), data: merged as any });
+        return merged as T[];
+      }
+    } catch (deltaErr) {
+      console.warn(`Incremental sync fallback for ${table}:`, deltaErr);
+    }
+  }
+
+  // 3. Full Snapshot Query (only on initial cold start or explicit manual forceRefresh)
   let allRows: T[] = [];
   let page = 0;
   const pageSize = Math.min(1000, maxRows); // 1000 rows per request
@@ -124,7 +175,7 @@ export async function fetchAllSupabaseRows<T = any>(
     const from = page * pageSize;
     const fetchSize = Math.min(pageSize, maxRows - allRows.length);
     const to = from + fetchSize - 1;
-    let query = client.from(table).select('*');
+    let query = client.from(table).select(selectColumns);
     if (orderBy) {
       query = query.order(orderBy, { ascending });
     }
@@ -133,13 +184,11 @@ export async function fetchAllSupabaseRows<T = any>(
     if (error) {
       if (isSupabaseQuotaError(error)) {
         if (!supabaseFailed) {
-          console.warn('📦 Supabase egress quota exceeded / project restricted. Seamlessly switching to Local & Express fallback database.');
+          console.warn('📦 Supabase egress quota notice. Seamlessly falling back to local database.');
         }
         supabaseFailed = true;
-      } else {
-        console.warn(`Supabase fetch notice on table ${table}:`, error.message || error);
       }
-      return [];
+      return cached ? (cached.data as T[]) : [];
     }
 
     if (data && data.length > 0) {
@@ -636,13 +685,14 @@ async function fetchSupabaseTableWithFallback<T = any>(
   orderBy: string = 'created_at',
   ascending: boolean = false,
   forceRefresh: boolean = false,
-  limit: number = 50000
+  limit: number = 50000,
+  selectColumns: string = '*'
 ): Promise<T[]> {
   if (!isSupabaseConfigured || !supabase || supabaseFailed) return [];
 
   // Try primary table first
   try {
-    const data = await fetchAllSupabaseRows<T>(supabase, primaryTable, orderBy, ascending, forceRefresh, limit);
+    const data = await fetchAllSupabaseRows<T>(supabase, primaryTable, orderBy, ascending, forceRefresh, limit, selectColumns);
     if (data && data.length > 0) return data;
   } catch (err: any) {
     if (isSupabaseQuotaError(err)) {
@@ -654,7 +704,7 @@ async function fetchSupabaseTableWithFallback<T = any>(
   // If primary returned empty or error, try fallback table
   if (fallbackTable && fallbackTable !== primaryTable) {
     try {
-      const data = await fetchAllSupabaseRows<T>(supabase, fallbackTable, orderBy, ascending, forceRefresh, limit);
+      const data = await fetchAllSupabaseRows<T>(supabase, fallbackTable, orderBy, ascending, forceRefresh, limit, selectColumns);
       if (data && data.length > 0) return data;
     } catch (err: any) {
       if (isSupabaseQuotaError(err)) {
@@ -936,13 +986,13 @@ export async function dbGetDashboardStats(): Promise<DashboardStats> {
 }
 
 
-// 4. SHOPEE ORDERS (Targeting Supabase table 'shopee-orders' & fallback 'shopee_orders')
+// 4. SHOPEE ORDERS (Targeting Supabase table 'shopee_orders' & fallback 'shopee-orders')
 export async function dbGetShopeeOrders(limit: number = 50000, forceRefresh: boolean = false): Promise<ShopeeOrder[]> {
   const deletedShopee = getClientDeletedShopeeOrders();
   let list: ShopeeOrder[] = [];
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    list = await fetchSupabaseTableWithFallback<ShopeeOrder>('shopee-orders', 'shopee_orders', 'created_at', false, forceRefresh, limit);
+    list = await fetchSupabaseTableWithFallback<ShopeeOrder>('shopee_orders', 'shopee-orders', 'created_at', false, forceRefresh, limit);
   }
 
   if (list.length === 0) {
@@ -989,7 +1039,7 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
   };
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+    for (const tbl of ['shopee_orders', 'shopee-orders']) {
       try {
         const { data, error } = await supabase
           .from(tbl)
@@ -1032,8 +1082,8 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
 }
 
 export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
-  clearSupabaseCache('shopee-orders');
   clearSupabaseCache('shopee_orders');
+  clearSupabaseCache('shopee-orders');
   let currentItem: ShopeeOrder | null = null;
   const list = getLocalShopeeOrders();
   const ex = list.find(o => o.id === id);
@@ -1051,7 +1101,7 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
   }
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+    for (const tbl of ['shopee_orders', 'shopee-orders']) {
       try {
         const { data, error } = await supabase
           .from(tbl)
@@ -1103,12 +1153,12 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
 }
 
 export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
-  clearSupabaseCache('shopee-orders');
   clearSupabaseCache('shopee_orders');
+  clearSupabaseCache('shopee-orders');
   blacklistClientShopeeOrder(id);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    for (const tbl of ['shopee-orders', 'shopee_orders']) {
+    for (const tbl of ['shopee_orders', 'shopee-orders']) {
       try {
         await supabase
           .from(tbl)
@@ -1137,15 +1187,15 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
 }
 
 
-// 5. MAPS REVIEWS / MAPS ORDERS (Targeting Supabase table 'maps_order' & fallback 'maps_orders', 'maps_reviews')
+// 5. MAPS REVIEWS / MAPS ORDERS (Targeting Supabase table 'maps_orders' & fallback 'maps_order', 'maps_reviews')
 export async function dbGetMapsReviews(limit: number = 50000, forceRefresh: boolean = false): Promise<MapsReview[]> {
   const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    list = await fetchSupabaseTableWithFallback<MapsReview>('maps_order', 'maps_orders', 'created_at', false, forceRefresh, limit);
+    list = await fetchSupabaseTableWithFallback<MapsReview>('maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit);
     if (list.length === 0) {
-      list = await fetchSupabaseTableWithFallback<MapsReview>('maps_reviews', 'maps_order', 'created_at', false, forceRefresh, limit);
+      list = await fetchSupabaseTableWithFallback<MapsReview>('maps_reviews', 'maps_orders', 'created_at', false, forceRefresh, limit);
     }
   }
 
@@ -1201,7 +1251,7 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
   };
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    for (const tbl of ['maps_order', 'maps_orders', 'maps_reviews']) {
+    for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
         const { data, error } = await supabase
           .from(tbl)
@@ -1245,8 +1295,8 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
 }
 
 export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsReview>): Promise<MapsReview> {
-  clearSupabaseCache('maps_order');
   clearSupabaseCache('maps_orders');
+  clearSupabaseCache('maps_order');
   clearSupabaseCache('maps_reviews');
   let currentItem: MapsReview | null = null;
   const list = getLocalMapsReviews().map(normalizeMapsReview);
@@ -1269,7 +1319,7 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
   }
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    for (const tbl of ['maps_order', 'maps_orders', 'maps_reviews']) {
+    for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
         const { data, error } = await supabase
           .from(tbl)
@@ -1333,13 +1383,13 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
 }
 
 export async function dbDeleteMapsReview(id: string): Promise<boolean> {
-  clearSupabaseCache('maps_order');
   clearSupabaseCache('maps_orders');
+  clearSupabaseCache('maps_order');
   clearSupabaseCache('maps_reviews');
   blacklistClientMapsReview(id);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    for (const tbl of ['maps_order', 'maps_orders', 'maps_reviews']) {
+    for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
         await supabase
           .from(tbl)
@@ -1367,6 +1417,42 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
   return true;
 }
 
+
+export async function dbGetShopeeOrderById(id: string): Promise<ShopeeOrder | null> {
+  const localList = getLocalShopeeOrders();
+  const cached = localList.find(o => o.id === id);
+  if (cached) return deserializeStatusAndNotes(cached);
+
+  if (isSupabaseConfigured && supabase && !supabaseFailed) {
+    for (const tbl of ['shopee_orders', 'shopee-orders']) {
+      try {
+        const { data, error } = await supabase.from(tbl).select('*').eq('id', id).single();
+        if (!error && data) {
+          return deserializeStatusAndNotes(data as ShopeeOrder);
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
+export async function dbGetMapsReviewById(id: string): Promise<MapsReview | null> {
+  const localList = getLocalMapsReviews();
+  const cached = localList.find(r => r.id === id);
+  if (cached) return normalizeMapsReview(cached);
+
+  if (isSupabaseConfigured && supabase && !supabaseFailed) {
+    for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
+      try {
+        const { data, error } = await supabase.from(tbl).select('*').eq('id', id).single();
+        if (!error && data) {
+          return normalizeMapsReview(data);
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
 
 // 6. STORAGE UPLOAD FOR PRODUCT IMAGES
 export async function dbUploadProductImage(file: File): Promise<string> {

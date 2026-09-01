@@ -30,8 +30,8 @@ export async function performGlobalAutoSync(force: boolean = false): Promise<boo
     return false;
   }
 
-  // Debounce: minimum 8 seconds between background fetches
-  if (!force && now - lastSyncTimestamp < 8000) {
+  // Debounce: minimum 60 seconds between background sync checks
+  if (!force && now - lastSyncTimestamp < 60000) {
     return false;
   }
 
@@ -39,10 +39,10 @@ export async function performGlobalAutoSync(force: boolean = false): Promise<boo
   isAutoSyncing = true;
 
   try {
-    // Exclusively fetch maps_orders and shopee_orders from Supabase
+    // Exclusively fetch maps_orders and shopee_orders with smart incremental sync & cache
     const [mapsData, shopeeData] = await Promise.all([
-      dbGetMapsReviews(20000, true).catch(() => []),
-      dbGetShopeeOrders(20000, true).catch(() => [])
+      dbGetMapsReviews(20000, force).catch(() => []),
+      dbGetShopeeOrders(20000, force).catch(() => [])
     ]);
 
     lastSyncTimestamp = Date.now();
@@ -50,8 +50,10 @@ export async function performGlobalAutoSync(force: boolean = false): Promise<boo
       localStorage.setItem(STORAGE_LAST_AUTO_SYNC, String(lastSyncTimestamp));
     } catch {}
 
-    // Dispatch real-time events to all active dashboard views & panels
+    // Dispatch real-time events with the fetched dataset to avoid downstream re-fetching
     const eventDetail = {
+      mapsData,
+      shopeeData,
       totalMaps: mapsData.length,
       totalShopee: shopeeData.length,
       timestamp: lastSyncTimestamp
@@ -71,17 +73,17 @@ export async function performGlobalAutoSync(force: boolean = false): Promise<boo
 }
 
 /**
- * Initializes continuous background auto-sync for maps_orders & shopee_orders
+ * Initializes conservative background auto-sync for maps_orders & shopee_orders (every 3 minutes)
  */
 export function initGlobalAutoSync(): void {
   if (typeof window === 'undefined') return;
 
-  // 1. Initial background fetch upon opening / mounting
+  // 1. Initial background fetch upon opening / mounting (normal cache-aware sync)
   setTimeout(() => {
-    performGlobalAutoSync(true);
-  }, 1000);
+    performGlobalAutoSync(false);
+  }, 2000);
 
-  // 2. Fetch when user switches back to tab or device wakes up
+  // 2. Fetch when user switches back to tab or device wakes up (only if cache is stale)
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       performGlobalAutoSync(false);
@@ -90,15 +92,15 @@ export function initGlobalAutoSync(): void {
 
   // 3. Fetch when device reconnects to internet
   window.addEventListener('online', () => {
-    performGlobalAutoSync(true);
+    performGlobalAutoSync(false);
   });
 
-  // 4. Background continuous polling every 15 seconds
+  // 4. Background continuous polling every 3 minutes (180,000 ms) instead of 15 seconds
   if (!autoSyncIntervalId) {
     autoSyncIntervalId = setInterval(() => {
       if (!document.hidden && navigator.onLine) {
         performGlobalAutoSync(false);
       }
-    }, 15000);
+    }, 180000);
   }
 }

@@ -83,7 +83,7 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
         if (!document.hidden) {
           loadOrdersData(true); // silent refresh
         }
-      }, 30000);
+      }, 180000);
 
       return () => clearInterval(interval);
     }

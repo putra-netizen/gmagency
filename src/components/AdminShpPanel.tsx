@@ -537,8 +537,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       toast.success(currentLang === 'id' ? 'Review Maps berhasil diperbarui' : 'Maps review updated successfully');
       setIsMapsModalOpen(false);
       setEditingMapsReview(null);
-      // Reload lists
-      const data = await dbGetMapsReviews(10000, true);
+      // Reload lists without forceRefresh (cache-aware)
+      const data = await dbGetMapsReviews();
       setMapsReviews(data);
     } catch (err) {
       console.error(err);
@@ -597,32 +597,17 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   }, [isAuthenticated, currentAdminUser]);
 
   // Fetch all initial data if authenticated
-  const loadData = async (silent: boolean = false) => {
+  const loadData = async (silent: boolean = false, forceRefresh: boolean = false) => {
     if (!isAuthenticated || !currentAdminUser) return;
     if (!silent && shopeeOrders.length === 0 && mapsReviews.length === 0) {
       setIsLoading(true);
     }
     try {
-      const orders = await dbGetShopeeOrders();
-      const reviews = await dbGetMapsReviews();
+      const [orders, reviews] = await Promise.all([
+        dbGetShopeeOrders(50000, forceRefresh),
+        dbGetMapsReviews(50000, forceRefresh)
+      ]);
       
-      // Filter logs per account: each account only logs and sees their own data.
-      // Pre-existing/legacy records are shown to all for safety.
-      const ADMIN_ACCOUNTS = ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'];
-      try {
-        const credsStr = localStorage.getItem('gm_adminshp_creds');
-        if (credsStr) {
-          const custom = JSON.parse(credsStr);
-          Object.keys(custom).forEach(k => {
-            if (!ADMIN_ACCOUNTS.includes(k)) {
-              ADMIN_ACCOUNTS.push(k);
-            }
-          });
-        }
-      } catch (e) {
-        console.error(e);
-      }
-
       setShopeeOrders(orders);
       setMapsReviews(reviews);
     } catch (error) {
@@ -634,7 +619,7 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadData(false);
+      loadData(false, false);
     }
   }, [isAuthenticated, currentAdminUser]);
 
@@ -642,21 +627,31 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     const handleLogoutEvent = () => {
       handleLogout();
     };
-    const handleRefreshEvent = () => {
+    const handleManualRefreshEvent = () => {
       if (isAuthenticated) {
-        // Silent reload so typing in forms is never interrupted by full loading spinner
-        loadData(true);
+        loadData(false, true);
       }
     };
+    const handleSyncedEvent = (e: any) => {
+      if (!isAuthenticated) return;
+      const detail = e?.detail;
+      if (detail && Array.isArray(detail.shopeeData) && Array.isArray(detail.mapsData)) {
+        setShopeeOrders(detail.shopeeData);
+        setMapsReviews(detail.mapsData);
+        return;
+      }
+      loadData(true, false);
+    };
+
     window.addEventListener('adminshp-logout', handleLogoutEvent);
-    window.addEventListener('adminshp-refresh', handleRefreshEvent);
-    window.addEventListener('gm_spreadsheet_data_synced', handleRefreshEvent);
-    window.addEventListener('gm_supabase_data_synced', handleRefreshEvent);
+    window.addEventListener('adminshp-refresh', handleManualRefreshEvent);
+    window.addEventListener('gm_spreadsheet_data_synced', handleSyncedEvent);
+    window.addEventListener('gm_supabase_data_synced', handleSyncedEvent);
     return () => {
       window.removeEventListener('adminshp-logout', handleLogoutEvent);
-      window.removeEventListener('adminshp-refresh', handleRefreshEvent);
-      window.removeEventListener('gm_spreadsheet_data_synced', handleRefreshEvent);
-      window.removeEventListener('gm_supabase_data_synced', handleRefreshEvent);
+      window.removeEventListener('adminshp-refresh', handleManualRefreshEvent);
+      window.removeEventListener('gm_spreadsheet_data_synced', handleSyncedEvent);
+      window.removeEventListener('gm_supabase_data_synced', handleSyncedEvent);
     };
   }, [isAuthenticated, currentAdminUser]);
 

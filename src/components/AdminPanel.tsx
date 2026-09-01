@@ -461,7 +461,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       handleLogout();
     };
     const onNavbarRefresh = () => {
-      loadDashboardData();
+      loadDashboardData(true);
     };
     const onNavigateKeuangan = () => {
       setActiveTab('keuangan');
@@ -657,8 +657,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       toast.success(currentLang === 'id' ? 'Review Maps berhasil diperbarui' : 'Maps review updated successfully');
       setIsMapsModalOpen(false);
       setEditingMapsReview(null);
-      // Reload lists with forceRefresh
-      const data = await dbGetMapsReviews(10000, true);
+      // Reload lists without forceRefresh (cache-aware)
+      const data = await dbGetMapsReviews();
       setMapsReviews(data);
     } catch (err) {
       console.error(err);
@@ -882,23 +882,22 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
   // Load Admin Dashboard Data
   const [isStatsLoading, setIsStatsLoading] = useState(false);
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (forceRefresh: boolean = false) => {
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const prodsData = await dbGetProducts();
+      const [prodsData, ordsData, shopeeData, mapsData, statsData] = await Promise.all([
+        dbGetProducts(500, forceRefresh),
+        dbGetOrders(10000, forceRefresh),
+        dbGetShopeeOrders(50000, forceRefresh),
+        dbGetMapsReviews(50000, forceRefresh),
+        dbGetDashboardStats()
+      ]);
+
       setProducts(prodsData);
-
-      const ordsData = await dbGetOrders();
       setOrders(ordsData);
-
-      const shopeeData = await dbGetShopeeOrders();
       setShopeeOrders(shopeeData);
-
-      const mapsData = await dbGetMapsReviews();
       setMapsReviews(mapsData);
-
-      const statsData = await dbGetDashboardStats();
       setStats(statsData);
     } catch (err: any) {
       console.error(err);
@@ -909,7 +908,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   };
 
   useEffect(() => {
-    loadDashboardData();
+    loadDashboardData(false);
+    // Relaxed background sync: 3 minutes interval (180,000 ms) with cache-aware queries
     const interval = setInterval(() => {
       if (document.hidden) return;
       const now = Date.now();
@@ -921,9 +921,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
         }
       });
 
-      dbGetProducts(10000, true).then(prodsData => setProducts(prodsData)).catch(err => console.error(err));
+      dbGetProducts().then(prodsData => setProducts(prodsData)).catch(err => console.error(err));
 
-      dbGetOrders(10000, true).then(ordsData => {
+      dbGetOrders().then(ordsData => {
         setOrders(prev => {
           if (!prev || prev.length === 0) return ordsData;
           return ordsData.map(newItem => {
@@ -936,7 +936,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
         });
       }).catch(err => console.error(err));
 
-      dbGetShopeeOrders(10000, true).then(shopeeData => {
+      dbGetShopeeOrders().then(shopeeData => {
         setShopeeOrders(prev => {
           if (!prev || prev.length === 0) return shopeeData;
           return shopeeData.map(newItem => {
@@ -949,7 +949,7 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
         });
       }).catch(err => console.error(err));
 
-      dbGetMapsReviews(10000, true).then(mapsData => {
+      dbGetMapsReviews().then(mapsData => {
         setMapsReviews(prev => {
           if (!prev || prev.length === 0) return mapsData;
           return mapsData.map(newItem => {
@@ -978,74 +978,31 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
       }).catch(err => console.error(err));
 
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(err => console.error(err));
-    }, 30000);
+    }, 180000);
 
-    const handleAutoSynced = () => {
-      const now = Date.now();
-      dbGetProducts(10000, true).then(prodsData => setProducts(prodsData)).catch(console.error);
-      
-      dbGetOrders(10000, true).then(ordsData => {
-        setOrders(prev => {
-          if (!prev || prev.length === 0) return ordsData;
-          return ordsData.map(newItem => {
-            const lock = recentLocalStatusUpdates.current.get(newItem.id);
-            if (lock && (now - lock.timestamp < 120000)) {
-              return { ...newItem, payment_status: lock.status as PaymentStatus };
-            }
-            return newItem;
-          });
-        });
-      }).catch(console.error);
+    // Event listener: use pre-fetched data from autoSyncManager without re-querying Supabase
+    const handleAutoSynced = (e: any) => {
+      const detail = e?.detail;
+      if (detail && Array.isArray(detail.shopeeData) && Array.isArray(detail.mapsData)) {
+        setShopeeOrders(detail.shopeeData);
+        setMapsReviews(detail.mapsData);
+        dbGetDashboardStats().then(statsData => setStats(statsData)).catch(console.error);
+        return;
+      }
 
-      dbGetShopeeOrders(10000, true).then(shopeeData => {
-        setShopeeOrders(prev => {
-          if (!prev || prev.length === 0) return shopeeData;
-          return shopeeData.map(newItem => {
-            const lock = recentLocalStatusUpdates.current.get(newItem.id);
-            if (lock && (now - lock.timestamp < 120000)) {
-              return { ...newItem, status: lock.status as any };
-            }
-            return newItem;
-          });
-        });
-      }).catch(console.error);
-
-      dbGetMapsReviews(10000, true).then(mapsData => {
-        setMapsReviews(prev => {
-          if (!prev || prev.length === 0) return mapsData;
-          return mapsData.map(newItem => {
-            const existing = prev.find(p => p.id === newItem.id);
-            const lock = recentLocalStatusUpdates.current.get(newItem.id);
-            let finalStatus = newItem.status;
-            if (lock && (now - lock.timestamp < 120000)) {
-              finalStatus = lock.status as any;
-            }
-            if (existing) {
-              const existingAccounts = existing.reviewer_accounts || [];
-              const newAccounts = newItem.reviewer_accounts || [];
-              const mergedAccounts = existingAccounts.length > newAccounts.length ? existingAccounts : newAccounts;
-              return {
-                ...newItem,
-                status: finalStatus,
-                reviewer_accounts: mergedAccounts
-              };
-            }
-            return {
-              ...newItem,
-              status: finalStatus
-            };
-          });
-        });
-      }).catch(console.error);
-
+      // If no direct data attached, read from memory cache (0 network call)
+      dbGetShopeeOrders().then(shopeeData => setShopeeOrders(shopeeData)).catch(console.error);
+      dbGetMapsReviews().then(mapsData => setMapsReviews(mapsData)).catch(console.error);
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(console.error);
     };
 
     window.addEventListener('gm_spreadsheet_data_synced', handleAutoSynced);
+    window.addEventListener('gm_supabase_data_synced', handleAutoSynced);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('gm_spreadsheet_data_synced', handleAutoSynced);
+      window.removeEventListener('gm_supabase_data_synced', handleAutoSynced);
     };
   }, []);
 
