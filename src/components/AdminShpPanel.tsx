@@ -36,6 +36,7 @@ import {
   EyeOff,
   LogOut,
   Sparkles,
+  ShoppingBag,
   ChevronLeft,
   ChevronRight,
   Send,
@@ -1299,35 +1300,10 @@ Format Chat : ${data.notes || '-'}`;
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 font-sans" id="shopee-portal-container">
       {/* Header Portal */}
-      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-5 border-b border-slate-100 pb-6">
-        <div>
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="bg-orange-50 text-orange-600 border border-orange-100 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans">
-              Shopee Integration
-            </span>
-            <span className="bg-slate-50 text-slate-700 border border-slate-200 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
-              <User className="h-3 w-3 text-slate-450" />
-              <span>Admin: {currentAdminUser.toUpperCase()}</span>
-            </span>
-            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider font-sans flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Supabase Database Active</span>
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight font-sans">
-            Manual Shopee Order Entry Portal
-          </h1>
-          <p className="text-slate-550 text-xs mt-1.5 leading-relaxed">
-            Silakan masukkan data transaksi pesanan shopee secara manual sesuai dengan jenis layanan di bawah ini.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-2xl text-xs font-bold text-emerald-800 shadow-xs">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            <span>Supabase Cloud Connected</span>
-          </div>
-        </div>
+      <div className="mb-6 border-b border-slate-100 pb-5">
+        <h1 className="text-xl sm:text-2xl font-black text-slate-850 tracking-tight font-sans uppercase">
+          WORKING SPACE - SHOPEE INPUT
+        </h1>
       </div>
 
       {/* Tab Switches */}
@@ -1341,7 +1317,7 @@ Format Chat : ${data.notes || '-'}`;
                 : 'border-transparent text-slate-400 hover:text-slate-750'
             }`}
           >
-            <Sparkles className="h-4 w-4 shrink-0" />
+            <ShoppingBag className="h-4 w-4 shrink-0" />
             <span>SOSMED & SPAM WA</span>
           </button>
           <button
@@ -1680,25 +1656,11 @@ Format Chat : ${data.notes || '-'}`;
               <div ref={shopeeQueueRef} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-visible scroll-mt-24">
                 <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <span className="h-2 w-2 rounded-full bg-orange-500" />
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
-                      Daftar Antrean Order Shopee Manual
+                      Shopee Orders
                     </h3>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const csv = generateShopeeOrdersCsv(filteredShopeeOrders);
-                        downloadCsvFile(csv, `Shopee_Orders_${new Date().toISOString().slice(0, 10)}.csv`);
-                        toast.success('File CSV Shopee Orders berhasil diunduh');
-                      }}
-                      title="Download data Shopee Orders dalam format CSV"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold border border-slate-200 transition-all cursor-pointer shadow-xs active:scale-95"
-                    >
-                      <Download className="h-3.5 w-3.5 text-slate-600" />
-                      <span>Export CSV</span>
-                    </button>
                     <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
                       {filteredShopeeOrders.length} / {shopeeOrders.length} Pesanan
                     </span>
@@ -2189,25 +2151,11 @@ Format Chat : ${data.notes || '-'}`;
                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-visible">
                      <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                        <div className="flex items-center gap-2.5">
-                         <span className="h-2 w-2 rounded-full bg-blue-500" />
                          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
                            Progres Target Review (G Maps, Tripadvisor & Review Apps)
                          </h3>
                        </div>
                        <div className="flex items-center gap-2">
-                         <button
-                           type="button"
-                           onClick={() => {
-                             const csv = generateMapsReviewsCsv(filteredMapsReviews);
-                             downloadCsvFile(csv, `Maps_Orders_${new Date().toISOString().slice(0, 10)}.csv`);
-                             toast.success('File CSV Maps Orders berhasil diunduh');
-                           }}
-                           title="Download data Maps Orders dalam format CSV"
-                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold border border-slate-200 transition-all cursor-pointer shadow-xs active:scale-95"
-                         >
-                           <Download className="h-3.5 w-3.5 text-slate-600" />
-                           <span>Export CSV</span>
-                         </button>
                          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
                            {filteredMapsReviews.length} / {mapsReviews.length} Data
                          </span>
