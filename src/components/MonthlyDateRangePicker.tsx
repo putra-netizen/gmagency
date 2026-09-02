@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Check, RotateCcw } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Check, RotateCcw } from 'lucide-react';
 
 export interface TimeFilterConfig {
   mode: 'all' | 'today' | 'week' | 'month' | 'custom';
@@ -422,46 +422,48 @@ export const MonthlyDateRangePicker: React.FC<MonthlyDateRangePickerProps> = ({
 
   // Compute text for main button
   const getButtonText = () => {
-    if (value.mode === 'all') return currentLang === 'id' ? 'SEMUA' : 'ALL';
-    if (value.mode === 'today') return currentLang === 'id' ? 'HARI INI' : 'TODAY';
-    if (value.mode === 'week') return currentLang === 'id' ? 'MINGGU INI' : 'WEEK';
+    if (value.mode === 'all') return currentLang === 'id' ? 'Semua Waktu' : 'All Time';
+    if (value.mode === 'today') return currentLang === 'id' ? 'Hari Ini' : 'Today';
+    if (value.mode === 'week') return currentLang === 'id' ? 'Minggu Ini' : 'This Week';
     
     // Month / Custom mode
-    const start = value.startDate || getDefaultMonthRange().startDate;
-    const end = value.endDate || getDefaultMonthRange().endDate;
+    const start = value.startDate ? new Date(value.startDate) : getDefaultMonthRange().startDate;
+    const end = value.endDate ? new Date(value.endDate) : getDefaultMonthRange().endDate;
+    
+    if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+      const months = currentLang === 'id' ? MONTH_NAMES_ID : MONTH_NAMES_EN;
+      const monthName = months[start.getMonth()];
+      const lastDayOfMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+      if (start.getDate() === 1 && end.getDate() === lastDayOfMonth) {
+        return `${monthName} ${start.getFullYear()}`;
+      }
+      return `${start.getDate()} - ${end.getDate()} ${monthName.slice(0, 3)} ${start.getFullYear()}`;
+    }
+
     return `${formatDateShort(start)} - ${formatDateShort(end)}`;
   };
 
   return (
     <div className="relative inline-block text-left" ref={containerRef}>
-      <div className="flex items-center gap-1.5 bg-white px-3 py-2 rounded-xl border border-slate-200/90 shadow-sm text-xs w-full sm:w-auto hover:border-blue-300 transition-all">
-        <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Waktu:</span>
-        
-        {/* Mode selector */}
-        <select
-          value={value.mode === 'custom' ? 'month' : value.mode}
-          onChange={(e) => handleModeSelect(e.target.value as any)}
-          className="bg-transparent text-slate-800 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-        >
-          <option value="all">{currentLang === 'id' ? 'SEMUA' : 'ALL'}</option>
-          <option value="today">{currentLang === 'id' ? 'HARI INI' : 'TODAY'}</option>
-          <option value="week">{currentLang === 'id' ? 'MINGGU INI' : 'WEEK'}</option>
-          <option value="month">{currentLang === 'id' ? 'RENTANG BULAN / CUSTOM' : 'MONTHLY RANGE'}</option>
-        </select>
-
-        {/* Active Range Pill Button (Opens Modal/Popover) */}
-        {(value.mode === 'month' || value.mode === 'custom') && (
-          <button
-            type="button"
-            onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-2.5 py-1 rounded-lg border border-blue-200 transition-all text-[11px] shadow-xs active:scale-95 cursor-pointer ml-1"
-            title="Klik untuk memilih rentang tanggal/bulan"
-          >
-            <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
-            <span>{getButtonText()}</span>
-          </button>
-        )}
-      </div>
+      {/* Modern Pill Button with Backlight Glow */}
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="group flex items-center justify-between gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full border border-indigo-200/90 bg-white shadow-[0_0_16px_rgba(99,102,241,0.18)] hover:shadow-[0_0_22px_rgba(99,102,241,0.3)] hover:border-indigo-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/20 transition-all duration-200 cursor-pointer select-none text-xs sm:text-sm font-semibold text-slate-800"
+        title="Klik untuk memilih rentang tanggal/bulan"
+      >
+        <div className="flex items-center gap-2 shrink-0">
+          <CalendarIcon className="w-4 h-4 text-indigo-600 shrink-0" />
+          <span className="truncate max-w-[140px] sm:max-w-[190px] font-semibold text-slate-800 font-sans">
+            {getButtonText()}
+          </span>
+        </div>
+        <ChevronDown
+          className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 shrink-0 ${
+            isOpen ? 'rotate-180 text-slate-800' : 'group-hover:text-slate-700'
+          }`}
+        />
+      </button>
 
       {/* Popover / Calendar Modal */}
       {isOpen && (
@@ -470,7 +472,7 @@ export const MonthlyDateRangePicker: React.FC<MonthlyDateRangePickerProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
                 <CalendarIcon className="w-4 h-4" />
               </div>
               <div>
@@ -478,7 +480,7 @@ export const MonthlyDateRangePicker: React.FC<MonthlyDateRangePickerProps> = ({
                   {currentLang === 'id' ? 'Pilih Rentang Bulan / Waktu' : 'Select Month / Date Range'}
                 </h4>
                 <p className="text-[11px] text-slate-500 font-medium">
-                  Default: Tanggal 1 s/d Akhir Bulan
+                  {currentLang === 'id' ? 'Pilih preset cepat atau tentukan rentang kalender' : 'Select a quick preset or customize range'}
                 </p>
               </div>
             </div>
@@ -486,47 +488,77 @@ export const MonthlyDateRangePicker: React.FC<MonthlyDateRangePickerProps> = ({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-xl transition-colors"
+              className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-xl transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Quick Month Presets Bar */}
+          {/* Quick Presets Bar */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-3 border-b border-slate-100 scrollbar-none">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Pintasan:</span>
             <button
               type="button"
-              onClick={() => applyPresetMonth(0)}
-              className="px-2.5 py-1 text-[11px] font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap shadow-xs"
+              onClick={() => handleModeSelect('all')}
+              className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+                value.mode === 'all'
+                  ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                  : 'bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700'
+              }`}
             >
-              Bulan Ini (Default)
+              Semua Waktu
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeSelect('today')}
+              className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+                value.mode === 'today'
+                  ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                  : 'bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700'
+              }`}
+            >
+              Hari Ini
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeSelect('week')}
+              className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+                value.mode === 'week'
+                  ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                  : 'bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700'
+              }`}
+            >
+              Minggu Ini
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPresetMonth(0)}
+              className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+                value.mode === 'month' && !value.startDate
+                  ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold'
+              }`}
+            >
+              Bulan Ini
             </button>
             <button
               type="button"
               onClick={() => applyPresetMonth(1)}
-              className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg transition-colors whitespace-nowrap"
+              className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
             >
               Bulan Lalu
             </button>
             <button
               type="button"
               onClick={() => applyPresetMonth(2)}
-              className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg transition-colors whitespace-nowrap"
+              className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
             >
               2 Bulan Lalu
             </button>
             <button
               type="button"
-              onClick={() => applyPresetMonth(3)}
-              className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg transition-colors whitespace-nowrap"
-            >
-              3 Bulan Lalu
-            </button>
-            <button
-              type="button"
               onClick={applyPresetThisYear}
-              className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg transition-colors whitespace-nowrap"
+              className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
             >
               Tahun Ini
             </button>

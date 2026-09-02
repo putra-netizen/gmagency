@@ -20,6 +20,7 @@ import { getQrisConfig, saveQrisConfig, resetQrisConfig } from '../utils/qrisHel
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
+import { ModernFilterSelect } from './ModernFilterSelect';
 import { FinanceView } from './FinanceView';
 import { parseAccountsList } from '../utils/csvExport';
 import { pauseAutoSyncFor } from '../utils/autoSyncManager';
@@ -29,7 +30,8 @@ import {
   Briefcase, Save, AlertCircle, FileText, Check, Database, X, Globe,
   ExternalLink, Image as ImageIcon, Settings, ShoppingCart, Copy, ArrowLeft,
   Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
-  FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft, Wallet
+  FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft, Wallet,
+  Filter, Activity, Layers, SlidersHorizontal, Tag
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -1899,48 +1901,56 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
             <div className="space-y-6" id="admin-orders-list">
               
               {/* Search & Sort Bar for Unpaid Web Orders */}
-              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
-                <div className="relative w-full lg:w-80">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/80 p-4 rounded-2xl border border-slate-100/80 shadow-xs">
+                <div className="relative w-full lg:w-80 group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                  </div>
                   <input
                     type="text"
                     value={searchUnpaid}
                     onChange={(e) => setSearchUnpaid(e.target.value)}
                     placeholder="Cari pesanan pending (nama, no WA, layanan, notes)..."
-                    className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
+                    className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
                   />
+                  {searchUnpaid && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchUnpaid('')}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
                 
-                {/* Beautiful Dragdown sorting / filtering controls */}
-                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Tipe Jasa Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tipe Jasa:</span>
-                    <select
-                      value={serviceFilterUnpaid}
-                      onChange={(e) => setServiceFilterUnpaid(e.target.value)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">SEMUA</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Modern Pill sorting / filtering controls with Backlight */}
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Tipe Jasa Filter */}
+                  <ModernFilterSelect
+                    value={serviceFilterUnpaid}
+                    onChange={setServiceFilterUnpaid}
+                    icon={<Filter className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Layanan' },
+                      ...products.map((p) => ({ value: p.id, label: p.name })),
+                    ]}
+                  />
 
-                  {/* Status / Progres Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
-                    <select
-                      value={sortUnpaid}
-                      onChange={(e) => setSortUnpaid(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">SEMUA</option>
-                      <option value="pending">PENDING</option>
-                      <option value="progress">PROGRES</option>
-                      <option value="done">DONE</option>
-                    </select>
-                  </div>
+                  {/* Status / Progres Filter */}
+                  <ModernFilterSelect
+                    value={sortUnpaid}
+                    onChange={(v) => setSortUnpaid(v as any)}
+                    icon={<Activity className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Progres' },
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'progress', label: 'Progres' },
+                      { value: 'done', label: 'Done' },
+                    ]}
+                  />
 
                   {/* Timeframe Filter (Monthly Date Range Picker) */}
                   <MonthlyDateRangePicker
@@ -2148,48 +2158,56 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
               </div>
 
               {/* Search & Sort Bar for Paid Web Orders */}
-              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm mt-6">
-                <div className="relative w-full lg:w-80">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/80 p-4 rounded-2xl border border-slate-100/80 shadow-xs mt-6">
+                <div className="relative w-full lg:w-80 group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                  </div>
                   <input
                     type="text"
                     value={searchPaid}
                     onChange={(e) => setSearchPaid(e.target.value)}
                     placeholder="Cari pesanan lunas (nama, no WA, layanan, notes)..."
-                    className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
+                    className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
                   />
+                  {searchPaid && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchPaid('')}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
-                {/* Beautiful Dragdown sorting / filtering controls */}
-                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Tipe Jasa Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tipe Jasa:</span>
-                    <select
-                      value={serviceFilterPaid}
-                      onChange={(e) => setServiceFilterPaid(e.target.value)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">SEMUA</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Modern Pill sorting / filtering controls with Backlight */}
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Tipe Jasa Filter */}
+                  <ModernFilterSelect
+                    value={serviceFilterPaid}
+                    onChange={setServiceFilterPaid}
+                    icon={<Filter className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Layanan' },
+                      ...products.map((p) => ({ value: p.id, label: p.name })),
+                    ]}
+                  />
 
-                  {/* Status / Progres Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
-                    <select
-                      value={sortPaid}
-                      onChange={(e) => setSortPaid(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">SEMUA</option>
-                      <option value="pending">PENDING</option>
-                      <option value="progress">PROGRES</option>
-                      <option value="done">DONE</option>
-                    </select>
-                  </div>
+                  {/* Status / Progres Filter */}
+                  <ModernFilterSelect
+                    value={sortPaid}
+                    onChange={(v) => setSortPaid(v as any)}
+                    icon={<Activity className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Progres' },
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'progress', label: 'Progres' },
+                      { value: 'done', label: 'Done' },
+                    ]}
+                  />
 
                   {/* Timeframe Filter (Monthly Date Range Picker) */}
                   <MonthlyDateRangePicker
@@ -2413,49 +2431,59 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
             <div className="space-y-6" id="admin-shopee-orders-list">
               
               {/* Search & Sort Bar */}
-              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
-                <div className="relative w-full lg:w-80">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/80 p-4 rounded-2xl border border-slate-100/80 shadow-xs">
+                <div className="relative w-full lg:w-80 group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                  </div>
                   <input
                     type="text"
                     value={searchShopee}
                     onChange={(e) => setSearchShopee(e.target.value)}
                     placeholder="Cari store, pembeli, layanan, target, worker..."
-                    className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
+                    className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
                   />
+                  {searchShopee && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchShopee('')}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
-                {/* Minimalist sorting / filtering controls */}
-                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Tipe Jasa Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tipe Jasa:</span>
-                    <select
-                      value={shopeeTypeFilter}
-                      onChange={(e) => setShopeeTypeFilter(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">SEMUA</option>
-                      <option value="report">REPORT</option>
-                      <option value="spam_wa">SPAM WA</option>
-                    </select>
-                  </div>
+                {/* Modern Pill sorting / filtering controls with Backlight */}
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Tipe Jasa Filter */}
+                  <ModernFilterSelect
+                    value={shopeeTypeFilter}
+                    onChange={(v) => setShopeeTypeFilter(v as any)}
+                    icon={<Filter className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Jasa' },
+                      { value: 'report', label: 'Report Sosmed' },
+                      { value: 'spam_wa', label: 'Spam WA' },
+                    ]}
+                  />
 
-                  {/* Status / Progres Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
-                    <select
-                      value={sortShopee}
-                      onChange={(e) => setSortShopee(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">SEMUA</option>
-                      <option value="pending">PENDING</option>
-                      <option value="progress">PROGRES</option>
-                      <option value="ready">READY</option>
-                      <option value="sudah_direkap">SUDAH DIREKAP</option>
-                      <option value="done">DONE</option>
-                    </select>
-                  </div>
+                  {/* Status / Progres Filter */}
+                  <ModernFilterSelect
+                    value={sortShopee}
+                    onChange={(v) => setSortShopee(v as any)}
+                    icon={<Activity className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Progres' },
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'progress', label: 'Progres' },
+                      { value: 'ready', label: 'Ready' },
+                      { value: 'sudah_direkap', label: 'Sudah Direkap' },
+                      { value: 'done', label: 'Done' },
+                    ]}
+                  />
 
                   {/* Timeframe Filter (Monthly Date Range Picker) */}
                   <MonthlyDateRangePicker
@@ -2695,52 +2723,63 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
             <div className="space-y-6" id="admin-maps-reviews-list">
               
               {/* Search & Sort Bar */}
-              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100/80 shadow-sm">
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full lg:w-auto">
-                  <div className="relative w-full sm:w-80">
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/80 p-4 rounded-2xl border border-slate-100/80 shadow-xs">
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center w-full lg:w-auto">
+                  <div className="relative w-full sm:w-80 group">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                      <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                    </div>
                     <input
                       type="text"
                       value={searchReview}
                       onChange={(e) => setSearchReview(e.target.value)}
                       placeholder="Cari store, klien, tipe review, notes..."
-                      className="w-full bg-white text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-200 focus:border-blue-500 font-sans shadow-sm"
+                      className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
                     />
+                    {searchReview && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchReview('')}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
-                  {/* Tipe Review Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto" id="admin-tipe-review-filter">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Tipe Review:</span>
-                    <select
-                      value={reviewTypeFilter}
-                      onChange={(e) => setReviewTypeFilter(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="SEMUA">SEMUA</option>
-                      <option value="TRIPAD">TRIPAD</option>
-                      <option value="GMAPS">GMAPS</option>
-                      <option value="REVIEW APPS">REVIEW APPS</option>
-                    </select>
-                  </div>
+                  {/* Tipe Review Filter (Modern Pill with Purple Backlight) */}
+                  <ModernFilterSelect
+                    value={reviewTypeFilter}
+                    onChange={(v) => setReviewTypeFilter(v as any)}
+                    icon={<Filter className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    id="admin-tipe-review-filter"
+                    options={[
+                      { value: 'SEMUA', label: 'Semua Review' },
+                      { value: 'TRIPAD', label: 'Tripadvisor' },
+                      { value: 'GMAPS', label: 'Google Maps' },
+                      { value: 'REVIEW APPS', label: 'Review Apps' },
+                    ]}
+                  />
                 </div>
 
                 {/* Minimalist sorting / filtering controls */}
-                <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Status / Progres Filter (Beautiful Dropdown) */}
-                  <div className="flex items-center gap-2 bg-white px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm text-xs w-full sm:w-auto">
-                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
-                    <select
-                      value={sortReview}
-                      onChange={(e) => setSortReview(e.target.value as any)}
-                      className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-xs uppercase"
-                    >
-                      <option value="all">SEMUA</option>
-                      <option value="pending">PENDING</option>
-                      <option value="progress">PROGRES</option>
-                      <option value="ready">READY</option>
-                      <option value="sudah_direkap">SUDAH DIREKAP</option>
-                      <option value="done">DONE</option>
-                    </select>
-                  </div>
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Status / Progres Filter */}
+                  <ModernFilterSelect
+                    value={sortReview}
+                    onChange={(v) => setSortReview(v as any)}
+                    icon={<Activity className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Progres' },
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'progress', label: 'Progres' },
+                      { value: 'ready', label: 'Ready' },
+                      { value: 'sudah_direkap', label: 'Sudah Direkap' },
+                      { value: 'done', label: 'Done' },
+                    ]}
+                  />
 
                   {/* Timeframe Filter (Monthly Date Range Picker) */}
                   <MonthlyDateRangePicker

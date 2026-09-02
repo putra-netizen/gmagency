@@ -17,6 +17,7 @@ import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview } from '../types';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
+import { ModernFilterSelect } from './ModernFilterSelect';
 import { 
   Copy, 
   Plus, 
@@ -50,7 +51,9 @@ import {
   X,
   ShieldCheck,
   Zap,
-  Clock
+  Clock,
+  Filter,
+  Activity
 } from 'lucide-react';
 import { 
   generateShopeeOrdersCsv, 
@@ -1703,49 +1706,59 @@ Format Chat : ${data.notes || '-'}`;
                 </div>
 
                 {/* Search & Sort Bar for Shopee Manual Orders */}
-                <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-white p-4 border-b border-slate-50">
-                  <div className="relative w-full lg:w-80">
+                <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/70 p-4 border-b border-slate-100">
+                  <div className="relative w-full lg:w-80 group">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                      <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                    </div>
                     <input
                       type="text"
                       value={searchShopee}
                       onChange={(e) => setSearchShopee(e.target.value)}
                       placeholder="Cari pesanan, toko, pembeli..."
-                      className="w-full bg-slate-50/50 text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-150 focus:border-slate-300 focus:bg-white font-sans transition-all shadow-sm"
+                      className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
                     />
+                    {searchShopee && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchShopee('')}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
-                  {/* Minimalist sorting / filtering controls */}
-                  <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Minimalist sorting / filtering controls with Modern Backlight */}
+                  <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
                     {/* Tipe Jasa / Jenis Filter */}
-                    <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-100 text-[10px] w-full sm:w-auto">
-                      <span className="text-slate-450 font-bold uppercase tracking-wider text-[10px]">Tipe Jasa:</span>
-                      <select
-                        value={shopeeTypeFilter}
-                        onChange={(e) => setShopeeTypeFilter(e.target.value as any)}
-                        className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase"
-                      >
-                        <option value="all">SEMUA</option>
-                        <option value="report">REPORT SOSMED</option>
-                        <option value="spam_wa">SPAM WA</option>
-                      </select>
-                    </div>
+                    <ModernFilterSelect
+                      value={shopeeTypeFilter}
+                      onChange={(v) => setShopeeTypeFilter(v as any)}
+                      icon={<Filter className="w-4 h-4 text-purple-600" />}
+                      glowColor="purple"
+                      options={[
+                        { value: 'all', label: 'Semua Jasa' },
+                        { value: 'report', label: 'Report Sosmed' },
+                        { value: 'spam_wa', label: 'Spam WA' },
+                      ]}
+                    />
 
-                    {/* Status / Progres Filter (Beautiful Dropdown) */}
-                    <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-100 text-[10px] w-full sm:w-auto">
-                      <span className="text-slate-450 font-bold uppercase tracking-wider text-[10px]">Progres:</span>
-                      <select
-                        value={sortShopee}
-                        onChange={(e) => setSortShopee(e.target.value as any)}
-                        className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase"
-                      >
-                        <option value="all">SEMUA</option>
-                        <option value="pending">PENDING</option>
-                        <option value="progress">PROGRES</option>
-                        <option value="ready">READY</option>
-                        <option value="sudah_direkap">SUDAH DIREKAP</option>
-                        <option value="done">DONE</option>
-                      </select>
-                    </div>
+                    {/* Status / Progres Filter */}
+                    <ModernFilterSelect
+                      value={sortShopee}
+                      onChange={(v) => setSortShopee(v as any)}
+                      icon={<Activity className="w-4 h-4 text-purple-600" />}
+                      glowColor="purple"
+                      options={[
+                        { value: 'all', label: 'Semua Progres' },
+                        { value: 'pending', label: 'Pending' },
+                        { value: 'progress', label: 'Progres' },
+                        { value: 'ready', label: 'Ready' },
+                        { value: 'sudah_direkap', label: 'Sudah Direkap' },
+                        { value: 'done', label: 'Done' },
+                      ]}
+                    />
 
                     {/* Timeframe Filter (Monthly Date Range Picker) */}
                     <MonthlyDateRangePicker
@@ -2201,61 +2214,70 @@ Format Chat : ${data.notes || '-'}`;
                        </div>
                      </div>
  
-                     {/* Search & Sort Bar for Maps Reviews */}
-                     <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-white p-4 border-b border-slate-50">
-                       <div className="relative w-full lg:w-80">
-                         <input
-                           type="text"
-                           value={searchMaps}
-                           onChange={(e) => setSearchMaps(e.target.value)}
-                           placeholder="Cari toko, klien, tipe, clue..."
-                           className="w-full bg-slate-50/50 text-xs text-slate-700 rounded-xl px-4 py-2.5 outline-none border border-slate-150 focus:border-slate-300 focus:bg-white font-sans transition-all shadow-sm"
-                         />
-                       </div>
- 
-                       {/* Minimalist sorting / filtering controls */}
-                       <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
-                         {/* Tipe Review Filter */}
-                         <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
-                           <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Tipe Review:</span>
-                           <select
-                             value={reviewTypeFilter}
-                             onChange={(e) => setReviewTypeFilter(e.target.value as any)}
-                             className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase ml-1.5"
-                           >
-                             <option value="all">SEMUA</option>
-                             <option value="GMAPS">GMAPS</option>
-                             <option value="TRIPAD">TRIPAD</option>
-                             <option value="REVIEW APPS">REVIEW APPS</option>
-                           </select>
-                         </div>
+                    {/* Search & Sort Bar for Maps Reviews */}
+                    <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/70 p-4 border-b border-slate-100">
+                      <div className="relative w-full lg:w-80 group">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                          <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                        </div>
+                        <input
+                          type="text"
+                          value={searchMaps}
+                          onChange={(e) => setSearchMaps(e.target.value)}
+                          placeholder="Cari toko, klien, tipe, clue..."
+                          className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
+                        />
+                        {searchMaps && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchMaps('')}
+                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
 
-                         {/* Status / Progres Filter (Minimalist badge/pills style) */}
-                         <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-100 text-[10px]">
-                           <span className="text-slate-450 font-bold uppercase tracking-wider px-2">Progres:</span>
-                           <select
-                             value={sortMaps}
-                             onChange={(e) => setSortMaps(e.target.value as any)}
-                             className="bg-transparent text-slate-700 font-bold outline-none cursor-pointer pr-1 border-none focus:ring-0 text-[10px] uppercase ml-1.5"
-                           >
-                             <option value="all">SEMUA</option>
-                             <option value="pending">PENDING</option>
-                             <option value="progress">PROGRES</option>
-                             <option value="ready">READY</option>
-                             <option value="sudah_direkap">SUDAH DIREKAP</option>
-                             <option value="done">DONE</option>
-                           </select>
-                         </div>
- 
-                         {/* Timeframe Filter (Monthly Date Range Picker) */}
-                         <MonthlyDateRangePicker
-                           value={timeFilterMaps}
-                           onChange={setTimeFilterMaps}
-                           currentLang="id"
-                         />
-                       </div>
-                     </div>
- 
+                      {/* Minimalist sorting / filtering controls with Modern Backlight */}
+                      <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
+                        {/* Tipe Review Filter */}
+                        <ModernFilterSelect
+                          value={reviewTypeFilter}
+                          onChange={(v) => setReviewTypeFilter(v as any)}
+                          icon={<Filter className="w-4 h-4 text-purple-600" />}
+                          glowColor="purple"
+                          options={[
+                            { value: 'all', label: 'Semua Review' },
+                            { value: 'GMAPS', label: 'Google Maps' },
+                            { value: 'TRIPAD', label: 'Tripadvisor' },
+                            { value: 'REVIEW APPS', label: 'Review Apps' },
+                          ]}
+                        />
+
+                        {/* Status / Progres Filter */}
+                        <ModernFilterSelect
+                          value={sortMaps}
+                          onChange={(v) => setSortMaps(v as any)}
+                          icon={<Activity className="w-4 h-4 text-purple-600" />}
+                          glowColor="purple"
+                          options={[
+                            { value: 'all', label: 'Semua Progres' },
+                            { value: 'pending', label: 'Pending' },
+                            { value: 'progress', label: 'Progres' },
+                            { value: 'ready', label: 'Ready' },
+                            { value: 'sudah_direkap', label: 'Sudah Direkap' },
+                            { value: 'done', label: 'Done' },
+                          ]}
+                        />
+
+                        {/* Timeframe Filter (Monthly Date Range Picker) */}
+                        <MonthlyDateRangePicker
+                          value={timeFilterMaps}
+                          onChange={setTimeFilterMaps}
+                          currentLang="id"
+                        />
+                      </div>
+                    </div>
                      <div className="overflow-x-auto">
                        <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
                          <colgroup>
