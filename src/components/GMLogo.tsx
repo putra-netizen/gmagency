@@ -6,6 +6,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
 
+export const GM_LOGO_URL = 'https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/getak%20upscaled%20(1).png';
+
 interface GMLogoProps {
   className?: string;
   size?: 'xs' | 'sm' | 'md' | 'lg';
@@ -55,11 +57,14 @@ export default function GMLogo({ className = '', size = 'md', showSubtitle = tru
           }}
         />
 
-        {/* Inner solid mask + brand monogram icon */}
-        <div className="absolute inset-[1.5px] rounded-full bg-gradient-to-tr from-blue-700 via-indigo-700 to-purple-800 overflow-hidden z-10 flex items-center justify-center shadow-inner">
-          <span className="font-black text-white text-[13px] sm:text-[15px] tracking-tighter drop-shadow select-none">
-            GM
-          </span>
+        {/* Inner solid mask + Real GM Logo Image */}
+        <div className="absolute inset-[1.5px] rounded-full bg-slate-900 overflow-hidden z-10 flex items-center justify-center shadow-inner">
+          <img 
+            src={GM_LOGO_URL} 
+            alt="GM Agency Logo" 
+            className="w-full h-full object-cover rounded-full select-none"
+            referrerPolicy="no-referrer"
+          />
         </div>
       </div>
 
