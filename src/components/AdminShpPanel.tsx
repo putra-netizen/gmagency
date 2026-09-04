@@ -16,6 +16,7 @@ import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview } from '../types';
+import { loginWithBackend, clientLogout } from '../lib/auth';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { ModernFilterSelect } from './ModernFilterSelect';
 import { 
@@ -62,6 +63,7 @@ import {
   downloadCsvFile,
   parseAccountsList
 } from '../utils/csvExport';
+import { sanitizeUrl } from '../utils/security';
 
 interface AdminShpPanelProps {
   currentLang: 'id' | 'en';
@@ -344,6 +346,7 @@ const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, de
 
 export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   // Authentication states
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       const pathname = window.location.pathname;
@@ -669,75 +672,44 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   }, [searchMaps, sortMaps, reviewTypeFilter, timeFilterMaps]);
 
   // Handle Login submission
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const u = adminUsername.trim().toLowerCase();
     const p = adminPassword;
+    setIsLoggingIn(true);
+    setAuthError('');
 
-    const credsStr = localStorage.getItem('gm_adminshp_creds');
-    let validCreds: Record<string, { u: string; p: string }> = {
-      'adminshp1': { u: 'adminera', p: 'gmadminshp1' },
-      'adminshp2': { u: 'admincika', p: 'gmadminshp2' },
-      'adminshp3': { u: 'adminvira', p: 'gmadminshp3' },
-      'adminshp4': { u: 'adminali', p: 'gmadminshp4' },
-    };
-
-    let matchedSlot: string | null = null;
-
-    if (credsStr) {
-      try {
-        const customCreds = JSON.parse(credsStr);
-        for (const slot of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
-          const slotCred = customCreds[slot];
-          if (slotCred && slotCred.username && slotCred.username.trim().toLowerCase() === u) {
-            if (slotCred.password === p) {
-              matchedSlot = slot;
-            }
-          }
+    try {
+      const res = await loginWithBackend(u, p);
+      if (res.success && res.user && (res.user.role === 'adminshp' || res.user.role === 'admin')) {
+        const matchedSlot = res.user.slot || res.user.username;
+        setIsAuthenticated(true);
+        setCurrentAdminUser(matchedSlot);
+        const routeName = getSlotRouteName(matchedSlot);
+        window.history.pushState(null, '', `/${routeName}`);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        try {
+          sessionStorage.setItem('gm_adminshp_auth', 'true');
+          sessionStorage.setItem('gm_adminshp_user', matchedSlot);
+          localStorage.setItem(`gm_adminshp_auth_${matchedSlot}`, 'true');
+          localStorage.setItem('gm_adminshp_user', matchedSlot);
+        } catch (err) {
+          console.warn('Storage restricted', err);
         }
-      } catch (e) {}
-    }
-
-    if (!matchedSlot) {
-      // Check default fallback only if slot hasn't been customized
-      for (const slot of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
-        let isCustomized = false;
-        if (credsStr) {
-          try {
-            const customCreds = JSON.parse(credsStr);
-            if (customCreds[slot]) isCustomized = true;
-          } catch (e) {}
-        }
-        const target = validCreds[slot];
-        if (!isCustomized && target.u === u && target.p === p) {
-          matchedSlot = slot;
-        }
+        setAuthError('');
+        logAdminShpAction(matchedSlot, 'Login', `Berhasil login ke sistem portal adminshp`);
+      } else {
+        setAuthError(res.error || (currentLang === 'id' ? 'Username atau password salah!' : 'Invalid username or password!'));
       }
-    }
-
-    if (matchedSlot) {
-      setIsAuthenticated(true);
-      setCurrentAdminUser(matchedSlot);
-      const routeName = getSlotRouteName(matchedSlot);
-      window.history.pushState(null, '', `/${routeName}`);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-      try {
-        sessionStorage.setItem('gm_adminshp_auth', 'true');
-        sessionStorage.setItem('gm_adminshp_user', matchedSlot);
-        localStorage.setItem(`gm_adminshp_auth_${matchedSlot}`, 'true');
-        localStorage.setItem('gm_adminshp_user', matchedSlot);
-      } catch (err) {
-        console.warn('Storage restricted', err);
-      }
-      setAuthError('');
-      // Log login activity
-      logAdminShpAction(matchedSlot, 'Login', `Berhasil login ke sistem portal adminshp`);
-    } else {
-      setAuthError(currentLang === 'id' ? 'Username atau password salah!' : 'Invalid username or password!');
+    } catch (err: any) {
+      setAuthError(err.message || 'Gagal terhubung ke server auth');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
   const handleLogout = () => {
+    clientLogout();
     if (currentAdminUser) {
       logAdminShpAction(currentAdminUser, 'Logout', `Berhasil logout dari sistem portal adminshp`);
     }
@@ -1209,10 +1181,20 @@ Format Chat : ${data.notes || '-'}`;
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-orange-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md hover:bg-orange-700 transition-all cursor-pointer mt-2 font-sans flex items-center justify-center gap-1.5 active:scale-98"
+              disabled={isLoggingIn}
+              className="w-full rounded-xl bg-orange-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md hover:bg-orange-700 transition-all cursor-pointer mt-2 font-sans flex items-center justify-center gap-1.5 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>Authenticate Portal</span>
-              <ChevronRight className="h-4 w-4" />
+              {isLoggingIn ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Memverifikasi...</span>
+                </>
+              ) : (
+                <>
+                  <span>Authenticate Portal</span>
+                  <ChevronRight className="h-4 w-4" />
+                </>
+              )}
             </button>
           </form>
 
@@ -1832,9 +1814,9 @@ Format Chat : ${data.notes || '-'}`;
 
                               {/* Target */}
                               <td className="px-4 py-3 truncate">
-                                {order.target_link.startsWith('http') ? (
+                                {sanitizeUrl(order.target_link) !== '#' ? (
                                   <a 
-                                    href={order.target_link} 
+                                    href={sanitizeUrl(order.target_link)} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
                                     className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-mono text-[10px] font-semibold"
@@ -2303,7 +2285,7 @@ Format Chat : ${data.notes || '-'}`;
                                       })}
                                     </div>
                                     <a 
-                                      href={item.maps_link}
+                                      href={sanitizeUrl(item.maps_link)}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-mono text-[10px] mt-1.5 truncate max-w-full font-semibold"
@@ -2407,9 +2389,9 @@ Format Chat : ${data.notes || '-'}`;
                                           : 'bg-white'
                                       }`}
                                     />
-                                    {item.proof_link && (
+                                    {item.proof_link && sanitizeUrl(item.proof_link) !== '#' && (
                                       <a
-                                        href={item.proof_link}
+                                        href={sanitizeUrl(item.proof_link)}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="text-[9px] text-emerald-600 hover:underline font-mono inline-block mt-1.5 truncate max-w-full font-bold"

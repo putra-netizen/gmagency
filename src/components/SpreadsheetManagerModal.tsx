@@ -19,6 +19,7 @@ import { motion } from 'motion/react';
 import { MapsReview, ShopeeOrder, Order } from '../types';
 import { generateBuildAllTablesAppsScript, syncAllTablesFromSpreadsheetUrl } from '../utils/spreadsheetIntegration';
 import { toast } from '../utils/toast';
+import { getAuthHeaders } from '../lib/auth';
 
 interface SpreadsheetManagerModalProps {
   isOpen: boolean;
@@ -119,7 +120,7 @@ export function SpreadsheetManagerModal({
     try {
       const res = await fetch('/api/sheets/push-batch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           webhookUrl: appsScriptUrl.trim(),
           mapsReviews,

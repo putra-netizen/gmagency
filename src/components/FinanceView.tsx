@@ -9,6 +9,7 @@ import {
   Lock, Key, ExternalLink, ArrowLeft, ShieldCheck, Globe, Loader2, AlertCircle, RotateCcw, Smartphone, Eye, EyeOff, Shield
 } from 'lucide-react';
 import { toast } from '../utils/toast';
+import { loginWithBackend } from '../lib/auth';
 
 export const FINANCE_WEB_URL = 'https://pay.gmsolution.store';
 
@@ -18,10 +19,12 @@ export const FINANCE_WEB_URL = 'https://pay.gmsolution.store';
  * @returns boolean indicating if PIN is authorized
  */
 export const checkAuth = async (pinInput: string): Promise<boolean> => {
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  const validPin = localStorage.getItem('gm_finance_pin') || '0101';
-  const clean = pinInput.trim();
-  return clean === validPin || clean === '0101';
+  try {
+    const res = await loginWithBackend('finance', pinInput.trim());
+    return res.success && res.user?.role === 'finance';
+  } catch {
+    return false;
+  }
 };
 
 interface FinanceViewProps {
@@ -69,8 +72,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setPinError(false);
 
     try {
-      const isValid = await checkAuth(pinInput);
-      if (isValid) {
+      const res = await loginWithBackend('finance', pinInput.trim());
+      if (res.success && res.user?.role === 'finance') {
         // Mark device as authenticated in localStorage so owner doesn't need to re-enter PIN
         localStorage.setItem('gm_finance_device_auth', 'true');
         localStorage.setItem('gm_finance_auth_time', new Date().toISOString());
@@ -82,7 +85,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         openFinanceWebInNewTab();
       } else {
         setPinError(true);
-        toast.error('PIN Keuangan Salah! Akses ditolak.');
+        toast.error(res.error || 'PIN Keuangan Salah! Akses ditolak.');
       }
     } catch (err) {
       toast.error('Gagal memverifikasi PIN Keuangan.');

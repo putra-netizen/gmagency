@@ -5,6 +5,7 @@
  */
 
 import { MapsReview, ShopeeOrder, Order } from '../types';
+import { getAuthHeaders } from '../lib/auth';
 
 export interface SpreadsheetConfig {
   sheetUrl: string;
@@ -1404,7 +1405,7 @@ export const syncFromGoogleSheetsUrl = async (
   try {
     const serverRes = await fetch('/api/sheets/sync-from-url', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ sheetUrl: cleanUrl })
     });
 
@@ -1705,7 +1706,7 @@ export const syncAllTablesFromSpreadsheetUrl = async (
   try {
     const serverRes = await fetch('/api/sheets/sync-from-url', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ sheetUrl: cleanUrl })
     });
 
@@ -1806,7 +1807,7 @@ export const syncAllTablesFromSpreadsheetUrl = async (
   try {
     fetch('/api/sheets/push-batch', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ mapsReviews: mergedMaps, shopeeOrders: mergedShopee })
     }).catch(() => {});
   } catch {}

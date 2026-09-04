@@ -23,6 +23,7 @@ import { createServer as createViteServer } from 'vite';
 import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus, MapsReview, ShopeeOrder } from './src/types';
 import { createClient } from '@supabase/supabase-js';
+import { loginHandler, meHandler, requireAuth, requireRole, saveAuthOverride } from './server/auth';
 
 const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
@@ -100,7 +101,25 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.get('/api/stats', (req, res, next) => {
+// --- AUTHENTICATION & SECURITY ENDPOINTS (TAHAP 1 & 2) ---
+app.post('/api/auth/login', loginHandler);
+app.get('/api/auth/me', requireAuth, meHandler);
+app.post('/api/auth/adminshp/update-password', requireRole('admin'), async (req, res) => {
+  const { slot, password } = req.body;
+  if (!slot || !password) {
+    return res.status(400).json({ error: 'Slot dan password wajib diisi!' });
+  }
+  try {
+    const bcrypt = (await import('bcryptjs')).default;
+    const hash = bcrypt.hashSync(password.trim(), 10);
+    saveAuthOverride(slot, hash);
+    res.json({ success: true, message: `Password ${slot} berhasil diperbarui di server` });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal memperbarui password' });
+  }
+});
+
+app.get('/api/stats', requireAuth, (req, res, next) => {
   req.url = '/dashboard/stats';
   app._router.handle(req, res, next);
 });
@@ -316,7 +335,7 @@ app.get('/api/products', async (req, res) => {
   res.json(db.products || INITIAL_PRODUCTS);
 });
 
-app.post('/api/products', async (req, res) => {
+app.post('/api/products', requireAuth, async (req, res) => {
   const newProduct: Product = {
     id: 'prod-' + Date.now(),
     name: req.body.name || 'Produk Baru',
@@ -337,7 +356,7 @@ app.post('/api/products', async (req, res) => {
   res.status(201).json(newProduct);
 });
 
-app.put('/api/products/:id', async (req, res) => {
+app.put('/api/products/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const db = readDatabase();
   const index = db.products.findIndex((p: Product) => p.id === id);
@@ -361,7 +380,7 @@ app.put('/api/products/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/products/:id', async (req, res) => {
+app.delete('/api/products/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const db = readDatabase();
   const initialLength = db.products.length;
@@ -376,7 +395,7 @@ app.delete('/api/products/:id', async (req, res) => {
 });
 
 // 2. ORDERS API (Managed locally via db.json)
-app.get('/api/orders', async (req, res) => {
+app.get('/api/orders', requireAuth, async (req, res) => {
   const db = readDatabase();
   const deletedOrders = db.deleted_orders || [];
 
@@ -426,7 +445,7 @@ app.post('/api/orders', async (req, res) => {
   res.status(201).json(newOrder);
 });
 
-app.put('/api/orders/:id', async (req, res) => {
+app.put('/api/orders/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const db = readDatabase();
   const index = (db.orders || []).findIndex((o: Order) => o.id === id);
@@ -460,7 +479,7 @@ app.put('/api/orders/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/orders/:id', async (req, res) => {
+app.delete('/api/orders/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const db = readDatabase();
   
@@ -494,7 +513,7 @@ app.get('/api/shopee_orders', async (req, res) => {
   res.json(filteredLocal);
 });
 
-app.post('/api/shopee_orders', async (req, res) => {
+app.post('/api/shopee_orders', requireAuth, async (req, res) => {
   const newOrder = {
     id: req.body.id || ('shp-' + Date.now().toString().slice(-6)),
     ...req.body,
@@ -524,7 +543,7 @@ app.post('/api/shopee_orders', async (req, res) => {
   res.status(201).json(newOrder);
 });
 
-app.put('/api/shopee_orders/:id', async (req, res) => {
+app.put('/api/shopee_orders/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
@@ -565,7 +584,7 @@ app.put('/api/shopee_orders/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/shopee_orders/:id', async (req, res) => {
+app.delete('/api/shopee_orders/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
@@ -651,7 +670,7 @@ app.get('/api/maps_reviews', async (req, res) => {
   res.json(filteredLocal);
 });
 
-app.post('/api/maps_reviews', async (req, res) => {
+app.post('/api/maps_reviews', requireAuth, async (req, res) => {
   const cleanAccounts = parseServerReviewerAccounts(req.body.reviewer_accounts);
 
   const newReview = {
@@ -689,7 +708,7 @@ app.post('/api/maps_reviews', async (req, res) => {
   res.status(201).json(newReview);
 });
 
-app.put('/api/maps_reviews/:id', async (req, res) => {
+app.put('/api/maps_reviews/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const reqAccounts = req.body.reviewer_accounts !== undefined ? parseServerReviewerAccounts(req.body.reviewer_accounts) : undefined;
   const updatePayload = { ...req.body };
@@ -749,7 +768,7 @@ app.put('/api/maps_reviews/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/maps_reviews/:id', async (req, res) => {
+app.delete('/api/maps_reviews/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
@@ -787,7 +806,7 @@ app.delete('/api/maps_reviews/:id', async (req, res) => {
 });
 
 // 3. FINANCIAL & STATS DASHBOARD API
-app.get('/api/dashboard/stats', async (req, res) => {
+app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   const db = readDatabase();
   const deletedOrders = db.deleted_orders || [];
 
@@ -922,7 +941,7 @@ ${text}`,
 // --- 5. GOOGLE SPREADSHEET 2-WAY SYNC & EXPORT/IMPORT API ---
 
 // 5.1 EXPORT CSV (100% Matching Google Sheets Format)
-app.get('/api/sheets/export-csv', async (req, res) => {
+app.get('/api/sheets/export-csv', requireAuth, async (req, res) => {
   const type = (req.query.type as string) || 'maps_reviews';
   const db = readDatabase();
   const deletedMaps = db.deleted_maps_reviews || [];
@@ -1151,7 +1170,7 @@ function parseServerCsvToRecords(csvText: string): Record<string, string>[] {
 }
 
 // 5.2 SYNC & IMPORT LANGSUNG DARI GOOGLE SPREADSHEET URL (PULL DATA LENGKAP MAPS & SHOPEE)
-app.post('/api/sheets/sync-from-url', async (req, res) => {
+app.post('/api/sheets/sync-from-url', requireAuth, async (req, res) => {
   try {
     const rawUrl = (req.body.sheetUrl || '').trim() || 'https://docs.google.com/spreadsheets/d/1OQ38cPjGPNcc6G2lQuQLwDlXTQMIqoUvNN0jaWCZwHI/edit';
     
@@ -1450,7 +1469,7 @@ app.post('/api/sheets/sync-from-url', async (req, res) => {
 });
 
 // 5.3 PUSH SINGLE RECORD KE GOOGLE SPREADSHEET VIA APPS SCRIPT WEBHOOK
-app.post('/api/sheets/push-single', async (req, res) => {
+app.post('/api/sheets/push-single', requireAuth, async (req, res) => {
   try {
     const { webhookUrl, type, action, payload, no_order, status, statusBaru, sheet_name } = req.body;
     const url = (webhookUrl || '').trim();
@@ -1505,7 +1524,7 @@ app.post('/api/sheets/push-single', async (req, res) => {
 });
 
 // 5.4 PUSH BATCH / TRANSAKSI KE GOOGLE SPREADSHEET VIA APPS SCRIPT WEBHOOK (SERVER PROXY)
-app.post('/api/sheets/push-batch', async (req, res) => {
+app.post('/api/sheets/push-batch', requireAuth, async (req, res) => {
   try {
     const { webhookUrl, reviews } = req.body;
     const url = (webhookUrl || '').trim() || 'https://script.google.com/macros/s/AKfycbzeu460eHLYqtLmJnBo9-eFGzqxV8zWK1AOuubiFHy0HNoJZ-t5J0q3CQkkY-IurTiahA/exec';
@@ -1569,7 +1588,7 @@ app.post('/api/sheets/push-batch', async (req, res) => {
 });
 
 // 5.5 TEST KONEKSI APPS SCRIPT WEBHOOK
-app.post('/api/sheets/test-webhook', async (req, res) => {
+app.post('/api/sheets/test-webhook', requireAuth, async (req, res) => {
   try {
     const { webhookUrl } = req.body;
     const url = (webhookUrl || '').trim();

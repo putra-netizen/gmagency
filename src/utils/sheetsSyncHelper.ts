@@ -21,6 +21,7 @@ const STORAGE_KEY = 'gmsolution_sheets_sync_config';
 const OFFLINE_QUEUE_KEY = 'gm_offline_sync_queue';
 
 export const DEFAULT_SHEETS_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzeu460eHLYqtLmJnBo9-eFGzqxV8zWK1AOuubiFHy0HNoJZ-t5J0q3CQkkY-IurTiahA/exec';
+import { getAuthHeaders } from '../lib/auth';
 
 // ==========================================
 // OFFLINE-FIRST SYNC QUEUE MANAGEMENT
@@ -250,7 +251,7 @@ export async function triggerDirectSheetsSync(
   try {
     const proxyRes = await fetch('/api/sheets/push-single', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         webhookUrl: url,
         type,
@@ -332,7 +333,7 @@ export async function triggerBatchMapsReviewsSync(reviews: any[]): Promise<{ suc
     // 1. Try server proxy endpoint first
     const proxyRes = await fetch('/api/sheets/push-batch', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         webhookUrl: url,
         reviews

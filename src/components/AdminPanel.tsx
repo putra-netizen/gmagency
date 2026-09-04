@@ -24,6 +24,8 @@ import { ModernFilterSelect } from './ModernFilterSelect';
 import { FinanceView } from './FinanceView';
 import { parseAccountsList } from '../utils/csvExport';
 import { pauseAutoSyncFor } from '../utils/autoSyncManager';
+import { sanitizeUrl } from '../utils/security';
+import { loginWithBackend, clientLogout, getAuthHeaders } from '../lib/auth';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
@@ -427,24 +429,35 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   const recentLocalStatusUpdates = useRef<Map<string, { status: string; timestamp: number }>>(new Map());
 
   // Authentication handlers
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'gmadmin') {
-      setIsAuthenticated(true);
-      try {
-        sessionStorage.setItem('gm_admin_auth', 'true');
-        localStorage.setItem('gm_admin_auth', 'true');
-      } catch (err) {
-        console.warn('Storage restricted', err);
+    setIsLoggingIn(true);
+    setAuthError('');
+    try {
+      const res = await loginWithBackend(username.trim(), password);
+      if (res.success && res.user?.role === 'admin') {
+        setIsAuthenticated(true);
+        try {
+          sessionStorage.setItem('gm_admin_auth', 'true');
+          localStorage.setItem('gm_admin_auth', 'true');
+        } catch (err) {
+          console.warn('Storage restricted', err);
+        }
+        setAuthError('');
+        window.dispatchEvent(new CustomEvent('admin-auth-change'));
+      } else {
+        setAuthError(res.error || (currentLang === 'id' ? 'Username atau password salah!' : 'Invalid username or password!'));
       }
-      setAuthError('');
-      window.dispatchEvent(new CustomEvent('admin-auth-change'));
-    } else {
-      setAuthError(currentLang === 'id' ? 'Username atau password salah!' : 'Invalid username or password!');
+    } catch (err: any) {
+      setAuthError(err.message || 'Gagal terhubung ke server auth');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
   const handleLogout = () => {
+    clientLogout();
     setIsAuthenticated(false);
     try {
       sessionStorage.removeItem('gm_admin_auth');
@@ -1528,9 +1541,11 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md hover:bg-blue-700 transition-colors cursor-pointer mt-2 font-sans"
+              disabled={isLoggingIn}
+              className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md hover:bg-blue-700 transition-colors cursor-pointer mt-2 font-sans disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              Sign In
+              {isLoggingIn && <RefreshCw className="h-4 w-4 animate-spin" />}
+              <span>{isLoggingIn ? 'Memverifikasi...' : 'Sign In'}</span>
             </button>
           </form>
         </div>
@@ -2042,9 +2057,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
                               {/* Target Details */}
                               <td className="px-4 py-3">
-                                {order.target_link && (
+                                {order.target_link && sanitizeUrl(order.target_link) !== '#' ? (
                                   <a 
-                                    href={order.target_link} 
+                                    href={sanitizeUrl(order.target_link)} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
                                     className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium truncate"
@@ -2053,7 +2068,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                     <Link2 className="h-3 w-3 shrink-0 text-blue-500" />
                                     <span className="truncate">{order.target_link}</span>
                                   </a>
-                                )}
+                                ) : order.target_link ? (
+                                  <span className="text-[11px] text-slate-700 font-mono truncate block">{order.target_link}</span>
+                                ) : null}
                                 {order.target_spam_phone && (
                                   <div className="text-[11px] text-amber-700 font-bold flex items-center gap-1 mt-0.5 truncate">
                                     <Phone className="h-3 w-3 text-amber-500 shrink-0" />
@@ -2308,9 +2325,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
                                 {/* Target Details */}
                                 <td className="px-4 py-3">
-                                  {order.target_link && (
+                                  {order.target_link && sanitizeUrl(order.target_link) !== '#' ? (
                                     <a 
-                                      href={order.target_link} 
+                                      href={sanitizeUrl(order.target_link)} 
                                       target="_blank" 
                                       rel="noopener noreferrer"
                                       className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium truncate"
@@ -2319,7 +2336,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                       <Link2 className="h-3 w-3 shrink-0 text-blue-500" />
                                       <span className="truncate">{order.target_link}</span>
                                     </a>
-                                  )}
+                                  ) : order.target_link ? (
+                                    <span className="text-[11px] text-slate-700 font-mono truncate block">{order.target_link}</span>
+                                  ) : null}
                                   {order.target_spam_phone && (
                                     <div className="text-[11px] text-amber-700 font-bold flex items-center gap-1 mt-0.5 truncate">
                                       <Phone className="h-3 w-3 text-amber-500 shrink-0" />
@@ -2881,9 +2900,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
                             {/* Target Link */}
                             <td className="px-4 py-3">
-                              {review.maps_link ? (
+                              {review.maps_link && sanitizeUrl(review.maps_link) !== '#' ? (
                                 <a
-                                  href={review.maps_link}
+                                  href={sanitizeUrl(review.maps_link)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium truncate"
@@ -2892,6 +2911,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                   <Link2 className="h-3 w-3 shrink-0 text-blue-500" />
                                   <span className="truncate">{review.maps_link}</span>
                                 </a>
+                              ) : review.maps_link ? (
+                                <span className="text-[11px] text-slate-700 font-mono truncate block">{review.maps_link}</span>
                               ) : (
                                 <span className="text-slate-400">-</span>
                               )}
@@ -3030,9 +3051,9 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                                 onSave={(val) => handleUpdateProofLink(review.id, val)}
                                 className="w-full rounded-lg border border-slate-200 px-2 py-1 text-[10px] outline-none focus:border-emerald-500 text-slate-700 font-mono bg-white"
                               />
-                              {review.proof_link && (
+                              {review.proof_link && sanitizeUrl(review.proof_link) !== '#' && (
                                 <a
-                                  href={review.proof_link}
+                                  href={sanitizeUrl(review.proof_link)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-[9px] text-emerald-600 hover:underline font-mono inline-block mt-1 truncate max-w-full font-bold"
@@ -3458,16 +3479,29 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={async () => {
+                                const newUsername = editingCreds[slot].username.trim().toLowerCase() || slot;
+                                const newPassword = editingCreds[slot].password.trim() || `gm${slot}`;
                                 const updated = {
                                   ...adminshpCreds,
                                   [slot]: {
-                                    username: editingCreds[slot].username.trim().toLowerCase() || slot,
-                                    password: editingCreds[slot].password.trim() || `gm${slot}`
+                                    username: newUsername,
+                                    password: newPassword
                                   }
                                 };
                                 localStorage.setItem('gm_adminshp_creds', JSON.stringify(updated));
                                 setAdminshpCreds(updated);
+
+                                try {
+                                  await fetch('/api/auth/adminshp/update-password', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                    body: JSON.stringify({ slot, password: newPassword })
+                                  });
+                                } catch (e) {
+                                  console.warn('Failed to update password on server:', e);
+                                }
+
                                 logAdminShpAction('Main Admin', 'Ubah Kredensial', `Mengubah kredensial slot ${slot}. Username baru: "${updated[slot].username}"`);
                                 toast.success(`Kredensial untuk ${slot} berhasil diperbarui!`);
                               }}

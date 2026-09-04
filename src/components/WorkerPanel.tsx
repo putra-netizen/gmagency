@@ -8,6 +8,8 @@ import { Order, Language } from '../types';
 import { dbGetOrders, dbUpdateOrder } from '../lib/supabase';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { toast } from '../utils/toast';
+import { sanitizeUrl } from '../utils/security';
+import { loginWithBackend, clientLogout } from '../lib/auth';
 import { 
   Database, 
   Lock, 
@@ -33,6 +35,7 @@ interface WorkerPanelProps {
 
 export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
   // Authentication states
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [currentWorker, setCurrentWorker] = useState<string | null>(() => {
     try {
       return sessionStorage.getItem('gm_worker_auth') || null;
@@ -90,21 +93,19 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
   }, [currentWorker]);
 
   // Handle Login submission
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const user = usernameInput.trim().toLowerCase();
     const password = passwordInput.trim();
+    setIsLoggingIn(true);
+    setLoginError('');
 
-    // Validate worker1 - worker8
-    const workerMatch = user.match(/^worker([1-8])$/);
-    if (workerMatch) {
-      const workerNum = workerMatch[1];
-      const expectedPassword = `gmworker${workerNum}`;
-
-      if (password === expectedPassword) {
-        setCurrentWorker(user);
+    try {
+      const res = await loginWithBackend(user, password);
+      if (res.success && res.user && res.user.role === 'worker') {
+        setCurrentWorker(res.user.username);
         try {
-          sessionStorage.setItem('gm_worker_auth', user);
+          sessionStorage.setItem('gm_worker_auth', res.user.username);
         } catch (err) {
           console.warn('Session storage restricted', err);
         }
@@ -112,15 +113,18 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
         setUsernameInput('');
         setPasswordInput('');
       } else {
-        setLoginError(currentLang === 'id' ? 'Password untuk worker tersebut salah!' : 'Incorrect password for this worker!');
+        setLoginError(res.error || (currentLang === 'id' ? 'Username atau password worker salah!' : 'Invalid worker username or password!'));
       }
-    } else {
-      setLoginError(currentLang === 'id' ? 'Username tidak dikenali (Gunakan worker1 s/d worker8)!' : 'Username not recognized (Use worker1 to worker8)!');
+    } catch (err: any) {
+      setLoginError(err.message || 'Gagal menghubungi server auth');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
   // Handle Logout
   const handleLogout = () => {
+    clientLogout();
     setCurrentWorker(null);
     try {
       sessionStorage.removeItem('gm_worker_auth');
@@ -260,9 +264,11 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
 
             <button
               type="submit"
-              className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md hover:bg-blue-700 transition-colors cursor-pointer mt-2 font-sans"
+              disabled={isLoggingIn}
+              className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md hover:bg-blue-700 transition-colors cursor-pointer mt-2 font-sans disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {currentLang === 'id' ? 'Masuk Tugas' : 'Sign In To Tasks'}
+              {isLoggingIn && <RefreshCw className="h-4 w-4 animate-spin" />}
+              <span>{isLoggingIn ? 'Memverifikasi...' : (currentLang === 'id' ? 'Masuk Tugas' : 'Sign In To Tasks')}</span>
             </button>
           </form>
           <div className="text-center pt-2">
@@ -412,15 +418,19 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
                       {order.target_link && (
                         <div>
                           <span className="text-[10px] text-slate-400 uppercase font-bold block">Link Target</span>
-                          <a 
-                            href={order.target_link} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-blue-600 hover:underline font-mono inline-flex items-center gap-1 break-all"
-                          >
-                            <span>{order.target_link}</span>
-                            <ExternalLink className="h-3 w-3 shrink-0" />
-                          </a>
+                          {sanitizeUrl(order.target_link) !== '#' ? (
+                            <a 
+                              href={sanitizeUrl(order.target_link)} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-blue-600 hover:underline font-mono inline-flex items-center gap-1 break-all"
+                            >
+                              <span>{order.target_link}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            </a>
+                          ) : (
+                            <span className="text-slate-700 font-mono text-xs break-all">{order.target_link}</span>
+                          )}
                         </div>
                       )}
                       {order.target_spam_phone && (
@@ -535,9 +545,9 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
                         {/* Extra targets info if relevant */}
                         {(order.target_link || order.notes) && (
                           <div className="pt-1.5 flex items-center gap-3 text-[10px] text-slate-400 flex-wrap">
-                            {order.target_link && (
+                            {order.target_link && sanitizeUrl(order.target_link) !== '#' && (
                               <a 
-                                href={order.target_link} 
+                                href={sanitizeUrl(order.target_link)} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
                                 className="text-blue-500 hover:underline inline-flex items-center gap-0.5 truncate max-w-[200px]"
@@ -555,11 +565,11 @@ export default function WorkerPanel({ currentLang }: WorkerPanelProps) {
                         )}
 
                         {/* Proof link display */}
-                        {isDone && order.worker_proof_url && (
+                        {isDone && order.worker_proof_url && sanitizeUrl(order.worker_proof_url) !== '#' && (
                           <div className="pt-1 flex items-center gap-1.5 text-[11px] text-emerald-700">
                             <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
                             <a 
-                              href={order.worker_proof_url} 
+                              href={sanitizeUrl(order.worker_proof_url)} 
                               target="_blank" 
                               rel="noopener noreferrer" 
                               className="font-semibold hover:underline inline-flex items-center gap-0.5"

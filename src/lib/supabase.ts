@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Product, Order, DashboardStats, ShopeeOrder, MapsReview } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
+import { getAuthHeaders } from './auth';
 
 export function isDummyOrder(o: any): boolean {
   if (!o) return true;
@@ -334,6 +335,7 @@ async function safeFetch<T>(
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
+        ...getAuthHeaders(),
         ...(options?.headers || {})
       }
     };
@@ -743,7 +745,7 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
   try {
     const response = await fetch('/api/products', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(newProduct),
     });
     if (response.ok) {
@@ -766,7 +768,7 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
   try {
     const response = await fetch(`/api/products/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(product),
     });
     if (response.ok) {
@@ -811,6 +813,7 @@ export async function dbDeleteProduct(id: string): Promise<boolean> {
   try {
     const response = await fetch(`/api/products/${id}`, {
       method: 'DELETE',
+      headers: { ...getAuthHeaders() },
     });
     if (response.ok) {
       const contentType = response.headers.get('content-type');
@@ -887,7 +890,7 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
   try {
     const response = await fetch(`/api/orders/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(orderData),
     });
     if (response.ok) {
@@ -924,6 +927,7 @@ export async function dbDeleteOrder(id: string): Promise<boolean> {
   try {
     await fetch(`/api/orders/${id}`, {
       method: 'DELETE',
+      headers: { ...getAuthHeaders() },
     });
   } catch (err) {
     console.warn('Failed to delete order via API:', err);
@@ -1061,7 +1065,7 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
   try {
     const response = await fetch('/api/shopee_orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(dbOrder)
     });
     if (response.ok) {
@@ -1124,7 +1128,7 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
   try {
     const response = await fetch(`/api/shopee_orders/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(finalData)
     });
     if (response.ok) {
@@ -1273,7 +1277,7 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
   try {
     const response = await fetch('/api/maps_reviews', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(dbReview)
     });
     if (response.ok) {
@@ -1345,7 +1349,7 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
   try {
     const response = await fetch(`/api/maps_reviews/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(finalData)
     });
     if (response.ok) {
@@ -1408,7 +1412,8 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
 
   try {
     await fetch(`/api/maps_reviews/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: { ...getAuthHeaders() }
     });
   } catch (err) {
     console.warn('Failed to delete Maps review via API:', err);
