@@ -10,12 +10,16 @@ import {
   dbCreateMapsReview, 
   dbUpdateMapsReview, 
   dbDeleteMapsReview,
+  dbGetReportMaps,
+  dbCreateReportMap,
+  dbUpdateReportMap,
+  dbDeleteReportMap,
   dbIsSupabaseConnected
 } from '../lib/supabase';
 import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
-import { ShopeeOrder, MapsReview } from '../types';
+import { ShopeeOrder, MapsReview, ReportMap } from '../types';
 import { loginWithBackend, clientLogout } from '../lib/auth';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { ModernFilterSelect } from './ModernFilterSelect';
@@ -425,9 +429,10 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   // Loading states
   const [shopeeOrders, setShopeeOrders] = useState<ShopeeOrder[]>([]);
   const [mapsReviews, setMapsReviews] = useState<MapsReview[]>([]);
+  const [reportMaps, setReportMaps] = useState<ReportMap[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'maps_review' } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'maps_review' | 'report_map' } | null>(null);
   const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
 
   // Form Collapse States
@@ -505,6 +510,16 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [editMapsReviewType, setEditMapsReviewType] = useState<'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS'>('G_MAPS');
   const [editMapsAccounts, setEditMapsAccounts] = useState<string[]>([]);
 
+  // Report map edit state
+  const [editingReportMap, setEditingReportMap] = useState<ReportMap | null>(null);
+  const [isReportMapModalOpen, setIsReportMapModalOpen] = useState(false);
+  const [editRepClientName, setEditRepClientName] = useState('');
+  const [editRepStoreName, setEditRepStoreName] = useState('');
+  const [editRepMapsLink, setEditRepMapsLink] = useState('');
+  const [editRepSlot, setEditRepSlot] = useState(1);
+  const [editRepReason, setEditRepReason] = useState('');
+  const [editRepServiceType, setEditRepServiceType] = useState<'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS'>('G_MAPS');
+
   const handleOpenEditShopee = (order: ShopeeOrder) => {
     setEditingShopeeOrder(order);
     setEditShpStoreName(order.store_name || '');
@@ -580,6 +595,43 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     }
   };
 
+  const handleOpenEditReportMap = (item: ReportMap) => {
+    setEditingReportMap(item);
+    setEditRepClientName(item.client_name || '');
+    setEditRepStoreName(item.store_name || '');
+    setEditRepMapsLink(item.maps_link || '');
+    setEditRepSlot(item.slot || 1);
+    setEditRepReason(item.reason || item.notes || '');
+    setEditRepServiceType((item.service_type as any) || 'G_MAPS');
+    setIsReportMapModalOpen(true);
+  };
+
+  const handleSaveReportMapEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingReportMap) return;
+    try {
+      const updated: Partial<ReportMap> = {
+        client_name: editRepClientName,
+        store_name: editRepStoreName,
+        maps_link: editRepMapsLink,
+        slot: editRepSlot,
+        reason: editRepReason,
+        notes: editRepReason,
+        service_type: editRepServiceType,
+        status: editingReportMap.status
+      };
+      await dbUpdateReportMap(editingReportMap.id, updated);
+      toast.success(currentLang === 'id' ? 'Report Maps berhasil diperbarui' : 'Report Maps updated successfully');
+      setIsReportMapModalOpen(false);
+      setEditingReportMap(null);
+      const data = await dbGetReportMaps();
+      setReportMaps(data);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memperbarui Report Maps');
+    }
+  };
+
   // Listen to route changes and sync with username pre-fill & session security
   useEffect(() => {
     const handleRouteSync = () => {
@@ -633,19 +685,21 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   // Fetch all initial data if authenticated
   const loadData = async (silent: boolean = false, forceRefresh: boolean = false) => {
     if (!isAuthenticated || !currentAdminUser) return;
-    if (!silent && shopeeOrders.length === 0 && mapsReviews.length === 0) {
+    if (!silent && shopeeOrders.length === 0 && mapsReviews.length === 0 && reportMaps.length === 0) {
       setIsLoading(true);
     }
     try {
-      const [orders, reviews] = await Promise.all([
+      const [orders, reviews, reports] = await Promise.all([
         dbGetShopeeOrders(50000, forceRefresh),
-        dbGetMapsReviews(50000, forceRefresh)
+        dbGetMapsReviews(50000, forceRefresh),
+        dbGetReportMaps(50000, forceRefresh)
       ]);
       
       setShopeeOrders(orders);
       setMapsReviews(reviews);
+      setReportMaps(reports);
     } catch (error) {
-      console.error('Error loading Shopee and Maps data:', error);
+      console.error('Error loading Shopee, Maps, and Report data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -672,6 +726,9 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
       if (detail && Array.isArray(detail.shopeeData) && Array.isArray(detail.mapsData)) {
         setShopeeOrders(detail.shopeeData);
         setMapsReviews(detail.mapsData);
+        if (Array.isArray(detail.reportMapsData)) {
+          setReportMaps(detail.reportMapsData);
+        }
         return;
       }
       loadData(true, false);
@@ -716,6 +773,10 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
 
       dbGetShopeeOrders(50000, false).then(shopeeData => {
         setShopeeOrders(shopeeData);
+      }).catch(console.error);
+
+      dbGetReportMaps(50000, false).then(reportsData => {
+        setReportMaps(reportsData);
       }).catch(console.error);
     }, 15000);
 
@@ -1075,23 +1136,22 @@ Format Chat : ${data.notes || '-'}`;
     }
 
     try {
-      const newReport = await dbCreateMapsReview({
+      const newReport = await dbCreateReportMap({
         id: 'rep-' + Date.now().toString().slice(-6),
-        order_kind: 'REPORT',
-        store_name: formReportMaps.storeName,
-        client_name: formReportMaps.clientName,
-        review_type: formReportMaps.reviewType,
-        target_count: formReportMaps.targetCount || 1,
         maps_link: formReportMaps.mapsLink,
+        client_name: formReportMaps.clientName,
+        store_name: formReportMaps.storeName,
+        service_type: formReportMaps.reviewType,
+        slot: formReportMaps.targetCount || 1,
+        reason: formReportMaps.notes,
         notes: formReportMaps.notes,
-        reviewer_accounts: [],
         proof_link: '',
         status: 'READY',
         payment_status: 'UNPAID',
         created_by: currentAdminUser
       });
 
-      setMapsReviews(prev => [newReport, ...prev]);
+      setReportMaps(prev => [newReport, ...prev]);
 
       // Log action
       if (currentAdminUser) {
@@ -1130,6 +1190,63 @@ Format Chat : ${data.notes || '-'}`;
     } catch (err) {
       console.error(err);
       toast.error(currentLang === 'id' ? `Gagal menambah data: ${err instanceof Error ? err.message : String(err)}` : `Failed to create data: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Update Report Maps Payment Status
+  const handleUpdateReportPaymentStatus = async (id: string, payment_status: 'PAID' | 'UNPAID') => {
+    setReportMaps(prev => prev.map(r => r.id === id ? { ...r, payment_status } : r));
+    try {
+      await dbUpdateReportMap(id, { payment_status });
+      if (currentAdminUser) {
+        const target = reportMaps.find(r => r.id === id);
+        logAdminShpAction(currentAdminUser, 'Update Status Pembayaran Report', `Mengubah status bayar "${target?.store_name || id}" menjadi ${payment_status}`);
+      }
+      toast.success(payment_status === 'PAID' ? 'Status: PAID' : 'Status: UNPAID');
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memperbarui status pembayaran');
+    }
+  };
+
+  // Update Report Maps Proof Link
+  const handleUpdateReportProofLink = async (id: string, value: string) => {
+    const target = reportMaps.find(r => r.id === id);
+    try {
+      await dbUpdateReportMap(id, { proof_link: value });
+      setReportMaps(prev => prev.map(r => r.id === id ? { ...r, proof_link: value } : r));
+      if (currentAdminUser) {
+        logAdminShpAction(currentAdminUser, 'Update Bukti Link Report', `Memperbarui bukti link untuk report store "${target?.store_name || 'unknown'}"`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Update Report Maps Reason/Notes
+  const handleUpdateReportReason = async (id: string, value: string) => {
+    try {
+      await dbUpdateReportMap(id, { reason: value, notes: value });
+      setReportMaps(prev => prev.map(r => r.id === id ? { ...r, reason: value, notes: value } : r));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Report Map Item
+  const handleDeleteReportMap = (id: string) => {
+    setDeleteConfirm({ id, type: 'report_map' });
+  };
+
+  const executeDeleteReportMap = async (id: string) => {
+    try {
+      await dbDeleteReportMap(id);
+      setReportMaps(prev => prev.filter(r => r.id !== id));
+      setDeleteConfirm(null);
+      toast.success('Data Report Maps berhasil dihapus.');
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal menghapus data.');
     }
   };
 
@@ -1390,14 +1507,37 @@ Format Chat : ${data.notes || '-'}`;
   const paginatedReviewMaps = filteredReviewMaps.slice((pageMaps - 1) * ITEMS_PER_PAGE, pageMaps * ITEMS_PER_PAGE);
   const paginatedMapsReviews = paginatedReviewMaps; // Alias for safety
   const mapsReviewsOnly = mapsReviews.filter(review => !isReportItem(review));
-  const reportMapsReviews = mapsReviews.filter(review => isReportItem(review));
+  
+  // Combine dedicated reportMaps with any legacy items from mapsReviews
+  const legacyReportMaps: ReportMap[] = mapsReviews
+    .filter(review => isReportItem(review))
+    .map(r => ({
+      id: r.id,
+      maps_link: r.maps_link || '',
+      client_name: r.client_name || '',
+      store_name: r.store_name || '',
+      service_type: (r.review_type as any) || 'G_MAPS',
+      slot: r.target_count || 1,
+      reason: r.notes || '',
+      notes: r.notes || '',
+      proof_link: r.proof_link || '',
+      status: (r.status as any) || 'READY',
+      payment_status: r.payment_status || 'UNPAID',
+      created_by: r.created_by,
+      created_at: r.created_at,
+      updated_at: r.updated_at
+    }));
+
+  const allReportMaps: ReportMap[] = [
+    ...reportMaps,
+    ...legacyReportMaps.filter(leg => !reportMaps.some(rm => rm.id === leg.id))
+  ];
 
   // Filtered and sorted Report Maps (for Tab 'report_maps')
-  const filteredReportMaps = mapsReviews
-    .filter(review => isReportItem(review))
-    .filter(review => isWithinTimeframe(review.created_at, timeFilterReportMaps))
-    .filter(review => {
-      const stat = review.status || 'PENDING';
+  const filteredReportMaps = allReportMaps
+    .filter(item => isWithinTimeframe(item.created_at, timeFilterReportMaps))
+    .filter(item => {
+      const stat = item.status || 'READY';
       if (sortReportMaps === 'pending') return stat === 'PENDING';
       if (sortReportMaps === 'progress') return stat === 'PROGRESS';
       if (sortReportMaps === 'ready') return stat === 'READY';
@@ -1405,27 +1545,28 @@ Format Chat : ${data.notes || '-'}`;
       if (sortReportMaps === 'done') return stat === 'DONE';
       return true; // if 'all'
     })
-    .filter(review => {
+    .filter(item => {
+      const st = item.service_type || 'G_MAPS';
       if (reportTypeFilter === 'TRIPAD') {
-        return review.review_type === 'TRIPAD';
+        return st === 'TRIPAD';
       }
       if (reportTypeFilter === 'GMAPS') {
-        return review.review_type === 'G_MAPS' || !review.review_type;
+        return st === 'G_MAPS';
       }
       if (reportTypeFilter === 'REVIEW APPS') {
-        return review.review_type === 'REVIEW_APPS';
+        return st === 'REVIEW_APPS';
       }
       return true; // if 'all'
     })
-    .filter(review => {
+    .filter(item => {
       if (!searchReportMaps) return true;
       const q = searchReportMaps.toLowerCase();
       return (
-        (review.id || '').toLowerCase().includes(q) ||
-        (review.store_name || '').toLowerCase().includes(q) ||
-        (review.client_name || '').toLowerCase().includes(q) ||
-        (review.notes || '').toLowerCase().includes(q) ||
-        (review.review_type || '').toLowerCase().includes(q)
+        (item.id || '').toLowerCase().includes(q) ||
+        (item.store_name || '').toLowerCase().includes(q) ||
+        (item.client_name || '').toLowerCase().includes(q) ||
+        (item.reason || item.notes || '').toLowerCase().includes(q) ||
+        (item.service_type || '').toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -2797,7 +2938,7 @@ Format Chat : ${data.notes || '-'}`;
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                          {filteredReportMaps.length} / {reportMapsReviews.length} Data
+                          {filteredReportMaps.length} / {allReportMaps.length} Data
                         </span>
                       </div>
                     </div>
@@ -2897,9 +3038,9 @@ Format Chat : ${data.notes || '-'}`;
                             </tr>
                           ) : (
                             paginatedReportMaps.map((item) => {
-                              const isTripad = item.review_type === 'TRIPAD';
-                              const isApps = item.review_type === 'REVIEW_APPS';
-                              const formatStr = `Link: ${item.maps_link}\nNama cust: ${item.client_name}\nNama st: ${item.store_name || '-'}\nJenis Jasa: ${isTripad ? 'TRIPAD' : isApps ? 'APPS' : 'G MAPS'}\nSlot: ${item.target_count || 1}\nAlasan: ${item.notes || '-'}`;
+                              const isTripad = (item.service_type as any) === 'TRIPAD';
+                              const isApps = (item.service_type as any) === 'REVIEW_APPS';
+                              const formatStr = `Link: ${item.maps_link}\nNama cust: ${item.client_name}\nNama st: ${item.store_name || '-'}\nJenis Jasa: ${isTripad ? 'TRIPAD' : isApps ? 'APPS' : 'G MAPS'}\nSlot: ${item.slot || 1}\nAlasan: ${item.reason || item.notes || '-'}`;
 
                               return (
                                 <tr key={item.id} className="hover:bg-slate-50/40 transition-colors">
@@ -2953,7 +3094,7 @@ Format Chat : ${data.notes || '-'}`;
                                       {isTripad ? 'TRIPAD' : isApps ? 'APPS' : 'G MAPS'}
                                     </span>
                                     <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
-                                      {item.target_count || 1} Slot
+                                      {item.slot || 1} Slot
                                     </span>
                                   </td>
 
@@ -2980,8 +3121,8 @@ Format Chat : ${data.notes || '-'}`;
                                     <DebouncedTextarea
                                       rows={2}
                                       placeholder="Alasan..."
-                                      value={item.notes || ''}
-                                      onSave={val => handleUpdateNotes(item.id, val)}
+                                      value={item.reason || item.notes || ''}
+                                      onSave={val => handleUpdateReportReason(item.id, val)}
                                       disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
                                       className={`w-full rounded-lg border border-slate-200 p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 font-sans resize-y min-h-[55px] ${
                                         item.created_by && item.created_by !== currentAdminUser 
@@ -3018,7 +3159,7 @@ Format Chat : ${data.notes || '-'}`;
                                       type="text"
                                       placeholder="Input link bukti..."
                                       value={item.proof_link || ''}
-                                      onSave={val => handleUpdateProofLink(item.id, val)}
+                                      onSave={val => handleUpdateReportProofLink(item.id, val)}
                                       disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
                                       className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-purple-500 text-slate-700 font-mono ${
                                         item.created_by && item.created_by !== currentAdminUser 
@@ -3044,7 +3185,7 @@ Format Chat : ${data.notes || '-'}`;
                                   <td className="px-4 py-3 text-center space-y-2">
                                     <button
                                       type="button"
-                                      onClick={() => handleUpdatePaymentStatus(item.id, item.payment_status === 'PAID' ? 'UNPAID' : 'PAID')}
+                                      onClick={() => handleUpdateReportPaymentStatus(item.id, item.payment_status === 'PAID' ? 'UNPAID' : 'PAID')}
                                       className={`w-full px-2 py-1.5 text-[10px] font-black rounded-lg border flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs ${
                                         item.payment_status === 'PAID'
                                           ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
@@ -3083,7 +3224,7 @@ Format Chat : ${data.notes || '-'}`;
                                       <div className="flex items-center justify-center gap-1">
                                         <button
                                           type="button"
-                                          onClick={() => handleOpenEditMaps(item)}
+                                          onClick={() => handleOpenEditReportMap(item)}
                                           className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
                                           title="Edit Target"
                                         >
@@ -3091,7 +3232,7 @@ Format Chat : ${data.notes || '-'}`;
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => handleDeleteMapsReview(item.id)}
+                                          onClick={() => handleDeleteReportMap(item.id)}
                                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                                           title="Hapus Target"
                                         >
@@ -3493,6 +3634,130 @@ Format Chat : ${data.notes || '-'}`;
         </div>
       )}
 
+      {/* REPORT MAPS EDIT MODAL */}
+      {isReportMapModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl transition-all border border-slate-100 flex flex-col my-8 animate-in fade-in zoom-in-95 duration-250">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-black text-slate-950 text-base font-sans uppercase">
+                {currentLang === 'id' ? 'EDIT INPUTAN REPORT MAPS' : 'EDIT REPORT MAPS INPUT'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsReportMapModalOpen(false);
+                  setEditingReportMap(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveReportMapEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Klien / Cust' : 'Client Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editRepClientName}
+                    onChange={(e) => setEditRepClientName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Toko / Store' : 'Store Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editRepStoreName}
+                    onChange={(e) => setEditRepStoreName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Jenis Jasa' : 'Service Type'}
+                  </label>
+                  <select
+                    value={editRepServiceType}
+                    onChange={(e) => setEditRepServiceType(e.target.value as any)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  >
+                    <option value="G_MAPS">GOOGLE MAPS</option>
+                    <option value="TRIPAD">TRIPADVISOR</option>
+                    <option value="REVIEW_APPS">REVIEW APPS</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Slot Target' : 'Target Slot'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editRepSlot}
+                    onChange={(e) => setEditRepSlot(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Target Link' : 'Target Link'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editRepMapsLink}
+                  onChange={(e) => setEditRepMapsLink(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Alasan (Reason)' : 'Reason'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editRepReason}
+                  onChange={(e) => setEditRepReason(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReportMapModalOpen(false);
+                    setEditingReportMap(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Batal' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-black text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/10 transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Simpan' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -3516,6 +3781,8 @@ Format Chat : ${data.notes || '-'}`;
                     executeDeleteShopeeOrder(deleteConfirm.id);
                   } else if (deleteConfirm.type === 'maps_review') {
                     executeDeleteMapsReview(deleteConfirm.id);
+                  } else if (deleteConfirm.type === 'report_map') {
+                    executeDeleteReportMap(deleteConfirm.id);
                   }
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-red-600/10"

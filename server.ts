@@ -818,6 +818,133 @@ app.delete('/api/maps_reviews/:id', requireAuth, async (req, res) => {
   res.json({ success: true, message: 'Maps review deleted and blacklisted' });
 });
 
+// --- REPORT MAPS API (Dedicated to Supabase 'report_maps' table) ---
+app.get('/api/report_maps', async (req, res) => {
+  const limit = Number(req.query.limit) || 50000;
+  const forceRefresh = req.query.refresh === 'true';
+  const db = readDatabase();
+  const deletedReportMaps = db.deleted_report_maps || [];
+
+  if (supabase && !serverSupabaseFailed) {
+    try {
+      const data = await fetchServerSupabaseWithFallback(supabase, 'report_maps', 'report_maps', 'created_at', false, forceRefresh, limit);
+      if (data && data.length > 0) {
+        const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedReportMaps.includes(o.id));
+        return res.json(filtered);
+      }
+    } catch (e) {
+      if (isSupabaseQuotaError(e)) serverSupabaseFailed = true;
+    }
+  }
+
+  const filteredLocal = (db.report_maps || [])
+    .filter((o: any) => o.created_by !== '__DELETED__' && !deletedReportMaps.includes(o.id));
+  res.json(filteredLocal);
+});
+
+app.post('/api/report_maps', requireAuth, async (req, res) => {
+  const newReport = {
+    id: req.body.id || ('rep-' + Date.now().toString().slice(-6)),
+    maps_link: req.body.maps_link || '',
+    client_name: req.body.client_name || '',
+    store_name: req.body.store_name || '',
+    service_type: req.body.service_type || 'G_MAPS',
+    slot: Number(req.body.slot) || 1,
+    reason: req.body.reason || req.body.notes || '',
+    notes: req.body.notes || req.body.reason || '',
+    proof_link: req.body.proof_link || '',
+    status: req.body.status || 'READY',
+    payment_status: req.body.payment_status || 'UNPAID',
+    created_by: req.body.created_by || '',
+    created_at: req.body.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  if (supabase && !serverSupabaseFailed) {
+    try {
+      const { data, error } = await supabase
+        .from('report_maps')
+        .insert([newReport])
+        .select()
+        .single();
+      if (!error && data) {
+        clearServerSupabaseCache('report_maps');
+        return res.status(201).json(data);
+      }
+    } catch {}
+  }
+
+  const db = readDatabase();
+  if (!db.report_maps) db.report_maps = [];
+  db.report_maps.push(newReport);
+  writeDatabase(db);
+  res.status(201).json(newReport);
+});
+
+app.put('/api/report_maps/:id', requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const updatePayload = { ...req.body, updated_at: new Date().toISOString() };
+
+  if (supabase && !serverSupabaseFailed) {
+    try {
+      const { data, error } = await supabase
+        .from('report_maps')
+        .update(updatePayload)
+        .eq('id', id)
+        .select()
+        .single();
+      if (!error && data) {
+        clearServerSupabaseCache('report_maps');
+        return res.json(data);
+      }
+    } catch {}
+  }
+
+  const db = readDatabase();
+  const idx = (db.report_maps || []).findIndex((o: any) => o.id === id);
+  if (idx !== -1) {
+    db.report_maps[idx] = {
+      ...db.report_maps[idx],
+      ...updatePayload
+    };
+    writeDatabase(db);
+    res.json(db.report_maps[idx]);
+  } else {
+    const newEntry = { id, ...updatePayload };
+    if (!db.report_maps) db.report_maps = [];
+    db.report_maps.push(newEntry);
+    writeDatabase(db);
+    res.json(newEntry);
+  }
+});
+
+app.delete('/api/report_maps/:id', requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  if (supabase && !serverSupabaseFailed) {
+    try {
+      const { error } = await supabase
+        .from('report_maps')
+        .delete()
+        .eq('id', id);
+      if (!error) {
+        clearServerSupabaseCache('report_maps');
+      }
+    } catch {}
+  }
+
+  const db = readDatabase();
+  if (!db.deleted_report_maps) db.deleted_report_maps = [];
+  if (!db.deleted_report_maps.includes(id)) {
+    db.deleted_report_maps.push(id);
+  }
+
+  db.report_maps = (db.report_maps || []).filter((o: any) => o.id !== id);
+  writeDatabase(db);
+
+  res.json({ success: true, message: 'Report map deleted' });
+});
+
 // 3. FINANCIAL & STATS DASHBOARD API
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   const db = readDatabase();

@@ -83,3 +83,20 @@ export interface MapsReview {
   created_by?: string;
 }
 
+export interface ReportMap {
+  id: string;
+  maps_link: string;
+  client_name: string;
+  store_name?: string;
+  service_type: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' | string;
+  slot: number;
+  reason: string;
+  notes?: string;
+  proof_link?: string;
+  status: 'PENDING' | 'PROGRESS' | 'READY' | 'SUDAH DIREKAP' | 'DONE' | string;
+  payment_status: 'PAID' | 'UNPAID' | string;
+  created_by?: string;
+  created_at: string;
+  updated_at?: string;
+}
+

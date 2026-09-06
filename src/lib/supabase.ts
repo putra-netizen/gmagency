@@ -6,7 +6,7 @@
 /// <reference types="vite/client" />
 
 import { createClient } from '@supabase/supabase-js';
-import { Product, Order, DashboardStats, ShopeeOrder, MapsReview } from '../types';
+import { Product, Order, DashboardStats, ShopeeOrder, MapsReview, ReportMap } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { getAuthHeaders } from './auth';
 
@@ -1462,6 +1462,267 @@ export async function dbGetMapsReviewById(id: string): Promise<MapsReview | null
     }
   }
   return null;
+}
+
+// 5.5. REPORT MAPS (SUPABASE TABLE: 'report_maps')
+export function normalizeReportMap(item: any): ReportMap {
+  if (!item) return item;
+  return {
+    id: String(item.id || ''),
+    maps_link: String(item.maps_link || item.target_link || ''),
+    client_name: String(item.client_name || ''),
+    store_name: item.store_name ? String(item.store_name) : '',
+    service_type: String(item.service_type || item.review_type || 'G_MAPS'),
+    slot: Number(item.slot || item.target_count || 1),
+    reason: String(item.reason || item.notes || ''),
+    notes: item.notes ? String(item.notes) : '',
+    proof_link: item.proof_link ? String(item.proof_link) : '',
+    status: String(item.status || 'READY'),
+    payment_status: String(item.payment_status || 'UNPAID'),
+    created_by: item.created_by ? String(item.created_by) : '',
+    created_at: item.created_at || new Date().toISOString(),
+    updated_at: item.updated_at || item.created_at || new Date().toISOString()
+  };
+}
+
+export function getClientDeletedReportMaps(): string[] {
+  try {
+    const data = localStorage.getItem('gmsolution_blacklist_report_maps');
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function blacklistClientReportMap(id: string) {
+  try {
+    const list = getClientDeletedReportMaps();
+    if (!list.includes(id)) {
+      list.push(id);
+      localStorage.setItem('gmsolution_blacklist_report_maps', JSON.stringify(list));
+    }
+  } catch (err) {
+    console.warn('Failed to save report map blacklist to localStorage:', err);
+  }
+}
+
+export function getLocalReportMaps(): ReportMap[] {
+  try {
+    const stored = localStorage.getItem('gmsolution_local_report_maps');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return parsed.map(normalizeReportMap);
+      }
+    }
+  } catch (e) {
+    console.error('Error reading local report_maps:', e);
+  }
+  return [];
+}
+
+export function updateLocalStorageReportMap(item: ReportMap) {
+  try {
+    const normalized = normalizeReportMap(item);
+    const list = getLocalReportMaps();
+    const index = list.findIndex(r => r.id === normalized.id);
+    if (index !== -1) {
+      list[index] = normalized;
+    } else {
+      list.push(normalized);
+    }
+    localStorage.setItem('gmsolution_local_report_maps', JSON.stringify(list));
+  } catch (e) {
+    console.error('Error updating local report_maps:', e);
+  }
+}
+
+export function deleteLocalStorageReportMap(id: string) {
+  try {
+    const list = getLocalReportMaps();
+    const filtered = list.filter(r => r.id !== id);
+    localStorage.setItem('gmsolution_local_report_maps', JSON.stringify(filtered));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+export async function dbGetReportMaps(limit: number = 50000, forceRefresh: boolean = false): Promise<ReportMap[]> {
+  const deletedMaps = getClientDeletedReportMaps();
+  let list: ReportMap[] = [];
+
+  const cols = 'id, maps_link, client_name, store_name, service_type, slot, reason, notes, proof_link, status, payment_status, created_by, created_at, updated_at';
+
+  if (isSupabaseConfigured && supabase && !supabaseFailed) {
+    list = await fetchSupabaseTableWithFallback<ReportMap>('report_maps', 'report_maps', 'created_at', false, forceRefresh, limit, cols);
+  }
+
+  if (list.length === 0) {
+    const rawList = await safeFetch<ReportMap[]>(
+      '/api/report_maps',
+      undefined,
+      'gmsolution_local_report_maps',
+      () => []
+    );
+    if (Array.isArray(rawList)) {
+      list = rawList.map(normalizeReportMap);
+    }
+  }
+
+  const filtered = list.filter(o => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
+  const finalNormalized = filtered.map(normalizeReportMap);
+
+  try {
+    localStorage.setItem('gmsolution_local_report_maps', JSON.stringify(finalNormalized));
+  } catch {}
+
+  return finalNormalized;
+}
+
+export async function dbCreateReportMap(data: Partial<ReportMap>): Promise<ReportMap> {
+  const repId = data.id || ('rep-' + Date.now().toString().slice(-6));
+
+  const completeReport: ReportMap = {
+    id: repId,
+    maps_link: data.maps_link || '',
+    client_name: data.client_name || '',
+    store_name: data.store_name || '',
+    service_type: data.service_type || 'G_MAPS',
+    slot: Number(data.slot) || 1,
+    reason: data.reason || data.notes || '',
+    notes: data.notes || data.reason || '',
+    proof_link: data.proof_link || '',
+    status: data.status || 'READY',
+    payment_status: data.payment_status || 'UNPAID',
+    created_by: data.created_by || '',
+    created_at: data.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  if (isSupabaseConfigured && supabase && !supabaseFailed) {
+    try {
+      const { data: resData, error } = await supabase
+        .from('report_maps')
+        .insert([completeReport])
+        .select()
+        .single();
+      if (!error && resData) {
+        clearSupabaseCache('report_maps');
+        const result = normalizeReportMap(resData);
+        updateLocalStorageReportMap(result);
+        return result;
+      } else if (error) {
+        console.warn('Supabase insert report_maps error:', error);
+      }
+    } catch (err) {
+      console.warn('Supabase insert report_maps caught error:', err);
+      if (isSupabaseQuotaError(err)) supabaseFailed = true;
+    }
+  }
+
+  try {
+    const response = await fetch('/api/report_maps', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(completeReport)
+    });
+    if (response.ok) {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const resData = await response.json();
+        const result = normalizeReportMap(resData);
+        updateLocalStorageReportMap(result);
+        return result;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to create report map via API, saving to LocalStorage:', err);
+  }
+
+  const localResult = normalizeReportMap(completeReport);
+  updateLocalStorageReportMap(localResult);
+  return localResult;
+}
+
+export async function dbUpdateReportMap(id: string, updateData: Partial<ReportMap>): Promise<ReportMap> {
+  clearSupabaseCache('report_maps');
+  const finalData: any = { ...updateData, updated_at: new Date().toISOString() };
+
+  if (isSupabaseConfigured && supabase && !supabaseFailed) {
+    try {
+      const { data, error } = await supabase
+        .from('report_maps')
+        .update(finalData)
+        .eq('id', id)
+        .select()
+        .single();
+      if (!error && data) {
+        clearSupabaseCache('report_maps');
+        const result = normalizeReportMap(data);
+        updateLocalStorageReportMap(result);
+        return result;
+      }
+    } catch (err) {
+      if (isSupabaseQuotaError(err)) supabaseFailed = true;
+    }
+  }
+
+  try {
+    const response = await fetch(`/api/report_maps/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(finalData)
+    });
+    if (response.ok) {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        const result = normalizeReportMap(data);
+        updateLocalStorageReportMap(result);
+        return result;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to update report map via API, falling back to LocalStorage:', err);
+  }
+
+  const list = getLocalReportMaps();
+  const current = list.find(r => r.id === id);
+  const merged = normalizeReportMap({ ...(current || {}), ...finalData, id });
+  updateLocalStorageReportMap(merged);
+  return merged;
+}
+
+export async function dbDeleteReportMap(id: string): Promise<boolean> {
+  clearSupabaseCache('report_maps');
+  blacklistClientReportMap(id);
+
+  if (isSupabaseConfigured && supabase && !supabaseFailed) {
+    try {
+      await supabase
+        .from('report_maps')
+        .update({ created_by: '__DELETED__' })
+        .eq('id', id);
+
+      await supabase
+        .from('report_maps')
+        .delete()
+        .eq('id', id);
+    } catch {}
+  }
+
+  deleteLocalStorageReportMap(id);
+
+  try {
+    await fetch(`/api/report_maps/${id}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeaders() }
+    });
+  } catch (err) {
+    console.warn('Failed to delete report map via API:', err);
+  }
+
+  return true;
 }
 
 // 6. STORAGE UPLOAD FOR PRODUCT IMAGES
