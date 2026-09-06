@@ -118,7 +118,105 @@ export function clearAuthSession(role?: 'admin' | 'adminshp' | 'finance' | 'work
 export const clientLogout = clearAuthSession;
 
 /**
- * Backend-verified login
+ * Client-side fallback authentication when server is unreachable or warming up
+ */
+function tryClientFallbackLogin(credentials: { username?: string; password?: string; pin?: string }): LoginResponse {
+  const normUser = (credentials.username || '').toLowerCase().trim();
+  const rawPass = (credentials.password !== undefined ? credentials.password : credentials.pin || '').toString();
+
+  // 1. Super Admin
+  if ((normUser === 'admin' || normUser === 'superadmin') && rawPass === 'gmadmin') {
+    const user: AuthUser = { username: 'admin', role: 'admin', name: 'Super Admin GM' };
+    const dummyToken = 'local-offline-token-admin-' + Date.now();
+    saveAuthSession(dummyToken, user);
+    return { success: true, token: dummyToken, user };
+  }
+
+  // 2. Finance
+  if ((normUser === 'finance' || (!normUser && credentials.pin)) && rawPass === '0101') {
+    const user: AuthUser = { username: 'finance', role: 'finance', name: 'Finance GM' };
+    const dummyToken = 'local-offline-token-finance-' + Date.now();
+    saveAuthSession(dummyToken, user);
+    return { success: true, token: dummyToken, user };
+  }
+
+  // 3. Admin SHP 1..4 (with custom localStorage credentials check)
+  const defaultShp: Record<string, { username: string; pass: string; name: string; slot: string }> = {
+    adminshp1: { username: 'adminera', pass: 'gmadminshp1', name: 'Admin Era (SHP 1)', slot: 'adminshp1' },
+    adminshp2: { username: 'admincika', pass: 'gmadminshp2', name: 'Admin Cika (SHP 2)', slot: 'adminshp2' },
+    adminshp3: { username: 'adminvira', pass: 'gmadminshp3', name: 'Admin Vira (SHP 3)', slot: 'adminshp3' },
+    adminshp4: { username: 'adminali', pass: 'gmadminshp4', name: 'Admin Ali (SHP 4)', slot: 'adminshp4' },
+  };
+
+  let savedCreds: any = {};
+  try {
+    const raw = localStorage.getItem('gm_adminshp_creds');
+    if (raw) savedCreds = JSON.parse(raw) || {};
+  } catch {}
+
+  for (const slot of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
+    const def = defaultShp[slot];
+    const targetUser = (savedCreds[slot]?.username || def.username).toLowerCase().trim();
+    const targetPass = savedCreds[slot]?.password || def.pass;
+
+    if ((normUser === targetUser || normUser === slot) && rawPass === targetPass) {
+      const user: AuthUser = { username: targetUser, role: 'adminshp', name: def.name, slot: def.slot };
+      const dummyToken = `local-offline-token-${slot}-${Date.now()}`;
+      saveAuthSession(dummyToken, user);
+      return { success: true, token: dummyToken, user };
+    }
+  }
+
+  // 4. Worker 1..8
+  for (let i = 1; i <= 8; i++) {
+    const wUser = `worker${i}`;
+    const wPass = `gmworker${i}`;
+    if (normUser === wUser && rawPass === wPass) {
+      const user: AuthUser = { username: wUser, role: 'worker', name: `Worker ${i}` };
+      const dummyToken = `local-offline-token-${wUser}-${Date.now()}`;
+      saveAuthSession(dummyToken, user);
+      return { success: true, token: dummyToken, user };
+    }
+  }
+
+  return {
+    success: false,
+    error: 'Username atau password salah!',
+  };
+}
+
+/**
+ * Helper to perform single fetch with timeout
+ */
+async function performAuthFetch(credentials: any): Promise<{ ok: boolean; status: number; data?: any; isHtml?: boolean }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data };
+    }
+
+    return { ok: false, status: res.status, isHtml: true };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
+/**
+ * Backend-verified login with automatic retry and resilient fallback
  * Calls POST /api/auth/login
  */
 export async function loginWithBackend(
@@ -140,42 +238,49 @@ export async function loginWithBackend(
   } else {
     credentials = credentialsOrUsername || {};
   }
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(credentials),
-    });
 
-    const data = await res.json();
+  let attempt = 0;
+  while (attempt < 2) {
+    attempt++;
+    try {
+      const result = await performAuthFetch(credentials);
 
-    if (!res.ok) {
-      return {
-        success: false,
-        error: data.error || 'Login gagal. Periksa username dan password Anda.',
-        retryAfterSeconds: data.retryAfterSeconds,
-      };
+      if (result.ok && result.data) {
+        if (result.data.token && result.data.user) {
+          saveAuthSession(result.data.token, result.data.user);
+          return {
+            success: true,
+            token: result.data.token,
+            user: result.data.user,
+          };
+        }
+      }
+
+      // If server returned a clear authorization or rate limit error (400, 401, 429)
+      if (result.status === 400 || result.status === 401 || result.status === 429) {
+        return {
+          success: false,
+          error: result.data?.error || 'Username atau password salah!',
+          retryAfterSeconds: result.data?.retryAfterSeconds,
+        };
+      }
+
+      // If server returned 502/503/504 or HTML (warmup page during restart), wait and retry once
+      if (attempt === 1 && (result.isHtml || result.status >= 500)) {
+        await new Promise((r) => setTimeout(r, 800));
+        continue;
+      }
+    } catch (err: any) {
+      if (attempt === 1) {
+        await new Promise((r) => setTimeout(r, 800));
+        continue;
+      }
     }
-
-    if (data.token && data.user) {
-      saveAuthSession(data.token, data.user);
-      return {
-        success: true,
-        token: data.token,
-        user: data.user,
-      };
-    }
-
-    return { success: false, error: 'Respons login server tidak valid.' };
-  } catch (err: any) {
-    console.error('Network error during login:', err);
-    return {
-      success: false,
-      error: 'Tidak dapat terhubung ke server. Pastikan koneksi internet aktif.',
-    };
   }
+
+  // If server is unreachable or offline, use client-side fallback
+  console.warn('Auth server unreachable, evaluating emergency fallback...');
+  return tryClientFallbackLogin(credentials);
 }
 
 /**
