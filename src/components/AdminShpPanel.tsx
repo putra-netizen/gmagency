@@ -30,6 +30,7 @@ import {
   FileText, 
   MessageSquare, 
   MapPin, 
+  Star,
   RefreshCw,
   AlertCircle,
   Lock,
@@ -387,8 +388,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [authError, setAuthError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Tabs: 'shopee' (Shopee Orders), 'maps' (Maps Reviews), 'progress' (Progres Account)
-  const [activeTab, setActiveTab] = useState<'shopee' | 'maps' | 'progress'>('shopee');
+  // Tabs: 'shopee' (Shopee Orders), 'maps' (Review Maps), 'report_maps' (Report Maps)
+  const [activeTab, setActiveTab] = useState<'shopee' | 'maps' | 'report_maps'>('shopee');
 
   // Search & Sort states for tables
   const [searchShopee, setSearchShopee] = useState('');
@@ -397,23 +398,28 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [timeFilterShopee, setTimeFilterShopee] = useState<TimeFilterConfig>({ mode: 'all' });
   const [pageShopee, setPageShopee] = useState(1);
 
+  // States for REVIEW MAPS tab ('maps')
   const [searchMaps, setSearchMaps] = useState('');
   const [sortMaps, setSortMaps] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'all' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('all');
   const [timeFilterMaps, setTimeFilterMaps] = useState<TimeFilterConfig>({ mode: 'all' });
   const [pageMaps, setPageMaps] = useState(1);
 
-  // States for 'PROGRES ACCOUNT' tab
-  const [searchProgress, setSearchProgress] = useState('');
-  const [sortProgress, setSortProgress] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
-  const [progressReviewTypeFilter, setProgressReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('SEMUA');
-  const [timeFilterProgress, setTimeFilterProgress] = useState<TimeFilterConfig>({ mode: 'all' });
-  const [pageProgress, setPageProgress] = useState(1);
-  const [copiedProgressId, setCopiedProgressId] = useState<string | null>(null);
+  // States for REPORT MAPS tab ('report_maps')
+  const [searchReportMaps, setSearchReportMaps] = useState('');
+  const [sortReportMaps, setSortReportMaps] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
+  const [reportTypeFilter, setReportTypeFilter] = useState<'all' | 'GMAPS' | 'TRIPAD' | 'REVIEW APPS'>('all');
+  const [timeFilterReportMaps, setTimeFilterReportMaps] = useState<TimeFilterConfig>({ mode: 'all' });
+  const [pageReportMaps, setPageReportMaps] = useState(1);
+
   const recentLocalStatusUpdates = useRef<Map<string, { status: string; timestamp: number }>>(new Map());
 
   const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: TimeFilterConfig | string) => {
     return isWithinCustomTimeframe(createdAtStr, timeframe);
+  };
+
+  const isReportItem = (r: MapsReview) => {
+    return r.order_kind === 'REPORT' || (r.id && String(r.id).startsWith('rep-'));
   };
 
   // Loading states
@@ -425,16 +431,18 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
 
   // Form Collapse States
-  // 'REPORT' | 'SPAM' | null
   const [activeForm, setActiveForm] = useState<'REPORT' | 'SPAM' | null>(null);
-  const [isMapsFormExpanded, setIsMapsFormExpanded] = useState<boolean>(false);
+  const [isReviewMapsFormExpanded, setIsReviewMapsFormExpanded] = useState<boolean>(false);
+  const [isReportMapsFormExpanded, setIsReportMapsFormExpanded] = useState<boolean>(false);
 
   // DOM Refs for auto-scroll
   const reportFormRef = useRef<HTMLDivElement>(null);
   const spamFormRef = useRef<HTMLDivElement>(null);
-  const mapsFormRef = useRef<HTMLDivElement>(null);
+  const reviewMapsFormRef = useRef<HTMLDivElement>(null);
+  const reportMapsFormRef = useRef<HTMLDivElement>(null);
   const shopeeQueueRef = useRef<HTMLDivElement>(null);
-  const mapsQueueRef = useRef<HTMLDivElement>(null);
+  const reviewMapsQueueRef = useRef<HTMLDivElement>(null);
+  const reportMapsQueueRef = useRef<HTMLDivElement>(null);
 
   // Form State: Input 1 (REPORT ALL SOSMED)
   const [formSosmed, setFormSosmed] = useState({
@@ -456,18 +464,25 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     notes: '' // Format Chat
   });
 
-  // Form State: Input 3 (MAPS REVIEW)
-  const [formMaps, setFormMaps] = useState({
-    clientName: '',
-    mapsLink: '',
-    targetCount: 5,
+  // Form State: REVIEW MAPS
+  const [formReviewMaps, setFormReviewMaps] = useState({
     storeName: '',
-    notes: '',
-    reviewType: 'G_MAPS' as 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS'
+    clientName: '',
+    reviewType: 'G_MAPS' as 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS',
+    targetCount: 5,
+    mapsLink: '',
+    notes: ''
   });
 
-  // Temporary state for typing "Nama Akun" per MapsReview row
-  const [tempAccountInput, setTempAccountInput] = useState<Record<string, string>>({});
+  // Form State: REPORT MAPS
+  const [formReportMaps, setFormReportMaps] = useState({
+    storeName: '',
+    clientName: '',
+    reviewType: 'G_MAPS' as 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS',
+    targetCount: 1,
+    mapsLink: '',
+    notes: ''
+  });
 
   // Shopee order edit state
   const [editingShopeeOrder, setEditingShopeeOrder] = useState<ShopeeOrder | null>(null);
@@ -723,8 +738,8 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
   }, [searchMaps, sortMaps, reviewTypeFilter, timeFilterMaps]);
 
   useEffect(() => {
-    setPageProgress(1);
-  }, [searchProgress, sortProgress, progressReviewTypeFilter, timeFilterProgress]);
+    setPageReportMaps(1);
+  }, [searchReportMaps, sortReportMaps, reportTypeFilter, timeFilterReportMaps]);
 
   // Handle Login submission
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -988,137 +1003,152 @@ Format Chat : ${data.notes || '-'}`;
     }
   };
 
-  // Submit Input 3 (MAPS REVIEW)
-  const handleSubmitMaps = async (e: React.FormEvent) => {
+  // Submit Input (REVIEW MAPS)
+  const handleSubmitReviewMaps = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formMaps.clientName || !formMaps.mapsLink || !formMaps.targetCount || !formMaps.storeName || !formMaps.notes) {
-      toast.error(currentLang === 'id' ? 'Mohon lengkapi semua data wajib (termasuk Nama Store & Notes/Clue)!' : 'Please fill all required fields (including Store Name & Notes/Clue)!');
+    if (!formReviewMaps.storeName || !formReviewMaps.clientName || !formReviewMaps.mapsLink) {
+      toast.error(currentLang === 'id' ? 'Mohon lengkapi Nama Store, Client Name, dan Link Target!' : 'Please fill all required fields!');
       return;
     }
 
     try {
       const newReview = await dbCreateMapsReview({
-        client_name: formMaps.clientName,
-        maps_link: formMaps.mapsLink,
-        target_count: formMaps.targetCount,
-        store_name: formMaps.storeName,
-        notes: formMaps.notes,
-        review_type: formMaps.reviewType,
+        id: 'map-' + Date.now().toString().slice(-6),
+        order_kind: 'REVIEW',
+        store_name: formReviewMaps.storeName,
+        client_name: formReviewMaps.clientName,
+        review_type: formReviewMaps.reviewType,
+        target_count: formReviewMaps.targetCount || 5,
+        maps_link: formReviewMaps.mapsLink,
+        notes: formReviewMaps.notes,
         reviewer_accounts: [],
         proof_link: '',
         status: 'READY',
+        payment_status: '',
         created_by: currentAdminUser
       });
 
       setMapsReviews(prev => [newReview, ...prev]);
 
-      // Log action
       if (currentAdminUser) {
-        logAdminShpAction(currentAdminUser, 'Buat Maps Target', `Mendaftarkan target review baru untuk store "${formMaps.storeName}" dengan target ${formMaps.targetCount} review`);
+        logAdminShpAction(currentAdminUser, 'Buat Target Review Maps', `Mendaftarkan target review baru untuk store "${formReviewMaps.storeName}" (${formReviewMaps.reviewType})`);
       }
 
-      // Reset form
-      setFormMaps({
-        clientName: '',
-        mapsLink: '',
-        targetCount: 5,
+      const copypasta = `Link: ${formReviewMaps.mapsLink}\nNama cust: ${formReviewMaps.clientName}\nNama st: ${formReviewMaps.storeName || '-'}\nclue: ${formReviewMaps.notes || '-'}`;
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(copypasta);
+          toast.success(currentLang === 'id' ? 'Target Review berhasil dibuat & format tersalin!' : 'Review Target created and format copied!');
+        } else {
+          toast.success(currentLang === 'id' ? 'Target Review berhasil dibuat!' : 'Review Target created successfully!');
+        }
+      } catch {
+        toast.success(currentLang === 'id' ? 'Target Review berhasil dibuat!' : 'Review Target created successfully!');
+      }
+
+      setFormReviewMaps({
         storeName: '',
-        notes: '',
-        reviewType: 'G_MAPS'
+        clientName: '',
+        reviewType: 'G_MAPS',
+        targetCount: 5,
+        mapsLink: '',
+        notes: ''
       });
 
-      // Collapse form & scroll to maps queue
-      setIsMapsFormExpanded(false);
+      setIsReviewMapsFormExpanded(false);
       setTimeout(() => {
-        mapsQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        reviewMapsQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 350);
-
-      toast.success(currentLang === 'id' ? 'Target review maps berhasil didaftarkan!' : 'Maps Review target created successfully!');
     } catch (err) {
       console.error(err);
       toast.error(currentLang === 'id' ? `Gagal menambah data: ${err instanceof Error ? err.message : String(err)}` : `Failed to create data: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
-  // Add Reviewer Account Name to specific Maps Review item
-  const handleAddReviewerAccount = async (reviewId: string) => {
-    const rawInput = tempAccountInput[reviewId]?.trim();
-    if (!rawInput) return;
-
-    const targetReview = mapsReviews.find(r => r.id === reviewId);
-    if (!targetReview) return;
-
-    const parsedNames = parseAccountsList(rawInput);
-    const namesToAdd = parsedNames.length > 0 ? parsedNames : [rawInput];
-
-    const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
-    const updatedAccounts = [...currentAccounts, ...namesToAdd];
-
-    // Optimistically update UI immediately so count & progress bar increment in real-time
-    setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
-      ...r,
-      reviewer_accounts: updatedAccounts,
-      status: (r.status === 'PENDING' && updatedAccounts.length > 0) ? 'PROGRESS' : r.status
-    } : r));
-    setTempAccountInput(prev => ({ ...prev, [reviewId]: '' }));
+  // Submit Input (REPORT MAPS)
+  const handleSubmitReportMaps = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formReportMaps.storeName || !formReportMaps.clientName || !formReportMaps.mapsLink || !formReportMaps.notes) {
+      toast.error(currentLang === 'id' ? 'Mohon lengkapi semua data wajib (Nama Store, Client Name, Target Link, dan Alasan)!' : 'Please fill all required fields!');
+      return;
+    }
 
     try {
-      const saved = await dbUpdateMapsReview(reviewId, {
-        reviewer_accounts: updatedAccounts
+      const newReport = await dbCreateMapsReview({
+        id: 'rep-' + Date.now().toString().slice(-6),
+        order_kind: 'REPORT',
+        store_name: formReportMaps.storeName,
+        client_name: formReportMaps.clientName,
+        review_type: formReportMaps.reviewType,
+        target_count: formReportMaps.targetCount || 1,
+        maps_link: formReportMaps.mapsLink,
+        notes: formReportMaps.notes,
+        reviewer_accounts: [],
+        proof_link: '',
+        status: 'READY',
+        payment_status: 'UNPAID',
+        created_by: currentAdminUser
       });
-      if (saved && Array.isArray(saved.reviewer_accounts)) {
-        const finalAccounts = saved.reviewer_accounts.length >= updatedAccounts.length
-          ? saved.reviewer_accounts
-          : updatedAccounts;
-        setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
-          ...r,
-          ...saved,
-          reviewer_accounts: finalAccounts
-        } : r));
-      }
+
+      setMapsReviews(prev => [newReport, ...prev]);
+
+      // Log action
       if (currentAdminUser) {
-        logAdminShpAction(currentAdminUser, 'Tambah Reviewer', `Menambahkan ${namesToAdd.length} akun reviewer ("${namesToAdd.join(', ')}") ke review store "${targetReview.store_name}"`);
+        logAdminShpAction(currentAdminUser, 'Buat Report Maps', `Mendaftarkan target report maps baru untuk store "${formReportMaps.storeName}" (${formReportMaps.reviewType})`);
       }
+
+      // Format text auto copy (sesuai format GM: Link, Nama cust, Nama st, dst)
+      const formatText = `Link: ${formReportMaps.mapsLink}\nNama cust: ${formReportMaps.clientName}\nNama st: ${formReportMaps.storeName || '-'}\nJenis Jasa: ${formReportMaps.reviewType === 'TRIPAD' ? 'TRIPAD' : formReportMaps.reviewType === 'REVIEW_APPS' ? 'APPS' : 'G MAPS'}\nSlot: ${formReportMaps.targetCount || 1}\nAlasan: ${formReportMaps.notes}`;
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(formatText);
+          toast.success(currentLang === 'id' ? 'Report Maps berhasil dibuat & format tersalin!' : 'Report Maps created and format copied!');
+        } else {
+          toast.success(currentLang === 'id' ? 'Report Maps berhasil dibuat!' : 'Report Maps created successfully!');
+        }
+      } catch {
+        toast.success(currentLang === 'id' ? 'Report Maps berhasil dibuat!' : 'Report Maps created successfully!');
+      }
+
+      // Reset form
+      setFormReportMaps({
+        storeName: '',
+        clientName: '',
+        reviewType: 'G_MAPS',
+        targetCount: 1,
+        mapsLink: '',
+        notes: ''
+      });
+
+      // Collapse form & scroll to report maps queue
+      setIsReportMapsFormExpanded(false);
+      setTimeout(() => {
+        reportMapsQueueRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 350);
     } catch (err) {
       console.error(err);
-      // Revert optimistic update on failure
-      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: currentAccounts } : r));
-      toast.error(currentLang === 'id' ? `Gagal menambah akun progres: ${err instanceof Error ? err.message : String(err)}` : `Failed to add progress account: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(currentLang === 'id' ? `Gagal menambah data: ${err instanceof Error ? err.message : String(err)}` : `Failed to create data: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
-  // Remove Reviewer Account Name
-  const handleRemoveReviewerAccount = async (reviewId: string, indexToRemove: number) => {
-    const targetReview = mapsReviews.find(r => r.id === reviewId);
-    if (!targetReview) return;
-
-    const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
-    const updatedAccounts = currentAccounts.filter((_, idx) => idx !== indexToRemove);
-
-    // Optimistically update UI immediately
-    setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: updatedAccounts } : r));
-
+  // Update Payment Status (PAID / UNPAID)
+  const handleUpdatePaymentStatus = async (id: string, payment_status: 'PAID' | 'UNPAID') => {
+    setMapsReviews(prev => prev.map(r => r.id === id ? { ...r, payment_status } : r));
     try {
-      const saved = await dbUpdateMapsReview(reviewId, {
-        reviewer_accounts: updatedAccounts
-      });
-      if (saved && Array.isArray(saved.reviewer_accounts)) {
-        setMapsReviews(prev => prev.map(r => r.id === reviewId ? {
-          ...r,
-          ...saved,
-          reviewer_accounts: saved.reviewer_accounts
-        } : r));
-      }
+      await dbUpdateMapsReview(id, { payment_status });
       if (currentAdminUser) {
-        logAdminShpAction(currentAdminUser, 'Hapus Reviewer', `Menghapus akun reviewer dari review store "${targetReview.store_name}"`);
+        const target = mapsReviews.find(r => r.id === id);
+        logAdminShpAction(currentAdminUser, 'Update Status Pembayaran', `Mengubah status bayar "${target?.store_name || id}" menjadi ${payment_status}`);
       }
+      toast.success(payment_status === 'PAID' ? 'Status: PAID' : 'Status: UNPAID');
     } catch (err) {
       console.error(err);
-      // Revert optimistic update on failure
-      setMapsReviews(prev => prev.map(r => r.id === reviewId ? { ...r, reviewer_accounts: currentAccounts } : r));
-      toast.error('Gagal menghapus akun progres.');
+      toast.error('Gagal memperbarui status pembayaran');
     }
   };
+
 
   // Update Bukti Link
   const handleUpdateProofLink = async (reviewId: string, value: string) => {
@@ -1314,8 +1344,9 @@ Format Chat : ${data.notes || '-'}`;
     })
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-  // Filtered and sorted Maps Reviews
-  const filteredMapsReviews = mapsReviews
+  // Filtered and sorted Review Maps (for Tab 'maps')
+  const filteredReviewMaps = mapsReviews
+    .filter(review => !isReportItem(review))
     .filter(review => isWithinTimeframe(review.created_at, timeFilterMaps))
     .filter(review => {
       const stat = review.status || 'PENDING';
@@ -1328,7 +1359,7 @@ Format Chat : ${data.notes || '-'}`;
     })
     .filter(review => {
       if (reviewTypeFilter === 'TRIPAD') {
-        return review.review_type === 'TRIPAD';
+        return review.review_type === 'TRIPAD' || (review.review_type as string) === 'TRIPADVISOR' || (review.review_type as string) === 'REVIEW_TRIPAD';
       }
       if (reviewTypeFilter === 'GMAPS') {
         return review.review_type === 'G_MAPS' || !review.review_type;
@@ -1356,35 +1387,39 @@ Format Chat : ${data.notes || '-'}`;
     });
 
   const paginatedShopeeOrders = filteredShopeeOrders.slice((pageShopee - 1) * ITEMS_PER_PAGE, pageShopee * ITEMS_PER_PAGE);
-  const paginatedMapsReviews = filteredMapsReviews.slice((pageMaps - 1) * ITEMS_PER_PAGE, pageMaps * ITEMS_PER_PAGE);
+  const paginatedReviewMaps = filteredReviewMaps.slice((pageMaps - 1) * ITEMS_PER_PAGE, pageMaps * ITEMS_PER_PAGE);
+  const paginatedMapsReviews = paginatedReviewMaps; // Alias for safety
+  const mapsReviewsOnly = mapsReviews.filter(review => !isReportItem(review));
+  const reportMapsReviews = mapsReviews.filter(review => isReportItem(review));
 
-  // Filtered and sorted Progress Reviews (For 'PROGRES ACCOUNT' tab)
-  const filteredProgressReviews = mapsReviews
-    .filter(review => isWithinTimeframe(review.created_at, timeFilterProgress))
+  // Filtered and sorted Report Maps (for Tab 'report_maps')
+  const filteredReportMaps = mapsReviews
+    .filter(review => isReportItem(review))
+    .filter(review => isWithinTimeframe(review.created_at, timeFilterReportMaps))
     .filter(review => {
       const stat = review.status || 'PENDING';
-      if (sortProgress === 'pending') return stat === 'PENDING';
-      if (sortProgress === 'progress') return stat === 'PROGRESS';
-      if (sortProgress === 'ready') return stat === 'READY';
-      if (sortProgress === 'sudah_direkap') return stat === 'SUDAH DIREKAP';
-      if (sortProgress === 'done') return stat === 'DONE';
+      if (sortReportMaps === 'pending') return stat === 'PENDING';
+      if (sortReportMaps === 'progress') return stat === 'PROGRESS';
+      if (sortReportMaps === 'ready') return stat === 'READY';
+      if (sortReportMaps === 'sudah_direkap') return stat === 'SUDAH DIREKAP';
+      if (sortReportMaps === 'done') return stat === 'DONE';
       return true; // if 'all'
     })
     .filter(review => {
-      if (progressReviewTypeFilter === 'TRIPAD') {
-        return review.review_type === 'TRIPAD' || (review.review_type as string) === 'TRIPADVISOR' || (review.review_type as string) === 'REVIEW_TRIPAD';
+      if (reportTypeFilter === 'TRIPAD') {
+        return review.review_type === 'TRIPAD';
       }
-      if (progressReviewTypeFilter === 'GMAPS') {
+      if (reportTypeFilter === 'GMAPS') {
         return review.review_type === 'G_MAPS' || !review.review_type;
       }
-      if (progressReviewTypeFilter === 'REVIEW APPS') {
+      if (reportTypeFilter === 'REVIEW APPS') {
         return review.review_type === 'REVIEW_APPS';
       }
-      return true; // if 'SEMUA' or 'all'
+      return true; // if 'all'
     })
     .filter(review => {
-      if (!searchProgress) return true;
-      const q = searchProgress.toLowerCase();
+      if (!searchReportMaps) return true;
+      const q = searchReportMaps.toLowerCase();
       return (
         (review.id || '').toLowerCase().includes(q) ||
         (review.store_name || '').toLowerCase().includes(q) ||
@@ -1399,7 +1434,7 @@ Format Chat : ${data.notes || '-'}`;
       return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
     });
 
-  const paginatedProgressReviews = filteredProgressReviews.slice((pageProgress - 1) * ITEMS_PER_PAGE, pageProgress * ITEMS_PER_PAGE);
+  const paginatedReportMaps = filteredReportMaps.slice((pageReportMaps - 1) * ITEMS_PER_PAGE, pageReportMaps * ITEMS_PER_PAGE);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 font-sans" id="shopee-portal-container">
@@ -1424,27 +1459,29 @@ Format Chat : ${data.notes || '-'}`;
             <ShoppingBag className="h-4 w-4 shrink-0" />
             <span>SOSMED & SPAM WA</span>
           </button>
+
           <button
             onClick={() => setActiveTab('maps')}
             className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
               activeTab === 'maps'
+                ? 'border-purple-600 text-purple-600 font-black'
+                : 'border-transparent text-slate-400 hover:text-slate-750'
+            }`}
+          >
+            <Star className="h-4 w-4 shrink-0" />
+            <span>REVIEW MAPS</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('report_maps')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
+              activeTab === 'report_maps'
                 ? 'border-blue-600 text-blue-600 font-black'
                 : 'border-transparent text-slate-400 hover:text-slate-750'
             }`}
           >
             <MapPin className="h-4 w-4 shrink-0" />
-            <span>G MAPS & REVIEW APPS</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('progress')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
-              activeTab === 'progress'
-                ? 'border-purple-600 text-purple-600 font-black'
-                : 'border-transparent text-slate-400 hover:text-slate-750'
-            }`}
-          >
-            <ListTodo className="h-4 w-4 shrink-0" />
-            <span>PROGRES ACCOUNT</span>
+            <span>REPORT MAPS</span>
           </button>
         </div>
       </div>
@@ -1903,19 +1940,6 @@ Format Chat : ${data.notes || '-'}`;
                                   }`}>
                                     {isSosmed ? 'REPORT' : 'SPAM WA'}
                                   </span>
-                                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md inline-block w-fit border ${
-                                    order.status === 'DONE'
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : order.status === 'PROGRESS'
-                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
-                                      : order.status === 'READY'
-                                      ? 'bg-white text-slate-700 border-slate-300'
-                                      : order.status === 'SUDAH DIREKAP'
-                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                      : 'bg-sky-50 text-sky-700 border-sky-200'
-                                  }`}>
-                                    {order.status || 'PENDING'}
-                                  </span>
                                   {order.created_by && (
                                     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 mt-1 border ${
                                       order.created_by === currentAdminUser 
@@ -2049,6 +2073,29 @@ Format Chat : ${data.notes || '-'}`;
                                     </div>
                                   )}
                                 </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(order.formatted_text, order.id)}
+                                  className={`w-full mt-1.5 px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                    copiedId === order.id
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                  }`}
+                                  title="Salin Format"
+                                >
+                                  {copiedId === order.id ? (
+                                    <>
+                                      <Check className="h-3 w-3 text-emerald-600" />
+                                      <span>Tersalin!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="h-3 w-3 text-blue-600" />
+                                      <span>Salin Format</span>
+                                    </>
+                                  )}
+                                </button>
                               </td>
                             </tr>
                           );
@@ -2068,104 +2115,567 @@ Format Chat : ${data.notes || '-'}`;
             </div>
           )}
 
-          {/* TAB 2: MAPS REVIEWS PROGRESS TRACKER */}
+          {/* TAB 2: REVIEW MAPS */}
           {activeTab === 'maps' && (
-            <div className="space-y-8 fade-in">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                
-                {/* COLLAPSIBLE MAPS FORM CARD (4 columns) */}
-                <div 
-                  className={`lg:col-span-4 bg-white rounded-3xl border transition-all duration-400 h-fit ${
-                    isMapsFormExpanded 
-                      ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg' 
-                      : 'border-slate-200 shadow-sm'
-                  }`}
-                  id="card-maps-review"
-                >
-                  {/* Card Header Section always visible */}
-                  <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-black shrink-0">
-                        <MapPin className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-sm font-black text-slate-900 leading-snug">
-                          G MAPS, TRIPAD & REVIEW APPS
-                        </h2>
-                      </div>
+            <div className="space-y-8 fade-in" id="adminshp-review-maps-view">
+              {/* COLLAPSIBLE REVIEW MAPS FORM CARD */}
+              <div 
+                className={`bg-white rounded-3xl border transition-all duration-400 ${
+                  isReviewMapsFormExpanded 
+                    ? 'border-purple-500 ring-4 ring-purple-500/10 shadow-lg' 
+                    : 'border-slate-200 shadow-sm'
+                }`}
+                id="card-review-maps"
+              >
+                {/* Card Header Section always visible */}
+                <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100">
+                  <div className="flex items-center gap-3.5">
+                    <div className="h-10 w-10 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center font-black shrink-0">
+                      <MapPin className="h-5 w-5" />
                     </div>
-                    
-                    <button
-                      onClick={() => setIsMapsFormExpanded(!isMapsFormExpanded)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                        isMapsFormExpanded
-                          ? 'bg-slate-900 text-white hover:bg-slate-800'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-600/20'
-                      }`}
-                    >
-                      {isMapsFormExpanded ? 'Hide' : 'Input Target Review'}
-                    </button>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900 leading-snug">
+                        REVIEW MAPS
+                      </h2>
+                      <p className="text-[11px] text-slate-400 font-medium">Input pesanan review Google Maps &amp; Tripadvisor</p>
+                    </div>
                   </div>
+                  
+                  <button
+                    onClick={() => setIsReviewMapsFormExpanded(!isReviewMapsFormExpanded)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      isReviewMapsFormExpanded
+                        ? 'bg-slate-900 text-white hover:bg-slate-800'
+                        : 'bg-purple-600 text-white hover:bg-purple-700 shadow-sm shadow-purple-600/20'
+                    }`}
+                  >
+                    {isReviewMapsFormExpanded ? 'Hide Form' : 'Input Pesanan Review Maps'}
+                  </button>
+                </div>
 
-                  {/* Collapsible Form Panel */}
-                  <AnimatePresence initial={false}>
-                    {isMapsFormExpanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.45, ease: [0.25, 0.8, 0.25, 1] }}
-                        className="overflow-hidden"
-                      >
-                        <div ref={mapsFormRef} className="p-5 border-t border-slate-100 bg-slate-50/30 space-y-4">
-                          <form onSubmit={handleSubmitMaps} className="space-y-4">
-                            {/* Tipe Review Selector Dropdown */}
-                            <div className="space-y-1.5">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                Tipe Review <span className="text-red-500">*</span>
-                              </label>
-                              <div className="relative">
-                                <select
-                                  value={formMaps.reviewType}
-                                  onChange={e => setFormMaps(prev => ({ ...prev, reviewType: e.target.value as 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' }))}
-                                  className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans cursor-pointer appearance-none pr-8 font-black text-slate-700 uppercase tracking-wider"
-                                >
-                                  <option value="G_MAPS">G Maps (Google Maps)</option>
-                                  <option value="TRIPAD">Tripadvisor (Tripad)</option>
-                                  <option value="REVIEW_APPS">Review Apps</option>
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
-                                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-
+                {/* Collapsible Form Panel */}
+                <AnimatePresence initial={false}>
+                  {isReviewMapsFormExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.45, ease: [0.25, 0.8, 0.25, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div ref={reviewMapsFormRef} className="p-6 border-t border-slate-100 bg-slate-50/30 space-y-4">
+                        <form onSubmit={handleSubmitReviewMaps} className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                Nama Client <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                required
-                                placeholder="Contoh: Hotel Melati Indah"
-                                value={formMaps.clientName}
-                                onChange={e => setFormMaps(prev => ({ ...prev, clientName: e.target.value }))}
-                                className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans"
-                              />
-                            </div>
-
-                            <div className="space-y-1.5">
                               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                                 Nama Store <span className="text-red-500">*</span>
                               </label>
                               <input
                                 type="text"
                                 required
-                                placeholder="Pilih atau ketik nama store..."
-                                value={formMaps.storeName}
-                                onChange={e => setFormMaps(prev => ({ ...prev, storeName: e.target.value }))}
+                                placeholder="Contoh: GM Store"
+                                value={formReviewMaps.storeName}
+                                onChange={e => setFormReviewMaps(prev => ({ ...prev, storeName: e.target.value }))}
+                                className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 font-sans"
+                              />
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {['KN', 'SPL', 'MP', 'PC', 'ADI', 'KYF', 'TWG', 'AC', 'GDM', 'VJ', 'LKS', 'ACS', 'NA', 'NRW', 'WNL'].map(st => (
+                                  <button
+                                    key={st}
+                                    type="button"
+                                    onClick={() => setFormReviewMaps(prev => ({ ...prev, storeName: st }))}
+                                    className={`px-2 py-0.5 text-[9px] font-black rounded-lg transition-all ${
+                                      formReviewMaps.storeName === st
+                                        ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-600'
+                                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
+                                    } cursor-pointer`}
+                                  >
+                                    {st}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Client Name <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Nama pembeli / client"
+                                value={formReviewMaps.clientName}
+                                onChange={e => setFormReviewMaps(prev => ({ ...prev, clientName: e.target.value }))}
+                                className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 font-sans"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Jenis Jasa <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={formReviewMaps.reviewType}
+                                onChange={e => setFormReviewMaps(prev => ({ ...prev, reviewType: e.target.value as 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' }))}
+                                className="w-full rounded-xl bg-white border border-slate-200 px-3 py-2.5 text-xs outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 font-sans cursor-pointer font-bold text-slate-700"
+                              >
+                                <option value="G_MAPS">G MAPS</option>
+                                <option value="TRIPAD">TRIPAD</option>
+                                <option value="REVIEW_APPS">APPS</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Jumlah Slot / Target <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="number"
+                                required
+                                min={1}
+                                value={formReviewMaps.targetCount}
+                                onChange={e => setFormReviewMaps(prev => ({ ...prev, targetCount: Math.max(1, Number(e.target.value)) }))}
+                                className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                              Target Link <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="https://maps.app.goo.gl/... link tripadvisor, atau link app store / play store"
+                              value={formReviewMaps.mapsLink}
+                              onChange={e => setFormReviewMaps(prev => ({ ...prev, mapsLink: e.target.value }))}
+                              className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 font-mono"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                              Catatan / Clue Review <span className="text-slate-400 font-normal">(Opsional)</span>
+                            </label>
+                            <textarea
+                              rows={2}
+                              placeholder="Clue review / catatan..."
+                              value={formReviewMaps.notes}
+                              onChange={e => setFormReviewMaps(prev => ({ ...prev, notes: e.target.value }))}
+                              className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 font-sans"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full py-3 bg-purple-600 hover:bg-purple-700 active:scale-[0.98] transition-all text-white rounded-xl text-xs font-extrabold uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-md shadow-purple-600/10 cursor-pointer"
+                          >
+                            <Send className="h-4 w-4" />
+                            <span>Submit &amp; Generate Format</span>
+                          </button>
+                        </form>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* TABLE LIST REVIEW MAPS */}
+              <div ref={reviewMapsQueueRef} className="space-y-4 scroll-mt-24">
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-visible">
+                  <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
+                        DATA REVIEW MAPS (G MAPS & TRIPAD)
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                        {filteredReviewMaps.length} / {mapsReviewsOnly.length} Data
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Search & Sort Bar for Maps Reviews */}
+                  <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/70 p-4 border-b border-slate-100">
+                    <div className="relative w-full lg:w-80 group">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                        <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                      </div>
+                      <input
+                        type="text"
+                        value={searchMaps}
+                        onChange={(e) => setSearchMaps(e.target.value)}
+                        placeholder="Cari toko, klien, tipe, catatan..."
+                        className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
+                      />
+                      {searchMaps && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchMaps('')}
+                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Sorting / filtering controls */}
+                    <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
+                      <ModernFilterSelect
+                        value={reviewTypeFilter}
+                        onChange={(v) => setReviewTypeFilter(v as any)}
+                        icon={<Filter className="w-4 h-4 text-purple-600" />}
+                        glowColor="purple"
+                        options={[
+                          { value: 'all', label: 'Semua Review' },
+                          { value: 'GMAPS', label: 'Google Maps' },
+                          { value: 'TRIPAD', label: 'Tripadvisor' },
+                        ]}
+                      />
+
+                      <ModernFilterSelect
+                        value={sortMaps}
+                        onChange={(v) => setSortMaps(v as any)}
+                        icon={<Activity className="w-4 h-4 text-purple-600" />}
+                        glowColor="purple"
+                        options={[
+                          { value: 'all', label: 'Semua Progres' },
+                          { value: 'pending', label: 'Pending' },
+                          { value: 'progress', label: 'Progres' },
+                          { value: 'ready', label: 'Ready' },
+                          { value: 'sudah_direkap', label: 'Sudah Direkap' },
+                          { value: 'done', label: 'Done' },
+                        ]}
+                      />
+
+                      <MonthlyDateRangePicker
+                        value={timeFilterMaps}
+                        onChange={setTimeFilterMaps}
+                        currentLang="id"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse table-fixed min-w-[1100px]">
+                      <colgroup>
+                        <col className="w-[12%]" />
+                        <col className="w-[14%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[13%]" />
+                        <col className="w-[17%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[10%]" />
+                      </colgroup>
+                      <thead>
+                        <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-450 text-[10px] font-bold uppercase tracking-wider">
+                          <th className="px-4 py-3.5">ID / Tanggal</th>
+                          <th className="px-4 py-3.5">Store & Klien</th>
+                          <th className="px-4 py-3.5">Jasa / Slot</th>
+                          <th className="px-4 py-3.5">Target</th>
+                          <th className="px-4 py-3.5">Clue / Catatan</th>
+                          <th className="px-4 py-3.5">Format Pesanan</th>
+                          <th className="px-4 py-3.5">Link Bukti</th>
+                          <th className="px-4 py-3.5 text-center">Status / Bayar</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                        {filteredReviewMaps.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-4 py-12 text-center text-slate-400 font-semibold font-sans">
+                              {searchMaps ? 'Tidak ada hasil pencarian yang cocok.' : 'Belum ada data review maps dimasukkan.'}
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedReviewMaps.map((item) => {
+                            const isTripad = item.review_type === 'TRIPAD';
+                            const isApps = item.review_type === 'REVIEW_APPS';
+                            const formatStr = `Link: ${item.maps_link}\nNama cust: ${item.client_name}\nNama st: ${item.store_name || '-'}\nclue: ${item.notes || '-'}`;
+
+                            return (
+                              <tr key={item.id} className="hover:bg-slate-50/40 transition-colors">
+                                {/* ID / Tanggal / Status */}
+                                <td className="px-4 py-3 font-mono">
+                                  <span className="font-bold text-slate-900 block truncate" title={item.id}>{item.id}</span>
+                                  <span className="text-[10px] text-slate-400 block mt-0.5 whitespace-nowrap">
+                                    {new Date(item.created_at).toLocaleDateString('id-ID', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                  <div className="flex flex-col gap-1 mt-1">
+                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md inline-block w-fit ${
+                                      isTripad
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : isApps
+                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                        : 'bg-purple-50 text-purple-700 border border-purple-200'
+                                    }`}>
+                                      {isTripad ? 'TRIPAD' : isApps ? 'APPS' : 'G MAPS'}
+                                    </span>
+                                    {item.created_by && (
+                                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 border ${
+                                        item.created_by === currentAdminUser 
+                                          ? 'bg-slate-100 text-slate-600 border-slate-200' 
+                                          : 'bg-violet-50 text-violet-700 border-violet-200'
+                                      }`}>
+                                        {item.created_by !== currentAdminUser && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
+                                        <span>diinput oleh {getSlotIndicatorName(item.created_by)}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Store & Klien (Ditumpuk) */}
+                                <td className="px-4 py-3">
+                                  <span className="font-extrabold text-slate-900 block truncate" title={item.store_name}>
+                                    {item.store_name || '-'}
+                                  </span>
+                                  <span className="text-xs text-slate-600 font-medium block truncate mt-0.5" title={item.client_name}>
+                                    {item.client_name}
+                                  </span>
+                                </td>
+
+                                {/* Jasa / Slot */}
+                                <td className="px-4 py-3">
+                                  <span className="font-bold text-slate-800 uppercase block tracking-wider text-[10px]">
+                                    {isTripad ? 'TRIPAD' : isApps ? 'APPS' : 'G MAPS'}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
+                                    {item.target_count || 1} Slot
+                                  </span>
+                                </td>
+
+                                {/* Target */}
+                                <td className="px-4 py-3 truncate">
+                                  {sanitizeUrl(item.maps_link) !== '#' ? (
+                                    <a
+                                      href={sanitizeUrl(item.maps_link)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-purple-600 hover:underline inline-flex items-center gap-1 font-mono text-[10px] font-semibold truncate max-w-full"
+                                      title={item.maps_link}
+                                    >
+                                      <ExternalLink className="h-3 w-3 shrink-0" />
+                                      <span className="truncate">Target Link</span>
+                                    </a>
+                                  ) : (
+                                    <span className="font-mono text-slate-700 font-bold truncate block">{item.maps_link}</span>
+                                  )}
+                                </td>
+
+                                {/* Clue / Catatan */}
+                                <td className="px-4 py-3">
+                                  <DebouncedTextarea
+                                    rows={2}
+                                    placeholder="Clue..."
+                                    value={item.notes || ''}
+                                    onSave={val => handleUpdateNotes(item.id, val)}
+                                    disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                    className={`w-full rounded-lg border border-slate-200 p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 font-sans resize-y min-h-[55px] ${
+                                      item.created_by && item.created_by !== currentAdminUser 
+                                        ? 'bg-slate-50 cursor-not-allowed text-slate-400' 
+                                        : 'bg-white'
+                                    }`}
+                                  />
+                                </td>
+
+                                {/* Format Pesanan with Single Button Copy */}
+                                <td className="px-4 py-3">
+                                  <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 relative group max-h-[110px] overflow-y-auto">
+                                    <pre className="font-mono text-[9px] text-slate-600 leading-normal whitespace-pre-wrap select-all">
+                                      {formatStr}
+                                    </pre>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyToClipboard(formatStr, item.id)}
+                                      className="absolute top-1.5 right-1.5 bg-white border border-slate-200 hover:border-slate-400 p-1 rounded-lg shadow-sm opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                      title="Salin Format"
+                                    >
+                                      {copiedId === item.id ? (
+                                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                      ) : (
+                                        <Copy className="h-3.5 w-3.5 text-slate-500" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </td>
+
+                                {/* Link Bukti */}
+                                <td className="px-4 py-3">
+                                  <DebouncedInput
+                                    type="text"
+                                    placeholder="Input link bukti..."
+                                    value={item.proof_link || ''}
+                                    onSave={val => handleUpdateProofLink(item.id, val)}
+                                    disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                    className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-purple-500 text-slate-700 font-mono ${
+                                      item.created_by && item.created_by !== currentAdminUser 
+                                        ? 'bg-slate-50 cursor-not-allowed text-slate-400' 
+                                        : 'bg-white'
+                                    }`}
+                                  />
+                                  {item.proof_link && sanitizeUrl(item.proof_link) !== '#' && (
+                                    <a
+                                      href={sanitizeUrl(item.proof_link)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[9px] text-purple-600 hover:underline font-mono inline-flex items-center gap-1 mt-1.5 truncate max-w-full font-bold"
+                                      title={item.proof_link}
+                                    >
+                                      <ExternalLink className="h-2.5 w-2.5" />
+                                      <span>Buka Bukti →</span>
+                                    </a>
+                                  )}
+                                </td>
+
+                                {/* Status Bayar / Aksi */}
+                                <td className="px-4 py-3 text-center space-y-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdatePaymentStatus(item.id, item.payment_status === 'PAID' ? 'UNPAID' : 'PAID')}
+                                    className={`w-full px-2 py-1.5 text-[10px] font-black rounded-lg border flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                                      item.payment_status === 'PAID'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                        : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
+                                    }`}
+                                    title="Klik untuk ubah status pembayaran (PAID / UNPAID)"
+                                  >
+                                    <span className={`h-2 w-2 rounded-full ${item.payment_status === 'PAID' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                                    <span>{item.payment_status === 'PAID' ? 'PAID' : 'UNPAID'}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => copyToClipboard(formatStr, item.id)}
+                                    className={`w-full px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                      copiedId === item.id
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                    }`}
+                                    title="Salin Format"
+                                  >
+                                    {copiedId === item.id ? (
+                                      <>
+                                        <Check className="h-3 w-3 text-emerald-600" />
+                                        <span>Tersalin!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="h-3 w-3 text-blue-600" />
+                                        <span>Salin Format</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  {(!item.created_by || item.created_by === currentAdminUser) && (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditMaps(item)}
+                                        className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Edit Target"
+                                      >
+                                        <Edit className="h-3.5 w-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteMapsReview(item.id)}
+                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Hapus Target"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <Pagination
+                    currentPage={pageMaps}
+                    totalPages={Math.ceil(filteredReviewMaps.length / ITEMS_PER_PAGE)}
+                    onPageChange={setPageMaps}
+                    activeBgColor="bg-purple-600"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: REPORT MAPS */}
+          {activeTab === 'report_maps' && (
+            <div className="space-y-8 fade-in" id="adminshp-report-maps-view">
+              {/* COLLAPSIBLE REPORT MAPS FORM CARD */}
+              <div 
+                className={`bg-white rounded-3xl border transition-all duration-400 ${
+                  isReportMapsFormExpanded 
+                    ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg' 
+                    : 'border-slate-200 shadow-sm'
+                }`}
+                id="card-report-maps"
+              >
+                {/* Card Header Section always visible */}
+                <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100">
+                  <div className="flex items-center gap-3.5">
+                    <div className="h-10 w-10 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-black shrink-0">
+                      <MapPin className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-slate-900 leading-snug">
+                        REPORT MAPS
+                      </h2>
+                      <p className="text-[11px] text-slate-400 font-medium">Input pesanan report Google Maps &amp; Tripadvisor</p>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => setIsReportMapsFormExpanded(!isReportMapsFormExpanded)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      isReportMapsFormExpanded
+                        ? 'bg-slate-900 text-white hover:bg-slate-800'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-600/20'
+                    }`}
+                  >
+                    {isReportMapsFormExpanded ? 'Hide Form' : 'Input Pesanan Report Maps'}
+                  </button>
+                </div>
+
+                {/* Collapsible Form Panel */}
+                <AnimatePresence initial={false}>
+                  {isReportMapsFormExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.45, ease: [0.25, 0.8, 0.25, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <div ref={reportMapsFormRef} className="p-6 border-t border-slate-100 bg-slate-50/30 space-y-4">
+                        <form onSubmit={handleSubmitReportMaps} className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Nama Store <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="Contoh: GM Store"
+                                value={formReportMaps.storeName}
+                                onChange={e => setFormReportMaps(prev => ({ ...prev, storeName: e.target.value }))}
                                 className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans"
                               />
                               <div className="flex flex-wrap gap-1 mt-1">
@@ -2173,9 +2683,9 @@ Format Chat : ${data.notes || '-'}`;
                                   <button
                                     key={st}
                                     type="button"
-                                    onClick={() => setFormMaps(prev => ({ ...prev, storeName: st }))}
+                                    onClick={() => setFormReportMaps(prev => ({ ...prev, storeName: st }))}
                                     className={`px-2 py-0.5 text-[9px] font-black rounded-lg transition-all ${
-                                      formMaps.storeName === st
+                                      formReportMaps.storeName === st
                                         ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-600'
                                         : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
                                     } cursor-pointer`}
@@ -2188,112 +2698,127 @@ Format Chat : ${data.notes || '-'}`;
 
                             <div className="space-y-1">
                               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                Notes / Clue <span className="text-red-500">*</span>
-                              </label>
-                              <textarea
-                                required
-                                placeholder="Contoh: ulasan harus bintang 5, foto tempat, clue ulasan positif"
-                                value={formMaps.notes}
-                                onChange={e => setFormMaps(prev => ({ ...prev, notes: e.target.value }))}
-                                rows={2}
-                                className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans resize-y"
-                              />
-                            </div>
-
-                            <div className="space-y-1">
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                {formMaps.reviewType === 'G_MAPS' 
-                                  ? 'Link Maps' 
-                                  : formMaps.reviewType === 'TRIPAD' 
-                                  ? 'Link Tripadvisor' 
-                                  : 'Link Target Apps'
-                                } <span className="text-red-500">*</span>
+                                Client Name <span className="text-red-500">*</span>
                               </label>
                               <input
-                                type="url"
+                                type="text"
                                 required
-                                placeholder={
-                                  formMaps.reviewType === 'G_MAPS' 
-                                    ? 'https://maps.google.com/?cid=...' 
-                                    : formMaps.reviewType === 'TRIPAD' 
-                                    ? 'https://www.tripadvisor.com/...' 
-                                    : 'https://play.google.com/store/apps/details?id=...'
-                                }
-                                value={formMaps.mapsLink}
-                                onChange={e => setFormMaps(prev => ({ ...prev, mapsLink: e.target.value }))}
-                                className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-mono"
+                                placeholder="Nama pembeli / client"
+                                value={formReportMaps.clientName}
+                                onChange={e => setFormReportMaps(prev => ({ ...prev, clientName: e.target.value }))}
+                                className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans"
                               />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Jenis Jasa <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                value={formReportMaps.reviewType}
+                                onChange={e => setFormReportMaps(prev => ({ ...prev, reviewType: e.target.value as 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS' }))}
+                                className="w-full rounded-xl bg-white border border-slate-200 px-3 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans cursor-pointer font-bold text-slate-700"
+                              >
+                                <option value="G_MAPS">G MAPS</option>
+                                <option value="TRIPAD">TRIPAD</option>
+                                <option value="REVIEW_APPS">APPS</option>
+                              </select>
                             </div>
 
                             <div className="space-y-1">
                               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                Target Count <span className="text-red-500">*</span>
+                                Jumlah Slot / Target <span className="text-red-500">*</span>
                               </label>
                               <input
                                 type="number"
                                 required
                                 min={1}
-                                placeholder="Jumlah ulasan target"
-                                value={formMaps.targetCount}
-                                onChange={e => setFormMaps(prev => ({ ...prev, targetCount: Math.max(1, Number(e.target.value)) }))}
+                                value={formReportMaps.targetCount}
+                                onChange={e => setFormReportMaps(prev => ({ ...prev, targetCount: Math.max(1, Number(e.target.value)) }))}
                                 className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-mono"
                               />
                             </div>
+                          </div>
 
-                            <button
-                              type="submit"
-                              className="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl text-xs font-extrabold uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/10"
-                            >
-                              <Plus className="h-4 w-4" />
-                              <span>
-                                {formMaps.reviewType === 'G_MAPS' 
-                                  ? 'Buat Target Review Maps' 
-                                  : formMaps.reviewType === 'TRIPAD' 
-                                  ? 'Buat Target Review Tripadvisor' 
-                                  : 'Buat Target Review Apps'
-                                }
-                              </span>
-                            </button>
-                          </form>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                              Target Link <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="https://maps.app.goo.gl/... atau link tripadvisor"
+                              value={formReportMaps.mapsLink}
+                              onChange={e => setFormReportMaps(prev => ({ ...prev, mapsLink: e.target.value }))}
+                              className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-mono"
+                            />
+                          </div>
 
-                 {/* TABLE PROGRESS & LIST (8 columns) */}
-                 <div ref={mapsQueueRef} className="lg:col-span-8 space-y-4 scroll-mt-24">
-                   <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-visible">
-                     <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-                       <div className="flex items-center gap-2.5">
-                         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
-                           Progres Target Review (G Maps, Tripadvisor & Review Apps)
-                         </h3>
-                       </div>
-                       <div className="flex items-center gap-2">
-                         <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                           {filteredMapsReviews.length} / {mapsReviews.length} Data
-                         </span>
-                       </div>
-                     </div>
- 
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                              Alasan <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                              rows={2}
+                              required
+                              placeholder="Alasan report / detail pengerjaan..."
+                              value={formReportMaps.notes}
+                              onChange={e => setFormReportMaps(prev => ({ ...prev, notes: e.target.value }))}
+                              className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl text-xs font-extrabold uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/10 cursor-pointer"
+                          >
+                            <Send className="h-4 w-4" />
+                            <span>Submit &amp; Generate Format</span>
+                          </button>
+                        </form>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* TABLE PROGRESS & LIST */}
+
+                {/* TABLE LIST REPORT MAPS */}
+                <div ref={reportMapsQueueRef} className="space-y-4 scroll-mt-24">
+                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-visible">
+                    <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
+                          DATA REPORT MAPS (G MAPS & TRIPAD)
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                          {filteredReportMaps.length} / {reportMapsReviews.length} Data
+                        </span>
+                      </div>
+                    </div>
+
                     {/* Search & Sort Bar for Maps Reviews */}
                     <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/70 p-4 border-b border-slate-100">
                       <div className="relative w-full lg:w-80 group">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                          <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                          <Search className="w-4 h-4 text-blue-500 group-focus-within:text-blue-600 transition-colors" />
                         </div>
                         <input
                           type="text"
-                          value={searchMaps}
-                          onChange={(e) => setSearchMaps(e.target.value)}
-                          placeholder="Cari toko, klien, tipe, clue..."
-                          className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
+                          value={searchReportMaps}
+                          onChange={(e) => setSearchReportMaps(e.target.value)}
+                          placeholder="Cari toko, klien, tipe, alasan..."
+                          className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-blue-200/80 shadow-[0_0_14px_rgba(59,130,246,0.14)] focus:shadow-[0_0_20px_rgba(59,130,246,0.28)] focus:border-blue-400 font-sans transition-all"
                         />
-                        {searchMaps && (
+                        {searchReportMaps && (
                           <button
                             type="button"
-                            onClick={() => setSearchMaps('')}
+                            onClick={() => setSearchReportMaps('')}
                             className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                           >
                             <X className="w-3.5 h-3.5" />
@@ -2301,28 +2826,26 @@ Format Chat : ${data.notes || '-'}`;
                         )}
                       </div>
 
-                      {/* Minimalist sorting / filtering controls with Modern Backlight */}
+                      {/* Sorting / filtering controls */}
                       <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
-                        {/* Tipe Review Filter */}
                         <ModernFilterSelect
-                          value={reviewTypeFilter}
-                          onChange={(v) => setReviewTypeFilter(v as any)}
-                          icon={<Filter className="w-4 h-4 text-purple-600" />}
-                          glowColor="purple"
+                          value={reportTypeFilter}
+                          onChange={(v) => setReportTypeFilter(v as any)}
+                          icon={<Filter className="w-4 h-4 text-blue-600" />}
+                          glowColor="blue"
                           options={[
-                            { value: 'all', label: 'Semua Review' },
+                            { value: 'all', label: 'Semua Report' },
                             { value: 'GMAPS', label: 'Google Maps' },
                             { value: 'TRIPAD', label: 'Tripadvisor' },
-                            { value: 'REVIEW APPS', label: 'Review Apps' },
+                            { value: 'REVIEW APPS', label: 'Apps' },
                           ]}
                         />
 
-                        {/* Status / Progres Filter */}
                         <ModernFilterSelect
-                          value={sortMaps}
-                          onChange={(v) => setSortMaps(v as any)}
-                          icon={<Activity className="w-4 h-4 text-purple-600" />}
-                          glowColor="purple"
+                          value={sortReportMaps}
+                          onChange={(v) => setSortReportMaps(v as any)}
+                          icon={<Activity className="w-4 h-4 text-blue-600" />}
+                          glowColor="blue"
                           options={[
                             { value: 'all', label: 'Semua Progres' },
                             { value: 'pending', label: 'Pending' },
@@ -2333,70 +2856,76 @@ Format Chat : ${data.notes || '-'}`;
                           ]}
                         />
 
-                        {/* Timeframe Filter (Monthly Date Range Picker) */}
                         <MonthlyDateRangePicker
-                          value={timeFilterMaps}
-                          onChange={setTimeFilterMaps}
+                          value={timeFilterReportMaps}
+                          onChange={setTimeFilterReportMaps}
                           currentLang="id"
                         />
                       </div>
                     </div>
-                     <div className="overflow-x-auto">
-                       <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
-                         <colgroup>
-                           <col className="w-[14%]" />
-                           <col className="w-[18%]" />
-                           <col className="w-[14%]" />
-                           <col className="w-[20%]" />
-                           <col className="w-[14%]" />
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse table-fixed min-w-[1100px]">
+                        <colgroup>
+                          <col className="w-[12%]" />
+                          <col className="w-[14%]" />
+                          <col className="w-[10%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[13%]" />
+                          <col className="w-[17%]" />
                           <col className="w-[12%]" />
                           <col className="w-[10%]" />
                         </colgroup>
                         <thead>
                           <tr className="bg-slate-50/50 border-b border-slate-100 text-slate-450 text-[10px] font-bold uppercase tracking-wider">
-                            <th className="px-3 py-3.5">Nama Store</th>
-                            <th className="px-3 py-3.5">Client / Target Link</th>
-                            <th className="px-3 py-3.5">Progres Target</th>
-                            <th className="px-3 py-3.5">Progres Akun</th>
-                            <th className="px-3 py-3.5">Clue</th>
-                            <th className="px-3 py-3.5">Link Bukti</th>
-                            <th className="px-3 py-3.5 text-center">Status / Aksi</th>
+                            <th className="px-4 py-3.5">ID / Tanggal</th>
+                            <th className="px-4 py-3.5">Store & Klien</th>
+                            <th className="px-4 py-3.5">Jasa / Slot</th>
+                            <th className="px-4 py-3.5">Target</th>
+                            <th className="px-4 py-3.5">Alasan</th>
+                            <th className="px-4 py-3.5">Format Pesanan</th>
+                            <th className="px-4 py-3.5">Link Bukti</th>
+                            <th className="px-4 py-3.5 text-center">Status / Bayar</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-sans">
-                          {filteredMapsReviews.length === 0 ? (
+                        <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                          {filteredReportMaps.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="px-4 py-12 text-center text-slate-400 font-semibold font-sans">
-                                {searchMaps ? 'Tidak ada hasil pencarian yang cocok.' : 'Belum ada data progres review dimasukkan.'}
+                              <td colSpan={8} className="px-4 py-12 text-center text-slate-400 font-semibold font-sans">
+                                {searchReportMaps ? 'Tidak ada hasil pencarian yang cocok.' : 'Belum ada data report maps dimasukkan.'}
                               </td>
                             </tr>
                           ) : (
-                            paginatedMapsReviews.map((item) => {
-                              const doneCount = item.reviewer_accounts?.length || 0;
-                              const pct = Math.min(100, Math.round((doneCount / item.target_count) * 100));
-                              const isFinished = item.status === 'DONE';
+                            paginatedReportMaps.map((item) => {
+                              const isTripad = item.review_type === 'TRIPAD';
+                              const isApps = item.review_type === 'REVIEW_APPS';
+                              const formatStr = `Link: ${item.maps_link}\nNama cust: ${item.client_name}\nNama st: ${item.store_name || '-'}\nJenis Jasa: ${isTripad ? 'TRIPAD' : isApps ? 'APPS' : 'G MAPS'}\nSlot: ${item.target_count || 1}\nAlasan: ${item.notes || '-'}`;
 
                               return (
                                 <tr key={item.id} className="hover:bg-slate-50/40 transition-colors">
-                                  {/* Nama Store (Static Readonly Badge as requested) */}
-                                  <td className="px-3 py-3 font-sans font-extrabold text-slate-900">
-                                    <span className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200 block text-center uppercase tracking-wider text-[11px] font-black">
-                                      {item.store_name || '-'}
+                                  {/* ID / Tanggal / Status */}
+                                  <td className="px-4 py-3 font-mono">
+                                    <span className="font-bold text-slate-900 block truncate" title={item.id}>{item.id}</span>
+                                    <span className="text-[10px] text-slate-400 block mt-0.5 whitespace-nowrap">
+                                      {new Date(item.created_at).toLocaleDateString('id-ID', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
                                     </span>
-                                  </td>
-
-                                  {/* Client / Target Link */}
-                                  <td className="px-3 py-3 font-sans">
-                                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                                      {item.review_type === 'TRIPAD' ? (
-                                        <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">Tripadvisor</span>
-                                      ) : item.review_type === 'REVIEW_APPS' ? (
-                                        <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">Review Apps</span>
-                                      ) : (
-                                        <span className="text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">G Maps</span>
-                                      )}
+                                    <div className="flex flex-col gap-1 mt-1">
+                                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md inline-block w-fit ${
+                                        isTripad
+                                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                          : isApps
+                                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                      }`}>
+                                        {isTripad ? 'TRIPAD' : isApps ? 'APPS' : 'G MAPS'}
+                                      </span>
                                       {item.created_by && (
-                                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 border ${
+                                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 border ${
                                           item.created_by === currentAdminUser 
                                             ? 'bg-slate-100 text-slate-600 border-slate-200' 
                                             : 'bg-violet-50 text-violet-700 border-violet-200'
@@ -2406,119 +2935,94 @@ Format Chat : ${data.notes || '-'}`;
                                         </span>
                                       )}
                                     </div>
-                                    <span className="font-bold text-slate-900 block truncate" title={item.client_name}>
+                                  </td>
+
+                                  {/* Store & Klien (Ditumpuk) */}
+                                  <td className="px-4 py-3">
+                                    <span className="font-extrabold text-slate-900 block truncate" title={item.store_name}>
+                                      {item.store_name || '-'}
+                                    </span>
+                                    <span className="text-xs text-slate-600 font-medium block truncate mt-0.5" title={item.client_name}>
                                       {item.client_name}
                                     </span>
-                                    <div className="text-[10px] text-slate-400 font-mono mt-1">
-                                      ID: {item.id.slice(0, 8)} | {new Date(item.created_at).toLocaleDateString('id-ID', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                      })}
-                                    </div>
-                                    <a 
-                                      href={sanitizeUrl(item.maps_link)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 hover:underline inline-flex items-center gap-0.5 font-mono text-[10px] mt-1.5 truncate max-w-full font-semibold"
-                                      title={item.maps_link}
-                                    >
-                                      {item.review_type === 'REVIEW_APPS' ? (
-                                        <>
-                                          <ExternalLink className="h-3 w-3 shrink-0 text-purple-500" />
-                                          <span className="truncate">View Target Apps</span>
-                                        </>
-                                      ) : item.review_type === 'TRIPAD' ? (
-                                        <>
-                                          <ExternalLink className="h-3 w-3 shrink-0 text-emerald-500" />
-                                          <span className="truncate">View Tripadvisor</span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <MapPin className="h-3 w-3 shrink-0 text-red-500" />
-                                          <span className="truncate">View Google Maps</span>
-                                        </>
-                                      )}
-                                    </a>
                                   </td>
 
-                                  {/* Progres Target indicator with beautiful progress bar */}
-                                  <td className="px-3 py-3">
-                                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 mb-1.5 font-mono">
-                                      <span>{doneCount} / {item.target_count}</span>
-                                      <span>{pct}%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                      <div 
-                                        className={`h-full rounded-full transition-all duration-300 ${
-                                          isFinished ? 'bg-emerald-500' : 'bg-blue-600'
-                                        }`} 
-                                        style={{ width: `${pct}%` }}
-                                      />
-                                    </div>
+                                  {/* Jasa / Slot */}
+                                  <td className="px-4 py-3">
+                                    <span className="font-bold text-slate-800 uppercase block tracking-wider text-[10px]">
+                                      {isTripad ? 'TRIPAD' : isApps ? 'APPS' : 'G MAPS'}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-mono mt-0.5 block">
+                                      {item.target_count || 1} Slot
+                                    </span>
                                   </td>
 
-                                  {/* Progres Akun - READ-ONLY VIEW FOR ADMINSHP */}
-                                  <td className="px-3 py-3 space-y-2">
-                                    {/* Efficient compact grid with 5 columns for reviewer accounts */}
-                                    {item.reviewer_accounts && item.reviewer_accounts.length > 0 ? (
-                                      <div className="border border-slate-200 rounded-xl p-2 bg-white max-h-[140px] overflow-y-auto shadow-inner">
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-1">
-                                          {item.reviewer_accounts.map((acc, index) => (
-                                            <div key={index} className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1.5 py-1 text-[9px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
-                                              <span className="truncate font-mono" title={`${index + 1}. ${acc}`}>
-                                                {index + 1}. {acc}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div className="text-[10px] text-slate-400 italic py-2 text-center bg-slate-50/60 border border-dashed border-slate-200 rounded-lg">
-                                        Belum ada ulasan akun diinput oleh Admin
-                                      </div>
-                                    )}
-
-                                    {item.reviewer_accounts && item.reviewer_accounts.length > 0 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setScreenshotModalItem(item)}
-                                        className="w-full mt-2 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                                  {/* Target */}
+                                  <td className="px-4 py-3 truncate">
+                                    {sanitizeUrl(item.maps_link) !== '#' ? (
+                                      <a
+                                        href={sanitizeUrl(item.maps_link)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-purple-600 hover:underline inline-flex items-center gap-1 font-mono text-[10px] font-semibold truncate max-w-full"
+                                        title={item.maps_link}
                                       >
-                                        <FileDown className="h-3.5 w-3.5 text-blue-600 animate-bounce" />
-                                        <span>Export PDF ({item.reviewer_accounts.length})</span>
-                                      </button>
+                                        <ExternalLink className="h-3 w-3 shrink-0" />
+                                        <span className="truncate">Target Link</span>
+                                      </a>
+                                    ) : (
+                                      <span className="font-mono text-slate-700 font-bold truncate block">{item.maps_link}</span>
                                     )}
                                   </td>
 
-                                  {/* Clue/Notes Column */}
-                                  <td className="px-3 py-3">
+                                  {/* Alasan */}
+                                  <td className="px-4 py-3">
                                     <DebouncedTextarea
                                       rows={2}
-                                      placeholder="Input clue/notes..."
+                                      placeholder="Alasan..."
                                       value={item.notes || ''}
                                       onSave={val => handleUpdateNotes(item.id, val)}
                                       disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
-                                      className={`w-full rounded-lg border border-slate-200 p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[60px] ${
+                                      className={`w-full rounded-lg border border-slate-200 p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 font-sans resize-y min-h-[55px] ${
                                         item.created_by && item.created_by !== currentAdminUser 
-                                          ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                          ? 'bg-slate-50 cursor-not-allowed text-slate-400' 
                                           : 'bg-white'
                                       }`}
                                     />
                                   </td>
 
-                                  {/* Link Bukti Pengerjaan */}
-                                  <td className="px-3 py-3">
+                                  {/* Format Pesanan with Single Button Copy */}
+                                  <td className="px-4 py-3">
+                                    <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 relative group max-h-[110px] overflow-y-auto">
+                                      <pre className="font-mono text-[9px] text-slate-600 leading-normal whitespace-pre-wrap select-all">
+                                        {formatStr}
+                                      </pre>
+                                      <button
+                                        type="button"
+                                        onClick={() => copyToClipboard(formatStr, item.id)}
+                                        className="absolute top-1.5 right-1.5 bg-white border border-slate-200 hover:border-slate-400 p-1 rounded-lg shadow-sm opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                        title="Salin Format"
+                                      >
+                                        {copiedId === item.id ? (
+                                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                                        ) : (
+                                          <Copy className="h-3.5 w-3.5 text-slate-500" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  </td>
+
+                                  {/* Link Bukti (input di luar form seperti di table sosmed lainnya) */}
+                                  <td className="px-4 py-3">
                                     <DebouncedInput
                                       type="text"
-                                      placeholder="Link bukti pengerjaan..."
+                                      placeholder="Input link bukti..."
                                       value={item.proof_link || ''}
                                       onSave={val => handleUpdateProofLink(item.id, val)}
                                       disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
-                                      className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-emerald-500 text-slate-700 font-mono ${
+                                      className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-purple-500 text-slate-700 font-mono ${
                                         item.created_by && item.created_by !== currentAdminUser 
-                                          ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
+                                          ? 'bg-slate-50 cursor-not-allowed text-slate-400' 
                                           : 'bg-white'
                                       }`}
                                     />
@@ -2527,49 +3031,35 @@ Format Chat : ${data.notes || '-'}`;
                                         href={sanitizeUrl(item.proof_link)}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-[9px] text-emerald-600 hover:underline font-mono inline-block mt-1.5 truncate max-w-full font-bold"
+                                        className="text-[9px] text-purple-600 hover:underline font-mono inline-flex items-center gap-1 mt-1.5 truncate max-w-full font-bold"
                                         title={item.proof_link}
                                       >
-                                        Buka Bukti →
+                                        <ExternalLink className="h-2.5 w-2.5" />
+                                        <span>Buka Bukti →</span>
                                       </a>
                                     )}
                                   </td>
 
-                                  {/* Status Badges & Action */}
-                                  <td className="px-3 py-3 text-center space-y-2">
-                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                      isFinished
-                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                        : item.status === 'PROGRESS'
-                                        ? 'bg-orange-100 text-orange-800 border border-orange-200'
-                                        : item.status === 'READY'
-                                        ? 'bg-white text-slate-700 border border-slate-300'
-                                        : item.status === 'SUDAH DIREKAP'
-                                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                        : 'bg-sky-100 text-sky-800 border border-sky-200'
-                                    }`}>
-                                      <span className={`h-1.5 w-1.5 rounded-full ${
-                                        isFinished 
-                                          ? 'bg-emerald-500' 
-                                          : item.status === 'PROGRESS'
-                                          ? 'bg-orange-500 animate-pulse'
-                                          : item.status === 'READY'
-                                          ? 'bg-slate-400'
-                                          : item.status === 'SUDAH DIREKAP'
-                                          ? 'bg-purple-500'
-                                          : 'bg-sky-500 animate-pulse'
-                                      }`} />
-                                      <span>{item.status || 'PENDING'}</span>
-                                    </span>
+                                  {/* Status Bayar / Aksi */}
+                                  <td className="px-4 py-3 text-center space-y-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdatePaymentStatus(item.id, item.payment_status === 'PAID' ? 'UNPAID' : 'PAID')}
+                                      className={`w-full px-2 py-1.5 text-[10px] font-black rounded-lg border flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+                                        item.payment_status === 'PAID'
+                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                          : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
+                                      }`}
+                                      title="Klik untuk ubah status pembayaran (PAID / UNPAID)"
+                                    >
+                                      <span className={`h-2 w-2 rounded-full ${item.payment_status === 'PAID' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                                      <span>{item.payment_status === 'PAID' ? 'PAID' : 'UNPAID'}</span>
+                                    </button>
 
                                     <button
-                                      onClick={() => {
-                                        const copypasta = `Link: ${item.maps_link}\nNama cust: ${item.client_name}\nNama st: ${item.store_name || '-'}\nclue: ${item.notes || '-'}`;
-                                        navigator.clipboard.writeText(copypasta);
-                                        setCopiedId(item.id);
-                                        setTimeout(() => setCopiedId(null), 2000);
-                                      }}
-                                      className={`w-full mt-1.5 px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                      type="button"
+                                      onClick={() => copyToClipboard(formatStr, item.id)}
+                                      className={`w-full px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
                                         copiedId === item.id
                                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                           : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
@@ -2590,23 +3080,24 @@ Format Chat : ${data.notes || '-'}`;
                                     </button>
 
                                     {(!item.created_by || item.created_by === currentAdminUser) && (
-                                      <>
-                                        <button
-                                          onClick={() => handleDeleteMapsReview(item.id)}
-                                          className="block mx-auto text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                                          title="Hapus Target"
-                                        >
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </button>
+                                      <div className="flex items-center justify-center gap-1">
                                         <button
                                           type="button"
                                           onClick={() => handleOpenEditMaps(item)}
-                                          className="block mx-auto text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer mt-1"
+                                          className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
                                           title="Edit Target"
                                         >
                                           <Edit className="h-3.5 w-3.5" />
                                         </button>
-                                      </>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteMapsReview(item.id)}
+                                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                          title="Hapus Target"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
                                     )}
                                   </td>
                                 </tr>
@@ -2618,427 +3109,16 @@ Format Chat : ${data.notes || '-'}`;
                     </div>
 
                     <Pagination
-                      currentPage={pageMaps}
-                      totalPages={Math.ceil(filteredMapsReviews.length / ITEMS_PER_PAGE)}
-                      onPageChange={setPageMaps}
+                      currentPage={pageReportMaps}
+                      totalPages={Math.ceil(filteredReportMaps.length / ITEMS_PER_PAGE)}
+                      onPageChange={setPageReportMaps}
                       activeBgColor="bg-blue-600"
                     />
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* TAB 3: PROGRES ACCOUNT */}
-          {activeTab === 'progress' && (
-            <div className="space-y-6 fade-in" id="adminshp-progress-account-view">
-              
-              {/* Search & Sort Bar */}
-              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/80 p-4 rounded-2xl border border-slate-100/80 shadow-xs">
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center w-full lg:w-auto">
-                  <div className="relative w-full sm:w-80 group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                      <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
-                    </div>
-                    <input
-                      type="text"
-                      value={searchProgress}
-                      onChange={(e) => setSearchProgress(e.target.value)}
-                      placeholder="Cari store, klien, tipe review, notes..."
-                      className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
-                    />
-                    {searchProgress && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchProgress('')}
-                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Tipe Review Filter (Modern Pill with Purple Backlight) */}
-                  <ModernFilterSelect
-                    value={progressReviewTypeFilter}
-                    onChange={(v) => setProgressReviewTypeFilter(v as any)}
-                    icon={<Filter className="w-4 h-4 text-purple-600" />}
-                    glowColor="purple"
-                    id="adminshp-tipe-review-filter"
-                    options={[
-                      { value: 'SEMUA', label: 'Semua Review' },
-                      { value: 'GMAPS', label: 'Google Maps' },
-                      { value: 'TRIPAD', label: 'Tripadvisor' },
-                      { value: 'REVIEW APPS', label: 'Review Apps' },
-                    ]}
-                  />
-                </div>
-
-                {/* Minimalist sorting / filtering controls */}
-                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
-                  {/* Status / Progres Filter */}
-                  <ModernFilterSelect
-                    value={sortProgress}
-                    onChange={(v) => setSortProgress(v as any)}
-                    icon={<Activity className="w-4 h-4 text-purple-600" />}
-                    glowColor="purple"
-                    options={[
-                      { value: 'all', label: 'Semua Progres' },
-                      { value: 'pending', label: 'Pending' },
-                      { value: 'progress', label: 'Progres' },
-                      { value: 'ready', label: 'Ready' },
-                      { value: 'sudah_direkap', label: 'Sudah Direkap' },
-                      { value: 'done', label: 'Done' },
-                    ]}
-                  />
-
-                  {/* Timeframe Filter (Monthly Date Range Picker) */}
-                  <MonthlyDateRangePicker
-                    value={timeFilterProgress}
-                    onChange={setTimeFilterProgress}
-                    currentLang={currentLang}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
-                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
-                      Review Orders Worker (G Maps, Tripadvisor &amp; Review Apps)
-                    </h3>
-                  </div>
-                  <span className="text-[11px] font-bold text-slate-600 bg-slate-200 px-2.5 py-0.5 rounded-full font-mono">
-                    {filteredProgressReviews.length} Total
-                  </span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
-                    <colgroup>
-                      <col className="w-[10%]" />
-                      <col className="w-[13%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[20%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[15%]" />
-                    </colgroup>
-                    <thead>
-                      <tr className="bg-slate-50/20 border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                        <th className="px-4 py-3">ID / Tanggal</th>
-                        <th className="px-4 py-3">Klien &amp; Store Name</th>
-                        <th className="px-4 py-3">Tipe Review</th>
-                        <th className="px-4 py-3">Target Link</th>
-                        <th className="px-4 py-3">Input Progres Akun</th>
-                        <th className="px-4 py-3">Clue</th>
-                        <th className="px-4 py-3">Link Bukti</th>
-                        <th className="px-4 py-3 text-center">Status / Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                      {filteredProgressReviews.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
-                            Belum ada laporan review yang cocok / terdaftar.
-                          </td>
-                        </tr>
-                      ) : (
-                        paginatedProgressReviews.map((review) => {
-                          const doneCount = review.reviewer_accounts?.length || 0;
-                          const pct = Math.min(100, Math.round((doneCount / (review.target_count || 1)) * 100));
-                          const isFinished = review.status === 'DONE';
-
-                          return (
-                            <tr key={review.id} className="hover:bg-slate-50/30 transition-colors">
-                              {/* ID and Date */}
-                              <td className="px-4 py-3 font-mono">
-                                <span className="font-bold text-slate-900 block truncate" title={review.id}>
-                                  {review.id.slice(0, 8)}...
-                                </span>
-                                <span className="text-[10px] text-slate-400 block mt-0.5 whitespace-nowrap">
-                                  {new Date(review.created_at).toLocaleDateString('id-ID', {
-                                    day: 'numeric',
-                                    month: 'short',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </span>
-                                {review.created_by && (
-                                  <span className="text-[9px] text-orange-600 font-bold block mt-1 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100/50 w-fit">
-                                    diinput oleh {getSlotIndicatorName(review.created_by)}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Client & Store Name */}
-                              <td className="px-4 py-3">
-                                <span className="font-bold text-slate-900 block truncate" title={review.store_name}>
-                                  {review.store_name}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-medium block mt-0.5 truncate" title={review.client_name}>
-                                  Klien: {review.client_name}
-                                </span>
-                              </td>
-
-                              {/* Review Type */}
-                              <td className="px-4 py-3">
-                                <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                  review.review_type === 'G_MAPS'
-                                    ? 'bg-red-50 text-red-700 border border-red-100'
-                                    : (review.review_type === 'TRIPAD' || (review.review_type as string) === 'TRIPADVISOR' || (review.review_type as string) === 'REVIEW_TRIPAD')
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                                    : 'bg-violet-50 text-violet-700 border border-violet-100'
-                                }`}>
-                                  {(review.review_type || 'G_MAPS').replace(/_/g, ' ')}
-                                </span>
-                              </td>
-
-                              {/* Target Link */}
-                              <td className="px-4 py-3">
-                                {review.maps_link && sanitizeUrl(review.maps_link) !== '#' ? (
-                                  <a
-                                    href={sanitizeUrl(review.maps_link)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-medium truncate"
-                                    title={review.maps_link}
-                                  >
-                                    <Link2 className="h-3 w-3 shrink-0 text-blue-500" />
-                                    <span className="truncate">{review.maps_link}</span>
-                                  </a>
-                                ) : review.maps_link ? (
-                                  <span className="text-[11px] text-slate-700 font-mono truncate block">{review.maps_link}</span>
-                                ) : (
-                                  <span className="text-slate-400">-</span>
-                                )}
-                              </td>
-
-                              {/* Input Progres Akun Column */}
-                              <td className="px-4 py-3 space-y-2">
-                                <div className="flex items-center justify-between text-[9px] font-bold text-slate-600 font-mono mb-1">
-                                  <span>Target: {doneCount} / {review.target_count || 0}</span>
-                                  <span>{pct}%</span>
-                                </div>
-                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mb-2">
-                                  <div 
-                                    className={`h-full rounded-full transition-all duration-300 ${
-                                      isFinished ? 'bg-emerald-500' : 'bg-blue-600'
-                                    }`} 
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-
-                                <div className="flex gap-1.5 items-center">
-                                  <input
-                                    type="text"
-                                    placeholder="Nama Akun Reviewer"
-                                    value={tempAccountInput[review.id] || ''}
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      if (val.endsWith(',') || val.endsWith('\n')) {
-                                        const cleanNames = val.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-                                        if (cleanNames.length > 0) {
-                                          const targetReview = mapsReviews.find(r => r.id === review.id);
-                                          if (targetReview) {
-                                            const currentAccounts = Array.isArray(targetReview.reviewer_accounts) ? targetReview.reviewer_accounts : [];
-                                            const updatedAccounts = [...currentAccounts, ...cleanNames];
-                                            setMapsReviews(prev => prev.map(r => r.id === review.id ? { 
-                                              ...r, 
-                                              reviewer_accounts: updatedAccounts,
-                                              status: (r.status === 'PENDING' && updatedAccounts.length > 0) ? 'PROGRESS' : r.status
-                                            } : r));
-                                            setTempAccountInput(prev => ({ ...prev, [review.id]: '' }));
-                                            dbUpdateMapsReview(review.id, { reviewer_accounts: updatedAccounts }).then(() => {
-                                              window.dispatchEvent(new CustomEvent('gm_supabase_data_synced', { detail: { timestamp: Date.now() } }));
-                                            }).catch(console.error);
-                                            return;
-                                          }
-                                        }
-                                      }
-                                      setTempAccountInput(prev => ({ ...prev, [review.id]: val }));
-                                    }}
-                                    onKeyDown={e => {
-                                      if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        handleAddReviewerAccount(review.id);
-                                      }
-                                    }}
-                                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 flex-grow font-sans bg-white min-w-0"
-                                  />
-                                  <button
-                                    type="button"
-                                    onPointerDown={(e) => {
-                                      e.preventDefault();
-                                      handleAddReviewerAccount(review.id);
-                                    }}
-                                    onClick={() => handleAddReviewerAccount(review.id)}
-                                    className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg px-2.5 py-1.5 transition-all shrink-0 cursor-pointer flex items-center justify-center min-w-[34px] min-h-[30px] shadow-sm font-bold"
-                                    title="Tambah Akun (Progres +1)"
-                                  >
-                                    <Plus className="h-4 w-4 stroke-[2.5]" />
-                                  </button>
-                                </div>
-
-                                {/* Scrollable grid for accounts */}
-                                {review.reviewer_accounts && review.reviewer_accounts.length > 0 ? (
-                                  <div className="border border-slate-200 rounded p-1.5 bg-white max-h-[100px] overflow-y-auto shadow-inner mt-1">
-                                    <div className="grid grid-cols-2 gap-1">
-                                      {review.reviewer_accounts.map((acc, index) => (
-                                        <div key={index} className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-[8px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
-                                          <span className="truncate font-mono" title={`${index + 1}. ${acc}`}>
-                                            {index + 1}. {acc}
-                                          </span>
-                                          <button
-                                            onClick={() => handleRemoveReviewerAccount(review.id, index)}
-                                            className="text-red-500 hover:text-red-700 font-extrabold hover:bg-red-50 px-0.5 rounded transition-all cursor-pointer text-[10px] leading-none"
-                                            title="Hapus Akun"
-                                          >
-                                            ×
-                                          </button>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="text-[9px] text-slate-400 italic py-1 text-center bg-slate-50/60 border border-dashed border-slate-200 rounded">
-                                    Belum ada ulasan akun diinput
-                                  </div>
-                                )}
-
-                                {review.reviewer_accounts && review.reviewer_accounts.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleExportPDF(review)}
-                                    className="w-full mt-1.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-all cursor-pointer shadow-sm"
-                                  >
-                                    <FileDown className="h-3 w-3 text-blue-600" />
-                                    <span>Export PDF ({review.reviewer_accounts.length})</span>
-                                  </button>
-                                )}
-                              </td>
-
-                              {/* Notes / Clue */}
-                              <td className="px-4 py-3">
-                                <DebouncedTextarea
-                                  rows={3}
-                                  placeholder="Input clue/catatan..."
-                                  value={review.notes || ''}
-                                  onSave={(val) => handleUpdateNotes(review.id, val)}
-                                  className="w-full rounded-lg border border-slate-200 bg-white p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-sans resize-y min-h-[60px]"
-                                />
-                              </td>
-
-                              {/* Link Bukti Pengerjaan */}
-                              <td className="px-4 py-3">
-                                <DebouncedInput
-                                  type="text"
-                                  placeholder="Link bukti pengerjaan..."
-                                  value={review.proof_link || ''}
-                                  onSave={(val) => handleUpdateProofLink(review.id, val)}
-                                  className="w-full rounded-lg border border-slate-200 px-2 py-1 text-[10px] outline-none focus:border-emerald-500 text-slate-700 font-mono bg-white"
-                                />
-                                {review.proof_link && sanitizeUrl(review.proof_link) !== '#' && (
-                                  <a
-                                    href={sanitizeUrl(review.proof_link)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[9px] text-emerald-600 hover:underline font-mono inline-block mt-1 truncate max-w-full font-bold"
-                                    title={review.proof_link}
-                                  >
-                                    Buka Bukti →
-                                  </a>
-                                )}
-                              </td>
-
-                              {/* Status dropdown & actions */}
-                              <td className="px-4 py-3 text-center">
-                                <select
-                                  value={review.status || 'PENDING'}
-                                  onChange={(e) => handleUpdateMapsStatus(review.id, e.target.value as any)}
-                                  className={`rounded-lg border px-2 py-1 text-[10px] font-bold outline-none cursor-pointer w-full ${
-                                    review.status === 'DONE'
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : review.status === 'PROGRESS'
-                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
-                                      : review.status === 'READY'
-                                      ? 'bg-white text-slate-700 border-slate-300'
-                                      : review.status === 'SUDAH DIREKAP'
-                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                      : 'bg-sky-50 text-sky-700 border-sky-200'
-                                  }`}
-                                >
-                                  <option value="PENDING">PENDING</option>
-                                  <option value="PROGRESS">PROGRESS</option>
-                                  <option value="READY">READY</option>
-                                  <option value="SUDAH DIREKAP">SUDAH DIREKAP</option>
-                                  <option value="DONE">DONE</option>
-                                </select>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const copypasta = `Link: ${review.maps_link}\nNama cust: ${review.client_name}\nNama st: ${review.store_name || '-'}\nclue: ${review.notes || '-'}`;
-                                    navigator.clipboard.writeText(copypasta);
-                                    setCopiedProgressId(review.id);
-                                    setTimeout(() => setCopiedProgressId(null), 2000);
-                                  }}
-                                  className={`w-full mt-1.5 px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                                    copiedProgressId === review.id
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                                  }`}
-                                  title="Salin Format"
-                                >
-                                  {copiedProgressId === review.id ? (
-                                    <>
-                                      <Check className="h-3 w-3 text-emerald-600" />
-                                      <span>Tersalin!</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="h-3 w-3 text-blue-600" />
-                                      <span>Salin Format</span>
-                                    </>
-                                  )}
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteMapsReview(review.id)}
-                                  className="block mx-auto mt-1.5 text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                                  title="Hapus Laporan"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditMaps(review)}
-                                  className="block mx-auto mt-1 text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
-                                  title="Edit Laporan"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <Pagination
-                  currentPage={pageProgress}
-                  totalPages={Math.ceil(filteredProgressReviews.length / ITEMS_PER_PAGE)}
-                  onPageChange={setPageProgress}
-                  activeBgColor="bg-purple-600"
-                />
-              </div>
-            </div>
-          )}
         </>
       )}
 

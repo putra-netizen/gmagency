@@ -654,6 +654,7 @@ app.get('/api/maps_reviews', async (req, res) => {
     if (data && data.length > 0) {
       const normalized = data.map((item: any) => ({
         ...item,
+        order_kind: item.order_kind || (item.id && String(item.id).startsWith('rep-') ? 'REPORT' : 'REVIEW'),
         reviewer_accounts: parseServerReviewerAccounts(item.reviewer_accounts)
       }));
       const filtered = normalized.filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id));
@@ -665,6 +666,7 @@ app.get('/api/maps_reviews', async (req, res) => {
     .filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id))
     .map((o: any) => ({
       ...o,
+      order_kind: o.order_kind || (o.id && String(o.id).startsWith('rep-') ? 'REPORT' : 'REVIEW'),
       reviewer_accounts: parseServerReviewerAccounts(o.reviewer_accounts)
     }));
   res.json(filteredLocal);
@@ -672,28 +674,39 @@ app.get('/api/maps_reviews', async (req, res) => {
 
 app.post('/api/maps_reviews', requireAuth, async (req, res) => {
   const cleanAccounts = parseServerReviewerAccounts(req.body.reviewer_accounts);
+  const isReport = req.body.order_kind === 'REPORT' || (req.body.id && String(req.body.id).startsWith('rep-'));
 
   const newReview = {
-    id: req.body.id || ('map-' + Date.now().toString().slice(-6)),
+    id: req.body.id || ((isReport ? 'rep-' : 'map-') + Date.now().toString().slice(-6)),
     ...req.body,
+    order_kind: isReport ? 'REPORT' : 'REVIEW',
     reviewer_accounts: cleanAccounts,
     proof_link: req.body.proof_link || '',
     status: req.body.status || 'PENDING',
+    payment_status: req.body.payment_status || (isReport ? 'UNPAID' : ''),
     created_at: req.body.created_at || new Date().toISOString()
   };
 
   if (supabase && !serverSupabaseFailed) {
     for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
-        const { data, error } = await supabase
+        let insertPayload: any = { ...newReview };
+        let { data, error } = await supabase
           .from(tbl)
-          .insert([newReview])
+          .insert([insertPayload])
           .select()
           .single();
+        if (error && error.message && error.message.includes('order_kind')) {
+          delete insertPayload.order_kind;
+          const retry = await supabase.from(tbl).insert([insertPayload]).select().single();
+          data = retry.data;
+          error = retry.error;
+        }
         if (!error && data) {
           clearServerSupabaseCache(tbl);
           return res.status(201).json({
             ...data,
+            order_kind: newReview.order_kind,
             reviewer_accounts: cleanAccounts
           });
         }

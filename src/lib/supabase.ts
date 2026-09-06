@@ -631,7 +631,8 @@ export function normalizeMapsReview(item: any): MapsReview {
     proof_link: String(item.proof_link || ''),
     notes: String(withStatusNotes.notes || ''),
     review_type: (item.review_type as any) || 'G_MAPS',
-    payment_status: item.payment_status || 'UNPAID',
+    order_kind: item.order_kind || (item.id && String(item.id).startsWith('rep-') ? 'REPORT' : 'REVIEW'),
+    payment_status: item.payment_status || ((item.id && String(item.id).startsWith('rep-')) ? 'UNPAID' : ''),
     created_by: String(item.created_by || ''),
     created_at: item.created_at || item.createdAt || new Date().toISOString()
   };
@@ -1197,10 +1198,12 @@ export async function dbGetMapsReviews(limit: number = 50000, forceRefresh: bool
   const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
 
+  const leanCols = 'id, store_name, client_name, review_type, target_count, maps_link, notes, proof_link, status, payment_status, created_by, created_at';
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    list = await fetchSupabaseTableWithFallback<MapsReview>('maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit);
+    list = await fetchSupabaseTableWithFallback<MapsReview>('maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit, leanCols);
     if (list.length === 0) {
-      list = await fetchSupabaseTableWithFallback<MapsReview>('maps_reviews', 'maps_orders', 'created_at', false, forceRefresh, limit);
+      list = await fetchSupabaseTableWithFallback<MapsReview>('maps_reviews', 'maps_orders', 'created_at', false, forceRefresh, limit, leanCols);
     }
   }
 
@@ -1245,7 +1248,8 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
     store_name: reviewData.store_name || '',
     notes: reviewData.notes || '',
     review_type: reviewData.review_type || 'G_MAPS',
-    created_by: reviewData.created_by || ''
+    created_by: reviewData.created_by || '',
+    payment_status: reviewData.payment_status || 'UNPAID'
   };
 
   const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(completeReview.notes, completeReview.status);
