@@ -631,6 +631,7 @@ export function normalizeMapsReview(item: any): MapsReview {
     proof_link: String(item.proof_link || ''),
     notes: String(withStatusNotes.notes || ''),
     review_type: (item.review_type as any) || 'G_MAPS',
+    payment_status: item.payment_status || 'UNPAID',
     created_by: String(item.created_by || ''),
     created_at: item.created_at || item.createdAt || new Date().toISOString()
   };

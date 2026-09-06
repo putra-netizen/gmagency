@@ -78,6 +78,7 @@ export interface MapsReview {
   store_name?: string;
   notes?: string;
   review_type?: 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS';
+  payment_status?: 'PAID' | 'UNPAID' | string;
   created_by?: string;
 }
 
