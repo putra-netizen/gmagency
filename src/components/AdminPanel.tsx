@@ -2102,7 +2102,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                   }`}
                   id="tab-shopee-orders"
                 >
-                  <span>{currentLang === 'id' ? 'Pesanan Shopee' : 'Shopee Orders'}</span>
+                  <span>Report Sosmed & Spam WA</span>
                 </button>
 
                 {/* 2. Review Orders */}
@@ -2124,7 +2124,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                   <span>Review Orders</span>
                 </button>
 
-                {/* 2.5. Map Reports */}
+                {/* 2.5. Report Orders */}
                 <button
                   onClick={() => {
                     isTabClicking.current = true;
@@ -2140,7 +2140,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                   }`}
                   id="tab-maps-reports"
                 >
-                  <span>Map Reports</span>
+                  <span>Report Orders</span>
                 </button>
 
                 {/* 3. Web Orders */}
@@ -2781,7 +2781,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
                     <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
-                      Daftar Pesanan Shopee (Manual Portal)
+                      Daftar Report Sosmed & Spam WA (Manual Portal)
                     </h3>
                   </div>
                   <span className="text-[11px] font-bold text-slate-600 bg-slate-200 px-2.5 py-0.5 rounded-full font-mono">
@@ -3491,7 +3491,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
                     <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
-                      Daftar Map Reports (Inputan Admin SHP)
+                      Daftar Report Orders (Inputan Admin SHP)
                     </h3>
                   </div>
                   <span className="text-[11px] font-bold text-slate-600 bg-slate-200 px-2.5 py-0.5 rounded-full font-mono">
