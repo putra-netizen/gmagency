@@ -1198,18 +1198,19 @@ export async function dbGetMapsReviews(limit: number = 50000, forceRefresh: bool
   const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
 
-  const leanCols = 'id, store_name, client_name, review_type, order_kind, target_count, maps_link, notes, proof_link, status, payment_status, created_by, created_at, reviewer_accounts';
+  // Safe column selection for maps_orders (excluding order_kind which does not exist in maps_orders schema)
+  const safeMapsCols = 'id, store_name, client_name, review_type, target_count, maps_link, notes, proof_link, status, payment_status, created_by, created_at, reviewer_accounts';
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    list = await fetchSupabaseTableWithFallback<MapsReview>('maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit, leanCols);
+    list = await fetchSupabaseTableWithFallback<MapsReview>('maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit, safeMapsCols);
     if (list.length === 0) {
-      list = await fetchSupabaseTableWithFallback<MapsReview>('maps_reviews', 'maps_orders', 'created_at', false, forceRefresh, limit, leanCols);
+      list = await fetchSupabaseTableWithFallback<MapsReview>('maps_reviews', 'maps_orders', 'created_at', false, forceRefresh, limit, safeMapsCols);
     }
   }
 
   if (list.length === 0) {
     const rawList = await safeFetch<MapsReview[]>(
-      '/api/maps_reviews',
+      `/api/maps_orders?limit=${limit}`,
       undefined,
       'gmsolution_local_maps_reviews',
       () => []
@@ -1249,7 +1250,8 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
     notes: reviewData.notes || '',
     review_type: reviewData.review_type || 'G_MAPS',
     created_by: reviewData.created_by || '',
-    payment_status: reviewData.payment_status || 'UNPAID'
+    payment_status: reviewData.payment_status || 'UNPAID',
+    order_kind: reviewData.order_kind || (String(mapId).startsWith('rep-') ? 'REPORT' : 'REVIEW')
   };
 
   const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(completeReview.notes, completeReview.status);
@@ -1262,14 +1264,16 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
+        const payloadToSend: any = { ...dbReview };
+        delete payloadToSend.order_kind; // Avoid column not found error in maps_orders
         const { data, error } = await supabase
           .from(tbl)
-          .insert([dbReview])
+          .insert([payloadToSend])
           .select()
           .single();
         if (!error && data) {
           clearSupabaseCache(tbl);
-          const result = normalizeMapsReview(data);
+          const result = normalizeMapsReview({ ...data, order_kind: completeReview.order_kind });
           updateLocalStorageMapsReview(result);
           return result;
         }
@@ -1280,7 +1284,7 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
   }
 
   try {
-    const response = await fetch('/api/maps_reviews', {
+    const response = await fetch('/api/maps_orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(dbReview)
@@ -1330,15 +1334,17 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
+        const payloadToSend: any = { ...finalData };
+        delete payloadToSend.order_kind; // Avoid column not found error in maps_orders
         const { data, error } = await supabase
           .from(tbl)
-          .update(finalData)
+          .update(payloadToSend)
           .eq('id', id)
           .select()
           .single();
         if (!error && data) {
           clearSupabaseCache(tbl);
-          const result = normalizeMapsReview(data);
+          const result = normalizeMapsReview({ ...data, order_kind: finalData.order_kind || currentItem?.order_kind });
           if (Array.isArray(finalData.reviewer_accounts) && finalData.reviewer_accounts.length > result.reviewer_accounts.length) {
             result.reviewer_accounts = finalData.reviewer_accounts;
           }
@@ -1352,7 +1358,7 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
   }
 
   try {
-    const response = await fetch(`/api/maps_reviews/${id}`, {
+    const response = await fetch(`/api/maps_orders/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(finalData)
@@ -1416,7 +1422,7 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
   deleteLocalStorageMapsReview(id);
 
   try {
-    await fetch(`/api/maps_reviews/${id}`, {
+    await fetch(`/api/maps_orders/${id}`, {
       method: 'DELETE',
       headers: { ...getAuthHeaders() }
     });

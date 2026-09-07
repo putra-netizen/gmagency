@@ -642,12 +642,12 @@ function parseServerReviewerAccounts(input: any): string[] {
   return [];
 }
 
-// --- MAPS REVIEWS API ---
-app.get('/api/maps_reviews', async (req, res) => {
+// --- MAPS ORDERS / MAPS REVIEWS API (Targeting 'maps_orders' table) ---
+const handleGetMapsOrders = async (req: any, res: any) => {
   const limit = Number(req.query.limit) || 50000;
   const forceRefresh = req.query.refresh === 'true';
   const db = readDatabase();
-  const deletedMaps = db.deleted_maps_reviews || [];
+  const deletedMaps = db.deleted_maps_reviews || db.deleted_maps_orders || [];
 
   if (supabase && !serverSupabaseFailed) {
     const data = await fetchServerSupabaseWithFallback(supabase, 'maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit);
@@ -662,7 +662,8 @@ app.get('/api/maps_reviews', async (req, res) => {
     }
   }
 
-  const filteredLocal = (db.maps_reviews || [])
+  const localList = db.maps_orders || db.maps_reviews || [];
+  const filteredLocal = localList
     .filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id))
     .map((o: any) => ({
       ...o,
@@ -670,9 +671,12 @@ app.get('/api/maps_reviews', async (req, res) => {
       reviewer_accounts: parseServerReviewerAccounts(o.reviewer_accounts)
     }));
   res.json(filteredLocal);
-});
+};
 
-app.post('/api/maps_reviews', requireAuth, async (req, res) => {
+app.get('/api/maps_orders', handleGetMapsOrders);
+app.get('/api/maps_reviews', handleGetMapsOrders);
+
+const handlePostMapsOrders = async (req: any, res: any) => {
   const cleanAccounts = parseServerReviewerAccounts(req.body.reviewer_accounts);
   const isReport = req.body.order_kind === 'REPORT' || (req.body.id && String(req.body.id).startsWith('rep-'));
 
@@ -691,12 +695,14 @@ app.post('/api/maps_reviews', requireAuth, async (req, res) => {
     for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
         let insertPayload: any = { ...newReview };
+        // Delete order_kind since maps_orders table in Supabase doesn't have this column
+        delete insertPayload.order_kind;
         let { data, error } = await supabase
           .from(tbl)
           .insert([insertPayload])
           .select()
           .single();
-        if (error && error.message && error.message.includes('order_kind')) {
+        if (error && error.message && (error.message.includes('order_kind') || error.code === 'PGRST204')) {
           delete insertPayload.order_kind;
           const retry = await supabase.from(tbl).insert([insertPayload]).select().single();
           data = retry.data;
@@ -715,13 +721,17 @@ app.post('/api/maps_reviews', requireAuth, async (req, res) => {
   }
 
   const db = readDatabase();
-  if (!db.maps_reviews) db.maps_reviews = [];
-  db.maps_reviews.push(newReview);
+  if (!db.maps_orders) db.maps_orders = db.maps_reviews ? [...db.maps_reviews] : [];
+  db.maps_orders.push(newReview);
+  if (db.maps_reviews) db.maps_reviews.push(newReview);
   writeDatabase(db);
   res.status(201).json(newReview);
-});
+};
 
-app.put('/api/maps_reviews/:id', requireAuth, async (req, res) => {
+app.post('/api/maps_orders', requireAuth, handlePostMapsOrders);
+app.post('/api/maps_reviews', requireAuth, handlePostMapsOrders);
+
+const handlePutMapsOrders = async (req: any, res: any) => {
   const { id } = req.params;
   const reqAccounts = req.body.reviewer_accounts !== undefined ? parseServerReviewerAccounts(req.body.reviewer_accounts) : undefined;
   const updatePayload = { ...req.body };
@@ -732,9 +742,12 @@ app.put('/api/maps_reviews/:id', requireAuth, async (req, res) => {
   if (supabase && !serverSupabaseFailed) {
     for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
       try {
+        const payloadToSend = { ...updatePayload };
+        // Delete order_kind to prevent PGRST204 schema error on maps_orders table
+        delete payloadToSend.order_kind;
         const { data, error } = await supabase
           .from(tbl)
-          .update(updatePayload)
+          .update(payloadToSend)
           .eq('id', id)
           .select()
           .single();
@@ -746,6 +759,7 @@ app.put('/api/maps_reviews/:id', requireAuth, async (req, res) => {
           }
           return res.json({
             ...data,
+            order_kind: updatePayload.order_kind || (String(id).startsWith('rep-') ? 'REPORT' : 'REVIEW'),
             reviewer_accounts: accounts
           });
         }
@@ -754,19 +768,22 @@ app.put('/api/maps_reviews/:id', requireAuth, async (req, res) => {
   }
 
   const db = readDatabase();
-  const idx = (db.maps_reviews || []).findIndex((o: any) => o.id === id);
+  const mapsList = db.maps_orders || db.maps_reviews || [];
+  const idx = mapsList.findIndex((o: any) => o.id === id);
   if (idx !== -1) {
-    db.maps_reviews[idx] = {
-      ...db.maps_reviews[idx],
+    mapsList[idx] = {
+      ...mapsList[idx],
       ...updatePayload
     };
+    db.maps_orders = mapsList;
+    if (db.maps_reviews) db.maps_reviews = mapsList;
     writeDatabase(db);
-    let accounts = parseServerReviewerAccounts(db.maps_reviews[idx].reviewer_accounts);
+    let accounts = parseServerReviewerAccounts(mapsList[idx].reviewer_accounts);
     if (reqAccounts && reqAccounts.length > accounts.length) {
       accounts = reqAccounts;
     }
     res.json({
-      ...db.maps_reviews[idx],
+      ...mapsList[idx],
       reviewer_accounts: accounts
     });
   } else {
@@ -774,14 +791,18 @@ app.put('/api/maps_reviews/:id', requireAuth, async (req, res) => {
       id,
       ...updatePayload
     };
-    if (!db.maps_reviews) db.maps_reviews = [];
-    db.maps_reviews.push(newEntry);
+    if (!db.maps_orders) db.maps_orders = [];
+    db.maps_orders.push(newEntry);
+    if (db.maps_reviews) db.maps_reviews.push(newEntry);
     writeDatabase(db);
     res.json(newEntry);
   }
-});
+};
 
-app.delete('/api/maps_reviews/:id', requireAuth, async (req, res) => {
+app.put('/api/maps_orders/:id', requireAuth, handlePutMapsOrders);
+app.put('/api/maps_reviews/:id', requireAuth, handlePutMapsOrders);
+
+const handleDeleteMapsOrders = async (req: any, res: any) => {
   const { id } = req.params;
 
   if (supabase && !serverSupabaseFailed) {
@@ -812,11 +833,19 @@ app.delete('/api/maps_reviews/:id', requireAuth, async (req, res) => {
     db.deleted_maps_reviews.push(id);
   }
 
-  db.maps_reviews = (db.maps_reviews || []).filter((o: any) => o.id !== id);
+  if (db.maps_orders) {
+    db.maps_orders = db.maps_orders.filter((o: any) => o.id !== id);
+  }
+  if (db.maps_reviews) {
+    db.maps_reviews = db.maps_reviews.filter((o: any) => o.id !== id);
+  }
   writeDatabase(db);
 
-  res.json({ success: true, message: 'Maps review deleted and blacklisted' });
-});
+  res.json({ success: true, message: 'Maps order deleted and blacklisted' });
+};
+
+app.delete('/api/maps_orders/:id', requireAuth, handleDeleteMapsOrders);
+app.delete('/api/maps_reviews/:id', requireAuth, handleDeleteMapsOrders);
 
 // --- REPORT MAPS API (Dedicated to Supabase 'report_maps' table) ---
 app.get('/api/report_maps', async (req, res) => {
@@ -1089,7 +1118,7 @@ app.get('/api/sheets/export-csv', requireAuth, async (req, res) => {
   const deletedOrders = db.deleted_orders || [];
 
   try {
-    if (type === 'maps_reviews') {
+    if (type === 'maps_reviews' || type === 'maps_orders') {
       let data: any[] = [];
       if (supabase && !serverSupabaseFailed) {
         try {
