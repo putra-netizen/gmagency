@@ -1621,38 +1621,38 @@ Format Chat : ${data.notes || '-'}`;
         <div className="flex items-center gap-2 sm:gap-3 min-w-max">
           <button
             onClick={() => setActiveTab('shopee')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 -mb-px transition-all cursor-pointer ${
               activeTab === 'shopee'
                 ? 'border-orange-500 text-orange-600 font-black'
                 : 'border-transparent text-slate-400 hover:text-slate-750'
             }`}
           >
             <ShoppingBag className="h-4 w-4 shrink-0" />
-            <span>SOSMED & SPAM WA</span>
+            <span>Report Sosmed & Spam WA</span>
           </button>
 
           <button
             onClick={() => setActiveTab('maps')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 -mb-px transition-all cursor-pointer ${
               activeTab === 'maps'
                 ? 'border-purple-600 text-purple-600 font-black'
                 : 'border-transparent text-slate-400 hover:text-slate-750'
             }`}
           >
             <Star className="h-4 w-4 shrink-0" />
-            <span>REVIEW MAPS</span>
+            <span>Review Orders</span>
           </button>
 
           <button
             onClick={() => setActiveTab('report_maps')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs font-bold uppercase tracking-wider border-b-2 -mb-px transition-all cursor-pointer ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 -mb-px transition-all cursor-pointer ${
               activeTab === 'report_maps'
                 ? 'border-blue-600 text-blue-600 font-black'
                 : 'border-transparent text-slate-400 hover:text-slate-750'
             }`}
           >
             <MapPin className="h-4 w-4 shrink-0" />
-            <span>REPORT MAPS</span>
+            <span>Report Orders</span>
           </button>
         </div>
       </div>
