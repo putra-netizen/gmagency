@@ -8,6 +8,7 @@ export interface AuthUser {
   role: 'admin' | 'adminshp' | 'finance';
   name: string;
   slot?: string;
+  inputer?: string;
 }
 
 export interface LoginResponse {
@@ -142,15 +143,18 @@ function tryClientFallbackLogin(credentials: { username?: string; password?: str
   const rawPass = (credentials.password !== undefined ? credentials.password : credentials.pin || '').toString();
 
   // Normalize email aliases to usernames
-  if (normUser === 'adminera@gmail.com' || normUser === 'adminshp1@gmail.com') normUser = 'adminera';
-  else if (normUser === 'admincika@gmail.com' || normUser === 'adminshp2@gmail.com') normUser = 'admincika';
-  else if (normUser === 'adminvira@gmail.com' || normUser === 'adminshp3@gmail.com') normUser = 'adminvira';
-  else if (normUser === 'adminali@gmail.com' || normUser === 'adminshp4@gmail.com') normUser = 'adminali';
-  else if (normUser === 'admin@gmail.com' || normUser === 'gmadmin@gmail.com') normUser = 'admin';
+  if (normUser === 'adminera@gmail.com' || normUser === 'adminshp1@gmail.com' || normUser === 'era') normUser = 'adminera';
+  else if (normUser === 'admincika@gmail.com' || normUser === 'adminshp2@gmail.com' || normUser === 'cika') normUser = 'admincika';
+  else if (normUser === 'adminvira@gmail.com' || normUser === 'adminshp3@gmail.com' || normUser === 'vira') normUser = 'adminvira';
+  else if (normUser === 'adminali@gmail.com' || normUser === 'adminshp4@gmail.com' || normUser === 'ali') normUser = 'adminali';
+  else if (normUser === 'admin@gmail.com' || normUser === 'gmadmin@gmail.com' || normUser === 'gmowner@gmail.com') normUser = 'admin';
 
-  // 1. Super Admin
-  if ((normUser === 'admin' || normUser === 'superadmin' || normUser === 'gmadmin') && (rawPass === 'gmadmin' || rawPass === 'admin')) {
-    const user: AuthUser = { username: 'admin', role: 'admin', name: 'Super Admin GM' };
+  // 1. Super Admin & Owner
+  if (
+    (normUser === 'admin' || normUser === 'superadmin' || normUser === 'gmadmin' || normUser === 'gmowner' || normUser === 'owner' || normUser === 'gmowner@gmail.com') &&
+    (rawPass === 'gmadmin' || rawPass === 'admin' || rawPass === 'lintani123')
+  ) {
+    const user: AuthUser = { username: 'admin', role: 'admin', name: 'Super Admin GM (Owner)', inputer: 'owner' };
     const dummyToken = 'local-offline-token-admin-' + Date.now();
     saveAuthSession(dummyToken, user, rememberMe);
     return { success: true, token: dummyToken, user };
@@ -158,18 +162,18 @@ function tryClientFallbackLogin(credentials: { username?: string; password?: str
 
   // 2. Finance
   if ((normUser === 'finance' || (!normUser && credentials.pin)) && rawPass === '0101') {
-    const user: AuthUser = { username: 'finance', role: 'finance', name: 'Finance GM' };
+    const user: AuthUser = { username: 'finance', role: 'finance', name: 'Finance GM', inputer: 'finance' };
     const dummyToken = 'local-offline-token-finance-' + Date.now();
     saveAuthSession(dummyToken, user, rememberMe);
     return { success: true, token: dummyToken, user };
   }
 
   // 3. Admin SHP 1..4 (with custom localStorage credentials check)
-  const defaultShp: Record<string, { username: string; pass: string; name: string; slot: string; email: string }> = {
-    adminshp1: { username: 'adminera', pass: 'gmadminshp1', name: 'Admin Era (SHP 1)', slot: 'adminshp1', email: 'adminera@gmail.com' },
-    adminshp2: { username: 'admincika', pass: 'gmadminshp2', name: 'Admin Cika (SHP 2)', slot: 'adminshp2', email: 'admincika@gmail.com' },
-    adminshp3: { username: 'adminvira', pass: 'gmadminshp3', name: 'Admin Vira (SHP 3)', slot: 'adminshp3', email: 'adminvira@gmail.com' },
-    adminshp4: { username: 'adminali', pass: 'gmadminshp4', name: 'Admin Ali (SHP 4)', slot: 'adminshp4', email: 'adminali@gmail.com' },
+  const defaultShp: Record<string, { username: string; pass: string; name: string; slot: string; email: string; inputer: string }> = {
+    adminshp1: { username: 'adminera', pass: 'gmadminshp1', name: 'Admin Era', slot: 'adminshp1', email: 'adminera@gmail.com', inputer: 'era' },
+    adminshp2: { username: 'admincika', pass: 'gmadminshp2', name: 'Admin Cika', slot: 'adminshp2', email: 'admincika@gmail.com', inputer: 'cika' },
+    adminshp3: { username: 'adminvira', pass: 'gmadminshp3', name: 'Admin Vira', slot: 'adminshp3', email: 'adminvira@gmail.com', inputer: 'vira' },
+    adminshp4: { username: 'adminali', pass: 'gmadminshp4', name: 'Admin Ali', slot: 'adminshp4', email: 'adminali@gmail.com', inputer: 'ali' },
   };
 
   let savedCreds: any = {};
@@ -183,8 +187,8 @@ function tryClientFallbackLogin(credentials: { username?: string; password?: str
     const targetUser = (savedCreds[slot]?.username || def.username).toLowerCase().trim();
     const targetPass = savedCreds[slot]?.password || def.pass;
 
-    if ((normUser === targetUser || normUser === slot || normUser === def.email) && (rawPass === targetPass || rawPass === 'gmadminshp' || rawPass === 'gmadmin')) {
-      const user: AuthUser = { username: targetUser, role: 'adminshp', name: def.name, slot: def.slot };
+    if ((normUser === targetUser || normUser === slot || normUser === def.email || normUser === def.inputer) && (rawPass === targetPass || rawPass === 'gmadminshp' || rawPass === 'gmadmin')) {
+      const user: AuthUser = { username: targetUser, role: 'adminshp', name: def.name, slot: def.slot, inputer: def.inputer };
       const dummyToken = `local-offline-token-${slot}-${Date.now()}`;
       saveAuthSession(dummyToken, user, rememberMe);
       return { success: true, token: dummyToken, user };
@@ -274,8 +278,21 @@ export async function loginWithBackend(
         }
       }
 
-      // If server returned a clear authorization or rate limit error (400, 401, 429)
-      if (result.status === 400 || result.status === 401 || result.status === 429) {
+      // If server returned a rate limit error (429) or bad request (400)
+      if (result.status === 429 || result.status === 400) {
+        return {
+          success: false,
+          error: result.data?.error || 'Terlalu banyak percobaan login. Silakan tunggu.',
+          retryAfterSeconds: result.data?.retryAfterSeconds,
+        };
+      }
+
+      // If server returned 401 unauthorized, check if client fallback matches before failing
+      if (result.status === 401) {
+        const fallback = tryClientFallbackLogin(credentials, rememberMe);
+        if (fallback.success) {
+          return fallback;
+        }
         return {
           success: false,
           error: result.data?.error || 'Username atau password salah!',

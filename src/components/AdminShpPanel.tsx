@@ -221,11 +221,21 @@ const Pagination: React.FC<PaginationProps> = ({
 
 const getSlotIndicatorName = (slot: string): string => {
   const clean = slot?.trim()?.toLowerCase();
-  if (clean === 'adminshp1' || clean === 'adminera') return 'ERA';
-  if (clean === 'adminshp2' || clean === 'admincika') return 'CIKA';
-  if (clean === 'adminshp3' || clean === 'adminvira') return 'VIRA';
-  if (clean === 'adminshp4' || clean === 'adminali') return 'ALI';
+  if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com') return 'era';
+  if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com') return 'cika';
+  if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com') return 'vira';
+  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com') return 'ali';
+  if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com') return 'owner';
   return slot;
+};
+
+const isSameInputer = (creator?: string, currentUser?: string): boolean => {
+  if (!creator) return true;
+  if (!currentUser) return false;
+  const c1 = getSlotIndicatorName(creator);
+  const c2 = getSlotIndicatorName(currentUser);
+  if (c2 === 'owner' || c2 === 'admin') return true;
+  return c1 === c2;
 };
 
 interface DebouncedInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'> {
@@ -911,7 +921,7 @@ Format Chat : ${data.notes || '-'}`;
         target_link: formSosmed.targetLink,
         notes: formSosmed.notes,
         formatted_text: formattedText,
-        created_by: currentAdminUser,
+        created_by: getSlotIndicatorName(currentAdminUser),
         status: 'READY'
       });
 
@@ -964,7 +974,7 @@ Format Chat : ${data.notes || '-'}`;
         target_link: formSpam.targetLink,
         notes: formSpam.notes,
         formatted_text: formattedText,
-        created_by: currentAdminUser,
+        created_by: getSlotIndicatorName(currentAdminUser),
         status: 'READY'
       });
 
@@ -1063,7 +1073,7 @@ Format Chat : ${data.notes || '-'}`;
         proof_link: '',
         status: 'READY',
         payment_status: '',
-        created_by: currentAdminUser
+        created_by: getSlotIndicatorName(currentAdminUser)
       });
 
       setMapsReviews(prev => [newReview, ...prev]);
@@ -1125,7 +1135,7 @@ Format Chat : ${data.notes || '-'}`;
         proof_link: '',
         status: 'READY',
         payment_status: 'UNPAID',
-        created_by: currentAdminUser
+        created_by: getSlotIndicatorName(currentAdminUser)
       });
 
       setReportMaps(prev => [newReport, ...prev]);
@@ -2103,11 +2113,11 @@ Format Chat : ${data.notes || '-'}`;
                                   </span>
                                   {order.created_by && (
                                     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 mt-1 border ${
-                                      order.created_by === currentAdminUser 
+                                      isSameInputer(order.created_by, currentAdminUser) 
                                         ? 'bg-slate-100 text-slate-600 border-slate-200' 
                                         : 'bg-violet-50 text-violet-700 border-violet-200'
                                     }`}>
-                                      {order.created_by !== currentAdminUser && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
+                                      {!isSameInputer(order.created_by, currentAdminUser) && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
                                       <span>diinput oleh {getSlotIndicatorName(order.created_by)}</span>
                                     </span>
                                   )}
@@ -2180,9 +2190,9 @@ Format Chat : ${data.notes || '-'}`;
                                   placeholder="Input work order..."
                                   value={order.work_order || ''}
                                   onSave={val => handleUpdateWorkOrder(order.id, val)}
-                                  disabled={order.created_by !== undefined && order.created_by !== currentAdminUser}
+                                  disabled={order.created_by !== undefined && !isSameInputer(order.created_by, currentAdminUser)}
                                   className={`w-full rounded-xl border border-slate-200 p-2 text-[10px] font-medium text-slate-800 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 font-sans resize-y min-h-[50px] ${
-                                    order.created_by && order.created_by !== currentAdminUser 
+                                    order.created_by && !isSameInputer(order.created_by, currentAdminUser) 
                                       ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
                                       : 'bg-white'
                                   }`}
@@ -2194,9 +2204,9 @@ Format Chat : ${data.notes || '-'}`;
                                 <select
                                   value={order.worker_id || ''}
                                   onChange={e => handleAssignWorker(order.id, e.target.value)}
-                                  disabled={order.created_by !== undefined && order.created_by !== currentAdminUser}
+                                  disabled={order.created_by !== undefined && !isSameInputer(order.created_by, currentAdminUser)}
                                   className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-bold text-slate-700 outline-none focus:border-orange-500 cursor-pointer ${
-                                    order.created_by && order.created_by !== currentAdminUser 
+                                    order.created_by && !isSameInputer(order.created_by, currentAdminUser) 
                                       ? 'bg-slate-50 cursor-not-allowed text-slate-450' 
                                       : 'bg-white'
                                   }`}
@@ -2215,7 +2225,7 @@ Format Chat : ${data.notes || '-'}`;
                                       <span>Pending</span>
                                     )}
                                   </span>
-                                  {(!order.created_by || order.created_by === currentAdminUser) && (
+                                  {(!order.created_by || isSameInputer(order.created_by, currentAdminUser)) && (
                                     <div className="flex flex-col items-center gap-1">
                                       <button
                                         onClick={() => handleDeleteShopeeOrder(order.id)}
@@ -2583,11 +2593,11 @@ Format Chat : ${data.notes || '-'}`;
                                     </span>
                                     {item.created_by && (
                                       <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 border ${
-                                        item.created_by === currentAdminUser 
+                                        isSameInputer(item.created_by, currentAdminUser) 
                                           ? 'bg-slate-100 text-slate-600 border-slate-200' 
                                           : 'bg-violet-50 text-violet-700 border-violet-200'
                                       }`}>
-                                        {item.created_by !== currentAdminUser && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
+                                        {!isSameInputer(item.created_by, currentAdminUser) && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
                                         <span>diinput oleh {getSlotIndicatorName(item.created_by)}</span>
                                       </span>
                                     )}
@@ -2639,9 +2649,9 @@ Format Chat : ${data.notes || '-'}`;
                                     placeholder="Clue..."
                                     value={item.notes || ''}
                                     onSave={val => handleUpdateNotes(item.id, val)}
-                                    disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                    disabled={item.created_by !== undefined && !isSameInputer(item.created_by, currentAdminUser)}
                                     className={`w-full rounded-lg border border-slate-200 p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 font-sans resize-y min-h-[55px] ${
-                                      item.created_by && item.created_by !== currentAdminUser 
+                                      item.created_by && !isSameInputer(item.created_by, currentAdminUser) 
                                         ? 'bg-slate-50 cursor-not-allowed text-slate-400' 
                                         : 'bg-white'
                                     }`}
@@ -2676,9 +2686,9 @@ Format Chat : ${data.notes || '-'}`;
                                     placeholder="Input link bukti..."
                                     value={item.proof_link || ''}
                                     onSave={val => handleUpdateProofLink(item.id, val)}
-                                    disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                    disabled={item.created_by !== undefined && !isSameInputer(item.created_by, currentAdminUser)}
                                     className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-purple-500 text-slate-700 font-mono ${
-                                      item.created_by && item.created_by !== currentAdminUser 
+                                      item.created_by && !isSameInputer(item.created_by, currentAdminUser) 
                                         ? 'bg-slate-50 cursor-not-allowed text-slate-400' 
                                         : 'bg-white'
                                     }`}
@@ -2736,7 +2746,7 @@ Format Chat : ${data.notes || '-'}`;
                                     )}
                                   </button>
 
-                                  {(!item.created_by || item.created_by === currentAdminUser) && (
+                                  {(!item.created_by || isSameInputer(item.created_by, currentAdminUser)) && (
                                     <div className="flex items-center justify-center gap-1">
                                       <button
                                         type="button"
@@ -3087,11 +3097,11 @@ Format Chat : ${data.notes || '-'}`;
                                       </span>
                                       {item.created_by && (
                                         <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md inline-flex items-center gap-1 border ${
-                                          item.created_by === currentAdminUser 
+                                          isSameInputer(item.created_by, currentAdminUser) 
                                             ? 'bg-slate-100 text-slate-600 border-slate-200' 
                                             : 'bg-violet-50 text-violet-700 border-violet-200'
                                         }`}>
-                                          {item.created_by !== currentAdminUser && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
+                                          {!isSameInputer(item.created_by, currentAdminUser) && <Lock className="h-2 w-2 shrink-0 text-violet-500" />}
                                           <span>diinput oleh {getSlotIndicatorName(item.created_by)}</span>
                                         </span>
                                       )}
@@ -3143,9 +3153,9 @@ Format Chat : ${data.notes || '-'}`;
                                       placeholder="Alasan..."
                                       value={item.reason || item.notes || ''}
                                       onSave={val => handleUpdateReportReason(item.id, val)}
-                                      disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                      disabled={item.created_by !== undefined && !isSameInputer(item.created_by, currentAdminUser)}
                                       className={`w-full rounded-lg border border-slate-200 p-1.5 text-[10px] font-medium text-slate-800 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 font-sans resize-y min-h-[55px] ${
-                                        item.created_by && item.created_by !== currentAdminUser 
+                                        item.created_by && !isSameInputer(item.created_by, currentAdminUser) 
                                           ? 'bg-slate-50 cursor-not-allowed text-slate-400' 
                                           : 'bg-white'
                                       }`}
@@ -3180,9 +3190,9 @@ Format Chat : ${data.notes || '-'}`;
                                       placeholder="Input link bukti..."
                                       value={item.proof_link || ''}
                                       onSave={val => handleUpdateReportProofLink(item.id, val)}
-                                      disabled={item.created_by !== undefined && item.created_by !== currentAdminUser}
+                                      disabled={item.created_by !== undefined && !isSameInputer(item.created_by, currentAdminUser)}
                                       className={`w-full rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] outline-none focus:border-purple-500 text-slate-700 font-mono ${
-                                        item.created_by && item.created_by !== currentAdminUser 
+                                        item.created_by && !isSameInputer(item.created_by, currentAdminUser) 
                                           ? 'bg-slate-50 cursor-not-allowed text-slate-400' 
                                           : 'bg-white'
                                       }`}
@@ -3240,7 +3250,7 @@ Format Chat : ${data.notes || '-'}`;
                                       )}
                                     </button>
 
-                                    {(!item.created_by || item.created_by === currentAdminUser) && (
+                                    {(!item.created_by || isSameInputer(item.created_by, currentAdminUser)) && (
                                       <div className="flex items-center justify-center gap-1">
                                         <button
                                           type="button"

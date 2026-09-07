@@ -5,13 +5,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
-import { Product, Order, Language, PaymentStatus, DashboardStats, ShopeeOrder, MapsReview } from '../types';
+import { Product, Order, Language, PaymentStatus, DashboardStats, ShopeeOrder, MapsReview, ReportMap } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
 import { 
   dbGetProducts, dbCreateProduct, dbUpdateProduct, dbDeleteProduct,
   dbGetOrders, dbCreateOrder, dbUpdateOrder, dbDeleteOrder, dbGetDashboardStats,
   dbGetShopeeOrders, dbCreateShopeeOrder, dbUpdateShopeeOrder, dbDeleteShopeeOrder,
   dbGetMapsReviews, dbCreateMapsReview, dbGetMapsReviews as dbGetMapsReviewsOriginal, dbUpdateMapsReview, dbDeleteMapsReview,
+  dbGetReportMaps, dbCreateReportMap, dbUpdateReportMap, dbDeleteReportMap,
   dbUploadProductImage
 } from '../lib/supabase';
 import { getAdminShpLogs, clearAdminShpLogs, AdminShpLog, logAdminShpAction } from '../utils/adminshpLogs';
@@ -44,10 +45,11 @@ interface AdminPanelProps {
 
 const getSlotIndicatorName = (slot: string): string => {
   const clean = slot?.trim()?.toLowerCase();
-  if (clean === 'adminshp1' || clean === 'adminera') return 'ERA';
-  if (clean === 'adminshp2' || clean === 'admincika') return 'CIKA';
-  if (clean === 'adminshp3' || clean === 'adminvira') return 'VIRA';
-  if (clean === 'adminshp4' || clean === 'adminali') return 'ALI';
+  if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com') return 'era';
+  if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com') return 'cika';
+  if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com') return 'vira';
+  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com') return 'ali';
+  if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com') return 'owner';
   return slot;
 };
 
@@ -268,19 +270,21 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
   const [orders, setOrders] = useState<Order[]>([]);
   const [shopeeOrders, setShopeeOrders] = useState<ShopeeOrder[]>([]);
   const [mapsReviews, setMapsReviews] = useState<MapsReview[]>([]);
+  const [reportMaps, setReportMaps] = useState<ReportMap[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   
   const [isLoading, setIsLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
+  const setErrorMsg = (msg: string) => setErrorMsgState(msg);
+  const [errorMsg, setErrorMsgState] = useState('');
   const [copiedShopeeId, setCopiedShopeeId] = useState<string | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [copiedReviewId, setCopiedReviewId] = useState<string | null>(null);
   const [tempAccountInput, setTempAccountInput] = useState<Record<string, string>>({});
   const [screenshotModalItem, setScreenshotModalItem] = useState<MapsReview | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'order' | 'product' } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; type: 'shopee_order' | 'order' | 'product' | 'report_map' } | null>(null);
   
-  // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'keuangan' | 'settings'
-  const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'keuangan' | 'settings'>('shopee_orders');
+  // Tab states: 'orders' | 'shopee_orders' | 'maps_reviews' | 'maps_reports' | 'keuangan' | 'settings'
+  const [activeTab, setActiveTab] = useState<'orders' | 'shopee_orders' | 'maps_reviews' | 'maps_reports' | 'keuangan' | 'settings'>('shopee_orders');
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
 
   // Settings view nested tab states
@@ -400,17 +404,25 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
   const [timeFilterReview, setTimeFilterReview] = useState<TimeFilterConfig>({ mode: 'all' });
   const [reviewTypeFilter, setReviewTypeFilter] = useState<'SEMUA' | 'TRIPAD' | 'GMAPS' | 'REVIEW APPS'>('SEMUA');
 
+  const [searchMapReport, setSearchMapReport] = useState('');
+  const [sortMapReport, setSortMapReport] = useState<'all' | 'pending' | 'progress' | 'ready' | 'sudah_direkap' | 'done'>('all');
+  const [timeFilterMapReport, setTimeFilterMapReport] = useState<TimeFilterConfig>({ mode: 'all' });
+  const [mapReportServiceFilter, setMapReportServiceFilter] = useState<'all' | 'G_MAPS' | 'TRIPAD' | 'REVIEW_APPS'>('all');
+  const [copiedMapReportId, setCopiedMapReportId] = useState<string | null>(null);
+
   // Pagination states
   const [pageUnpaid, setPageUnpaid] = useState(1);
   const [pagePaid, setPagePaid] = useState(1);
   const [pageShopee, setPageShopee] = useState(1);
   const [pageReview, setPageReview] = useState(1);
+  const [pageMapReport, setPageMapReport] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
   useEffect(() => { setPageUnpaid(1); }, [searchUnpaid, serviceFilterUnpaid, sortUnpaid, timeFilterUnpaid]);
   useEffect(() => { setPagePaid(1); }, [searchPaid, serviceFilterPaid, sortPaid, timeFilterPaid]);
   useEffect(() => { setPageShopee(1); }, [searchShopee, shopeeTypeFilter, sortShopee, timeFilterShopee]);
   useEffect(() => { setPageReview(1); }, [searchReview, reviewTypeFilter, sortReview, timeFilterReview]);
+  useEffect(() => { setPageMapReport(1); }, [searchMapReport, mapReportServiceFilter, sortMapReport, timeFilterMapReport]);
 
   const isWithinTimeframe = (createdAtStr: string | undefined, timeframe: TimeFilterConfig | string) => {
     return isWithinCustomTimeframe(createdAtStr, timeframe);
@@ -710,6 +722,107 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
     }
   };
 
+  // Report Maps edit state and handlers
+  const [editingReportMap, setEditingReportMap] = useState<ReportMap | null>(null);
+  const [isReportMapModalOpen, setIsReportMapModalOpen] = useState(false);
+  const [editRmClientName, setEditRmClientName] = useState('');
+  const [editRmStoreName, setEditRmStoreName] = useState('');
+  const [editRmServiceType, setEditRmServiceType] = useState('G_MAPS');
+  const [editRmSlot, setEditRmSlot] = useState(1);
+  const [editRmMapsLink, setEditRmMapsLink] = useState('');
+  const [editRmReason, setEditRmReason] = useState('');
+  const [editRmProofLink, setEditRmProofLink] = useState('');
+  const [editRmStatus, setEditRmStatus] = useState('READY');
+
+  const handleOpenEditReportMap = (item: ReportMap) => {
+    setEditingReportMap(item);
+    setEditRmClientName(item.client_name || '');
+    setEditRmStoreName(item.store_name || '');
+    setEditRmServiceType(item.service_type || 'G_MAPS');
+    setEditRmSlot(item.slot || 1);
+    setEditRmMapsLink(item.maps_link || '');
+    setEditRmReason(item.reason || item.notes || '');
+    setEditRmProofLink(item.proof_link || '');
+    setEditRmStatus(item.status || 'READY');
+    setIsReportMapModalOpen(true);
+  };
+
+  const handleSaveReportMapEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingReportMap) return;
+    try {
+      const updated: Partial<ReportMap> = {
+        client_name: editRmClientName,
+        store_name: editRmStoreName,
+        service_type: editRmServiceType,
+        slot: editRmSlot,
+        maps_link: editRmMapsLink,
+        reason: editRmReason,
+        notes: editRmReason,
+        proof_link: editRmProofLink,
+        status: editRmStatus
+      };
+      await dbUpdateReportMap(editingReportMap.id, updated);
+      toast.success(currentLang === 'id' ? 'Report Maps berhasil diperbarui' : 'Report Maps updated successfully');
+      setIsReportMapModalOpen(false);
+      setEditingReportMap(null);
+      const data = await dbGetReportMaps();
+      setReportMaps(data);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memperbarui Report Maps');
+    }
+  };
+
+  const handleDeleteReportMap = (id: string) => {
+    setDeleteConfirm({ id, type: 'report_map' });
+  };
+
+  const executeDeleteReportMap = async (id: string) => {
+    try {
+      await dbDeleteReportMap(id);
+      setReportMaps(prev => prev.filter(m => m.id !== id));
+      toast.success('Report Maps berhasil dihapus');
+      setDeleteConfirm(null);
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal menghapus Report Maps');
+    }
+  };
+
+  const handleUpdateReportMapReason = async (id: string, reason: string) => {
+    try {
+      setReportMaps(prev => prev.map(m => m.id === id ? { ...m, reason, notes: reason } : m));
+      await dbUpdateReportMap(id, { reason, notes: reason });
+      toast.success('Alasan berhasil disimpan');
+    } catch (e) {
+      console.error(e);
+      toast.error('Gagal menyimpan alasan');
+    }
+  };
+
+  const handleUpdateReportMapProofLink = async (id: string, proof_link: string) => {
+    try {
+      setReportMaps(prev => prev.map(m => m.id === id ? { ...m, proof_link } : m));
+      await dbUpdateReportMap(id, { proof_link });
+      toast.success('Link bukti berhasil disimpan');
+    } catch (e) {
+      console.error(e);
+      toast.error('Gagal menyimpan link bukti');
+    }
+  };
+
+  const handleUpdateReportMapStatus = async (id: string, status: string) => {
+    try {
+      setReportMaps(prev => prev.map(m => m.id === id ? { ...m, status } : m));
+      await dbUpdateReportMap(id, { status });
+      toast.success(`Status berhasil diubah ke ${status}`);
+    } catch (e) {
+      console.error(e);
+      toast.error('Gagal memperbarui status');
+    }
+  };
+
   // Online Export Settings State
   const [exportStartDate, setExportStartDate] = useState('');
   const [exportEndDate, setExportEndDate] = useState('');
@@ -930,12 +1043,13 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const [prodsData, ordsData, shopeeData, mapsData, statsData] = await Promise.all([
+      const [prodsData, ordsData, shopeeData, mapsData, statsData, reportMapsData] = await Promise.all([
         dbGetProducts(500, forceRefresh),
         dbGetOrders(10000, forceRefresh),
         dbGetShopeeOrders(50000, forceRefresh),
         dbGetMapsReviews(50000, forceRefresh),
-        dbGetDashboardStats()
+        dbGetDashboardStats(),
+        dbGetReportMaps(50000, forceRefresh)
       ]);
 
       setProducts(prodsData);
@@ -943,6 +1057,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
       setShopeeOrders(shopeeData);
       setMapsReviews(mapsData);
       setStats(statsData);
+      setReportMaps(reportMapsData);
     } catch (err: any) {
       console.error(err);
       setErrorMsg(currentLang === 'id' ? 'Gagal memuat data dashboard.' : 'Failed to load dashboard data.');
@@ -1021,6 +1136,8 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
         });
       }).catch(err => console.error(err));
 
+      dbGetReportMaps().then(rmData => setReportMaps(rmData)).catch(err => console.error(err));
+
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(err => console.error(err));
     }, 180000);
 
@@ -1030,6 +1147,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
       if (detail && Array.isArray(detail.shopeeData) && Array.isArray(detail.mapsData)) {
         setShopeeOrders(detail.shopeeData);
         setMapsReviews(detail.mapsData);
+        dbGetReportMaps().then(rmData => setReportMaps(rmData)).catch(console.error);
         dbGetDashboardStats().then(statsData => setStats(statsData)).catch(console.error);
         return;
       }
@@ -1037,6 +1155,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
       // If no direct data attached, read from memory cache (0 network call)
       dbGetShopeeOrders().then(shopeeData => setShopeeOrders(shopeeData)).catch(console.error);
       dbGetMapsReviews().then(mapsData => setMapsReviews(mapsData)).catch(console.error);
+      dbGetReportMaps().then(rmData => setReportMaps(rmData)).catch(console.error);
       dbGetDashboardStats().then(statsData => setStats(statsData)).catch(console.error);
     };
 
@@ -1764,10 +1883,48 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
       return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
     });
 
+  // Filtered and Sorted Map Reports (Inputan Admin SHP)
+  const filteredMapReports = reportMaps
+    .filter(m => isWithinTimeframe(m.created_at, timeFilterMapReport))
+    .filter(m => {
+      const stat = m.status || 'READY';
+      if (sortMapReport === 'pending') return stat === 'PENDING';
+      if (sortMapReport === 'progress') return stat === 'PROGRESS';
+      if (sortMapReport === 'ready') return stat === 'READY';
+      if (sortMapReport === 'sudah_direkap') return stat === 'SUDAH DIREKAP';
+      if (sortMapReport === 'done') return stat === 'DONE';
+      return true;
+    })
+    .filter(m => {
+      if (mapReportServiceFilter === 'all') return true;
+      return m.service_type === mapReportServiceFilter;
+    })
+    .filter(m => {
+      if (!searchMapReport) return true;
+      const q = searchMapReport.toLowerCase();
+      return (
+        (m.id || '').toLowerCase().includes(q) ||
+        (m.store_name || '').toLowerCase().includes(q) ||
+        (m.client_name || '').toLowerCase().includes(q) ||
+        (m.service_type || '').toLowerCase().includes(q) ||
+        (m.maps_link || '').toLowerCase().includes(q) ||
+        (m.reason || '').toLowerCase().includes(q) ||
+        (m.notes || '').toLowerCase().includes(q) ||
+        (m.proof_link || '').toLowerCase().includes(q) ||
+        (m.created_by || '').toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+    });
+
   const paginatedUnpaidOrders = filteredUnpaidOrders.slice((pageUnpaid - 1) * ITEMS_PER_PAGE, pageUnpaid * ITEMS_PER_PAGE);
   const paginatedPaidOrders = filteredPaidOrders.slice((pagePaid - 1) * ITEMS_PER_PAGE, pagePaid * ITEMS_PER_PAGE);
   const paginatedShopeeOrders = filteredShopeeOrders.slice((pageShopee - 1) * ITEMS_PER_PAGE, pageShopee * ITEMS_PER_PAGE);
   const paginatedMapsReviews = filteredMapsReviews.slice((pageReview - 1) * ITEMS_PER_PAGE, pageReview * ITEMS_PER_PAGE);
+  const paginatedMapReports = filteredMapReports.slice((pageMapReport - 1) * ITEMS_PER_PAGE, pageMapReport * ITEMS_PER_PAGE);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8" id="admin-panel-container">
@@ -1965,6 +2122,25 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                   id="tab-maps-reviews"
                 >
                   <span>Review Orders</span>
+                </button>
+
+                {/* 2.5. Map Reports */}
+                <button
+                  onClick={() => {
+                    isTabClicking.current = true;
+                    setActiveTab('maps_reports');
+                    window.history.pushState(null, '', '/admin');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                    setTimeout(() => { isTabClicking.current = false; }, 50);
+                  }}
+                  className={`shrink-0 whitespace-nowrap px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center cursor-pointer ${
+                    activeTab === 'maps_reports'
+                      ? 'border-blue-600 text-blue-600 font-black'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                  id="tab-maps-reports"
+                >
+                  <span>Map Reports</span>
                 </button>
 
                 {/* 3. Web Orders */}
@@ -3240,6 +3416,315 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
             </div>
           )}
 
+          {/* MAP REPORTS TAB (HASIL INPUTAN ADMIN SHP) */}
+          {activeTab === 'maps_reports' && (
+            <div className="space-y-6" id="admin-map-reports-list">
+              
+              {/* Search & Sort Bar - Replicating Shopee Orders Filter Design */}
+              <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/80 p-4 rounded-2xl border border-slate-100/80 shadow-xs">
+                <div className="relative w-full lg:w-80 group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
+                  </div>
+                  <input
+                    type="text"
+                    value={searchMapReport}
+                    onChange={(e) => setSearchMapReport(e.target.value)}
+                    placeholder="Cari store, klien, link, alasan, inputer..."
+                    className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
+                  />
+                  {searchMapReport && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchMapReport('')}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Modern Pill sorting / filtering controls with Backlight */}
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
+                  {/* Tipe Jasa Filter */}
+                  <ModernFilterSelect
+                    value={mapReportServiceFilter}
+                    onChange={(v) => setMapReportServiceFilter(v as any)}
+                    icon={<Filter className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Jasa' },
+                      { value: 'G_MAPS', label: 'Google Maps' },
+                      { value: 'TRIPAD', label: 'Tripadvisor' },
+                      { value: 'REVIEW_APPS', label: 'Review Apps' },
+                    ]}
+                  />
+
+                  {/* Status / Progres Filter */}
+                  <ModernFilterSelect
+                    value={sortMapReport}
+                    onChange={(v) => setSortMapReport(v as any)}
+                    icon={<Activity className="w-4 h-4 text-purple-600" />}
+                    glowColor="purple"
+                    options={[
+                      { value: 'all', label: 'Semua Progres' },
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'progress', label: 'Progres' },
+                      { value: 'ready', label: 'Ready' },
+                      { value: 'sudah_direkap', label: 'Sudah Direkap' },
+                      { value: 'done', label: 'Done' },
+                    ]}
+                  />
+
+                  {/* Timeframe Filter (Monthly Date Range Picker) */}
+                  <MonthlyDateRangePicker
+                    value={timeFilterMapReport}
+                    onChange={setTimeFilterMapReport}
+                    currentLang={currentLang}
+                  />
+                </div>
+              </div>
+
+              {/* Table Container */}
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
+                      Daftar Map Reports (Inputan Admin SHP)
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-600 bg-slate-200 px-2.5 py-0.5 rounded-full font-mono">
+                    {filteredMapReports.length} Total
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse table-fixed min-w-[1000px]">
+                    <colgroup>
+                      <col className="w-[12%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[15%]" />
+                    </colgroup>
+                    <thead>
+                      <tr className="bg-slate-50/20 border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+                        <th className="px-4 py-3">ID / Tanggal</th>
+                        <th className="px-4 py-3">Store / Klien</th>
+                        <th className="px-4 py-3">Jenis Jasa</th>
+                        <th className="px-4 py-3">Slot</th>
+                        <th className="px-4 py-3">Target & Format</th>
+                        <th className="px-4 py-3">Alasan & Bukti</th>
+                        <th className="px-4 py-3 text-center">Status / Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                      {filteredMapReports.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
+                            Belum ada inputan Report Maps yang cocok / diinput oleh Admin SHP.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedMapReports.map((item) => (
+                          <tr key={item.id} className="hover:bg-slate-50/30 transition-colors">
+                            {/* ID and Date */}
+                            <td className="px-4 py-3 font-mono">
+                              <span className="font-bold text-slate-900 block truncate" title={item.id}>
+                                {item.id.slice(0, 8)}...
+                              </span>
+                              <span className="text-[10px] text-slate-400 block mt-0.5 whitespace-nowrap">
+                                {new Date(item.created_at).toLocaleDateString('id-ID', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                              {item.created_by && (
+                                <span className="text-[9px] text-purple-600 font-bold block mt-1 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100/50 w-fit">
+                                  diinput oleh {getSlotIndicatorName(item.created_by)}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Store & Client */}
+                            <td className="px-4 py-3">
+                              <span className="font-bold text-slate-900 block truncate" title={item.store_name || '-'}>
+                                {item.store_name || '-'}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-medium block mt-0.5 truncate" title={item.client_name}>
+                                {item.client_name}
+                              </span>
+                            </td>
+
+                            {/* Service Type */}
+                            <td className="px-4 py-3">
+                              <span className="font-bold text-slate-900 block truncate uppercase">
+                                {item.service_type === 'TRIPAD'
+                                  ? 'TRIPADVISOR'
+                                  : item.service_type === 'REVIEW_APPS'
+                                  ? 'REVIEW APPS'
+                                  : 'GOOGLE MAPS'}
+                              </span>
+                              <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">
+                                REPORT MAPS
+                              </span>
+                            </td>
+
+                            {/* Slot */}
+                            <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                              {item.slot || 1} Slot
+                            </td>
+
+                            {/* Target & Format */}
+                            <td className="px-4 py-3 space-y-1">
+                              {item.maps_link && sanitizeUrl(item.maps_link) !== '#' ? (
+                                <a
+                                  href={sanitizeUrl(item.maps_link)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-purple-600 hover:underline inline-flex items-center gap-1 font-mono font-medium truncate max-w-full bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100"
+                                  title={item.maps_link}
+                                >
+                                  <ExternalLink className="h-3 w-3 shrink-0" />
+                                  <span className="truncate">{item.maps_link}</span>
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 font-mono truncate block">
+                                  {item.maps_link || '-'}
+                                </span>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const formatStr = `Link: ${item.maps_link}\nNama cust: ${item.client_name}\nNama st: ${item.store_name || '-'}\nJenis Jasa: ${item.service_type}\nSlot: ${item.slot || 1}\nAlasan: ${item.reason || item.notes || '-'}`;
+                                  navigator.clipboard.writeText(formatStr);
+                                  setCopiedMapReportId(item.id);
+                                  setTimeout(() => setCopiedMapReportId(null), 2000);
+                                }}
+                                className="inline-flex items-center gap-1.5 text-[9px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded-lg transition-colors cursor-pointer font-sans"
+                              >
+                                {copiedMapReportId === item.id ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    <span>Tersalin!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3 w-3" />
+                                    <span>Salin Format</span>
+                                  </>
+                                )}
+                              </button>
+                            </td>
+
+                            {/* Alasan & Bukti */}
+                            <td className="px-4 py-3 space-y-1.5">
+                              <div>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Alasan:</span>
+                                <DebouncedTextarea
+                                  value={item.reason || item.notes || ''}
+                                  onSave={(val) => handleUpdateReportMapReason(item.id, val)}
+                                  placeholder="Tulis alasan/notes..."
+                                  className="w-full h-11 rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-sans outline-none focus:border-purple-500 resize-none bg-slate-50 hover:bg-white focus:bg-white transition-all text-slate-700"
+                                />
+                              </div>
+
+                              <div>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Bukti:</span>
+                                <div className="flex items-center gap-1">
+                                  <DebouncedInput
+                                    value={item.proof_link || ''}
+                                    onSave={(val) => handleUpdateReportMapProofLink(item.id, val)}
+                                    placeholder="Link bukti..."
+                                    className="w-full rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-mono outline-none focus:border-purple-500 bg-white text-slate-700"
+                                  />
+                                  {item.proof_link && sanitizeUrl(item.proof_link) !== '#' && (
+                                    <a
+                                      href={sanitizeUrl(item.proof_link)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1 rounded-md bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors shrink-0"
+                                      title="Buka Link Bukti"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Status & Actions */}
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col gap-1.5 items-stretch">
+                                {/* Progres Status Selector */}
+                                <select
+                                  value={item.status || 'READY'}
+                                  onChange={(e) => handleUpdateReportMapStatus(item.id, e.target.value)}
+                                  className={`w-full rounded-lg border px-2 py-1 text-[10px] font-bold outline-none cursor-pointer ${
+                                    item.status === 'DONE'
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : item.status === 'PROGRESS'
+                                      ? 'bg-orange-50 text-orange-700 border-orange-200'
+                                      : item.status === 'READY'
+                                      ? 'bg-white text-slate-700 border-slate-300'
+                                      : item.status === 'SUDAH DIREKAP'
+                                      ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                      : 'bg-sky-50 text-sky-700 border-sky-200'
+                                  }`}
+                                >
+                                  <option value="PENDING">PENDING</option>
+                                  <option value="PROGRESS">PROGRESS</option>
+                                  <option value="READY">READY</option>
+                                  <option value="SUDAH DIREKAP">SUDAH DIREKAP</option>
+                                  <option value="DONE">DONE</option>
+                                </select>
+
+                                {/* Edit & Hapus Buttons */}
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditReportMap(item)}
+                                    className="flex-1 inline-flex items-center justify-center gap-1 text-[10px] font-bold text-blue-600 hover:bg-blue-50 py-1.5 rounded-lg transition-colors cursor-pointer border border-dashed border-blue-200 font-sans"
+                                    title="Edit Report Map"
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                    <span>Edit</span>
+                                  </button>
+                                  
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteReportMap(item.id)}
+                                    className="flex-1 inline-flex items-center justify-center gap-1 text-[10px] font-bold text-red-600 hover:bg-red-50 py-1.5 rounded-lg transition-colors cursor-pointer border border-dashed border-red-200 font-sans"
+                                    title="Hapus Report Map"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                    <span>Hapus</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <Pagination
+                  currentPage={pageMapReport}
+                  totalPages={Math.ceil(filteredMapReports.length / ITEMS_PER_PAGE)}
+                  onPageChange={setPageMapReport}
+                  activeBgColor="bg-blue-600"
+                />
+              </div>
+            </div>
+          )}
+
           {/* 4. SETTINGS VIEW WITH PRODUCT MGMT AND SPREADSHEET SYNC */}
           {activeTab === 'settings' && (
             <div className="flex flex-col lg:flex-row gap-8 items-start w-full" id="admin-settings-dashboard">
@@ -3518,11 +4003,16 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                         return (
                           <div key={slot} className="bg-slate-50 border border-slate-100 rounded-2xl p-5 space-y-4 flex flex-col justify-between">
                             <div className="space-y-3">
-                              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                                <span className="text-xs font-black text-slate-800 uppercase font-sans">
-                                  Slot {index + 1} ({slot})
-                                </span>
-                                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full uppercase">
+                              <div className="flex items-start justify-between border-b border-slate-200 pb-2">
+                                <div>
+                                  <span className="text-xs font-black text-slate-800 uppercase font-sans block">
+                                    Slot {index + 1} ({slot})
+                                  </span>
+                                  <span className="text-[10px] text-blue-600 font-bold block mt-0.5">
+                                    Inputer: <span className="underline">{getSlotIndicatorName(slot)}</span> ({slot === 'adminshp1' ? 'adminera@gmail.com' : slot === 'adminshp2' ? 'admincika@gmail.com' : slot === 'adminshp3' ? 'adminvira@gmail.com' : 'adminali@gmail.com'})
+                                  </span>
+                                </div>
+                                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full uppercase shrink-0">
                                   Aktif
                                 </span>
                               </div>
@@ -4391,6 +4881,160 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
           </div>
         </div>
       )}
+      {/* REPORT MAPS EDIT MODAL */}
+      {isReportMapModalOpen && editingReportMap && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl transition-all border border-slate-100 flex flex-col my-8 animate-in fade-in zoom-in-95 duration-250">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/50">
+              <h3 className="font-black text-slate-950 text-base font-sans uppercase">
+                {currentLang === 'id' ? 'Edit Inputan Report Maps' : 'Edit Report Maps Input'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setIsReportMapModalOpen(false);
+                  setEditingReportMap(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveReportMapEdit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Klien / Cust' : 'Client Name'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editRmClientName}
+                    onChange={(e) => setEditRmClientName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Nama Toko / Store' : 'Store Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editRmStoreName}
+                    onChange={(e) => setEditRmStoreName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Jenis Jasa' : 'Service Type'}
+                  </label>
+                  <select
+                    value={editRmServiceType}
+                    onChange={(e) => setEditRmServiceType(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 cursor-pointer"
+                  >
+                    <option value="G_MAPS">GOOGLE MAPS</option>
+                    <option value="TRIPAD">TRIPADVISOR</option>
+                    <option value="REVIEW_APPS">REVIEW APPS</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    {currentLang === 'id' ? 'Slot Target' : 'Target Slot'}
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editRmSlot}
+                    onChange={(e) => setEditRmSlot(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Target Link
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editRmMapsLink}
+                  onChange={(e) => setEditRmMapsLink(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  {currentLang === 'id' ? 'Alasan (Reason)' : 'Reason'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editRmReason}
+                  onChange={(e) => setEditRmReason(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Link Bukti
+                </label>
+                <input
+                  type="text"
+                  value={editRmProofLink}
+                  onChange={(e) => setEditRmProofLink(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Status Progres
+                </label>
+                <select
+                  value={editRmStatus}
+                  onChange={(e) => setEditRmStatus(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 cursor-pointer"
+                >
+                  <option value="PENDING">PENDING</option>
+                  <option value="PROGRESS">PROGRESS</option>
+                  <option value="READY">READY</option>
+                  <option value="SUDAH DIREKAP">SUDAH DIREKAP</option>
+                  <option value="DONE">DONE</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReportMapModalOpen(false);
+                    setEditingReportMap(null);
+                  }}
+                  className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Batal' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md shadow-blue-600/20 cursor-pointer"
+                >
+                  {currentLang === 'id' ? 'Simpan Perubahan' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Custom Delete Confirmation Dialog */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
@@ -4416,6 +5060,8 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                     executeDeleteOrder(deleteConfirm.id);
                   } else if (deleteConfirm.type === 'product') {
                     executeDeleteProduct(deleteConfirm.id);
+                  } else if (deleteConfirm.type === 'report_map') {
+                    executeDeleteReportMap(deleteConfirm.id);
                   }
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-red-600/10"

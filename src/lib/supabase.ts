@@ -29,12 +29,28 @@ const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
 
 export function sanitizeSupabaseKey(key: string | undefined): string {
-  if (!key) return '';
+  if (!key) return DEFAULT_SUPABASE_ANON_KEY;
   const trimmed = key.trim();
   const parts = trimmed.split('.');
   if (parts.length > 3) {
-    // If concatenated JWTs exist, take the first valid 3-part JWT
-    return parts.slice(0, 3).join('.');
+    for (let i = 0; i <= parts.length - 3; i++) {
+      const candidate = parts.slice(i, i + 3).join('.');
+      try {
+        const payload = JSON.parse(atob(parts[i + 1]));
+        if (payload.ref === 'reonysrsoaepzykwwfzw') {
+          return candidate;
+        }
+      } catch {}
+    }
+    for (let i = 0; i < parts.length; i++) {
+      try {
+        const payload = JSON.parse(atob(parts[i]));
+        if (payload.ref === 'reonysrsoaepzykwwfzw') {
+          return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + parts[i] + '.' + parts[i + 1];
+        }
+      } catch {}
+    }
+    return DEFAULT_SUPABASE_ANON_KEY;
   }
   return trimmed;
 }

@@ -51,16 +51,12 @@ export async function getLogoBase64(): Promise<string | null> {
 export const getSlotIndicatorName = (slot?: string): string => {
   if (!slot) return 'Admin GM Agency';
   const clean = slot.trim().toLowerCase();
-  if (clean === 'adminshp1' || clean === 'adminera') return 'ERA';
-  if (clean === 'admin4') return 'ADMIN 4';
-  if (clean === 'admin5') return 'ADMIN 5';
-  if (clean === 'admin6') return 'ADMIN 6';
-  if (clean === 'admin7') return 'ADMIN 7';
-  if (clean === 'admin8') return 'ADMIN 8';
-  if (clean === 'admin9') return 'ADMIN 9';
-  if (clean === 'admin10') return 'ADMIN 10';
-  if (clean.startsWith('admin')) return clean.toUpperCase();
-  return slot.toUpperCase();
+  if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com') return 'era';
+  if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com') return 'cika';
+  if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com') return 'vira';
+  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com') return 'ali';
+  if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com') return 'owner';
+  return slot;
 };
 
 /**
