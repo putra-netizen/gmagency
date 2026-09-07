@@ -25,20 +25,21 @@ import { FinanceView } from './FinanceView';
 import { parseAccountsList } from '../utils/csvExport';
 import { pauseAutoSyncFor } from '../utils/autoSyncManager';
 import { sanitizeUrl } from '../utils/security';
-import { loginWithBackend, clientLogout, getAuthHeaders } from '../lib/auth';
+import { loginWithBackend, clientLogout, getAuthHeaders, saveAuthSession } from '../lib/auth';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
-  Plus, Edit, Trash2, Eye, Link2, Phone, Calendar, RefreshCw, 
+  Plus, Edit, Trash2, Eye, EyeOff, Link2, Phone, Calendar, RefreshCw, 
   Briefcase, Save, AlertCircle, FileText, Check, Database, X, Globe,
   ExternalLink, Image as ImageIcon, Settings, ShoppingCart, Copy, ArrowLeft,
   Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
   FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft, Wallet,
-  Filter, Activity, Layers, SlidersHorizontal, Tag
+  Filter, Activity, Layers, SlidersHorizontal, Tag, Lock, Mail, ShieldCheck
 } from 'lucide-react';
 
 interface AdminPanelProps {
   currentLang: Language;
   onInstallApp?: () => void;
+  onSwitchToAdminShp?: () => void;
 }
 
 const getSlotIndicatorName = (slot: string): string => {
@@ -259,7 +260,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, onPage
   );
 };
 
-export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProps) {
+export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminShp }: AdminPanelProps) {
   const t = TRANSLATIONS[currentLang];
 
   // Component States
@@ -425,6 +426,8 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
   });
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
   const recentLocalStatusUpdates = useRef<Map<string, { status: string; timestamp: number }>>(new Map());
 
@@ -435,22 +438,48 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
     setIsLoggingIn(true);
     setAuthError('');
     try {
-      const res = await loginWithBackend(username.trim(), password);
-      if (res.success && res.user?.role === 'admin') {
+      const res = await loginWithBackend(username.trim(), password, rememberMe);
+      if (res.success && (res.user?.role === 'admin' || res.user?.role === 'adminshp')) {
         setIsAuthenticated(true);
         try {
-          sessionStorage.setItem('gm_admin_auth', 'true');
-          localStorage.setItem('gm_admin_auth', 'true');
+          if (res.user?.role === 'admin') {
+            sessionStorage.setItem('gm_admin_auth', 'true');
+            if (rememberMe) {
+              localStorage.setItem('gm_admin_auth', 'true');
+            } else {
+              localStorage.removeItem('gm_admin_auth');
+            }
+          } else if (res.user?.role === 'adminshp') {
+            sessionStorage.setItem('gm_adminshp_auth', 'true');
+            if (rememberMe) {
+              localStorage.setItem('gm_adminshp_auth', 'true');
+            } else {
+              localStorage.removeItem('gm_adminshp_auth');
+            }
+            if (res.user?.slot) {
+              sessionStorage.setItem('gm_adminshp_user', res.user.slot);
+              if (rememberMe) {
+                localStorage.setItem('gm_adminshp_user', res.user.slot);
+                localStorage.setItem(`gm_adminshp_auth_${res.user.slot}`, 'true');
+              }
+            }
+          }
         } catch (err) {
           console.warn('Storage restricted', err);
         }
         setAuthError('');
         window.dispatchEvent(new CustomEvent('admin-auth-change'));
+        window.dispatchEvent(new CustomEvent('adminshp-auth-change'));
+        window.dispatchEvent(new Event('gm_auth_changed'));
+        if (res.user?.role === 'adminshp' && onSwitchToAdminShp) {
+          onSwitchToAdminShp();
+        }
+        toast.success(currentLang === 'id' ? 'Autentikasi berhasil! Selamat datang.' : 'Authentication successful! Welcome.');
       } else {
-        setAuthError(res.error || (currentLang === 'id' ? 'Username atau password salah!' : 'Invalid username or password!'));
+        setAuthError(res.error || (currentLang === 'id' ? 'Email/username atau kata sandi tidak sesuai!' : 'Invalid email/username or password!'));
       }
     } catch (err: any) {
-      setAuthError(err.message || 'Gagal terhubung ke server auth');
+      setAuthError(err.message || 'Gagal terhubung ke server autentikasi');
     } finally {
       setIsLoggingIn(false);
     }
@@ -1493,59 +1522,106 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
 
   if (!isAuthenticated) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 sm:px-6 lg:px-8" id="admin-login-wrapper">
-        <div className="bg-white rounded-3xl border border-slate-100 p-8 shadow-xl space-y-6">
-          <div className="text-center space-y-2">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mb-2">
-              <Database className="h-6 w-6" />
+      <div className="min-h-[82vh] flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8 bg-slate-50/70" id="admin-login-wrapper">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-white p-7 sm:p-9 shadow-xl shadow-slate-200/50 space-y-6">
+          {/* Header section inspired by Image 2 (Light, custom wording) */}
+          <div className="flex items-start gap-3.5 border-b border-slate-100 pb-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 border border-blue-200/80 text-blue-600 shadow-xs">
+              <ShieldCheck className="h-6 w-6 stroke-[2.2]" />
             </div>
-            <h2 className="text-xl font-black text-slate-950 uppercase tracking-tight font-sans">
-              Admin Portal
-            </h2>
-            <p className="text-xs text-slate-400 font-medium font-sans">
-              GM AGENCY Internal Database Access
-            </p>
+            <div>
+              <h2 className="text-xl font-black text-slate-950 uppercase tracking-tight font-sans">
+                {currentLang === 'id' ? 'Portal Masuk Admin' : 'Admin Login Portal'}
+              </h2>
+            </div>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             {authError && (
-              <div className="flex items-center gap-2 rounded-xl bg-red-50 border border-red-100 p-3.5 text-xs font-bold text-red-700">
-                <AlertCircle className="h-4 w-4 shrink-0" />
+              <div className="flex items-center gap-2.5 rounded-xl bg-red-50 border border-red-200/80 p-3.5 text-xs font-bold text-red-700">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
                 <span>{authError}</span>
               </div>
             )}
 
+            {/* Email / Username input */}
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">Username</label>
-              <input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans"
-              />
+              <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider font-sans">
+                {currentLang === 'id' ? 'Email / Username Admin' : 'Admin Email / Username'}
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Email atau username"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white pl-10 pr-4 py-3 text-xs sm:text-sm font-medium text-slate-900 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all font-sans shadow-xs"
+                />
+              </div>
             </div>
 
+            {/* Password input */}
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">Password</label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 font-sans"
-              />
+              <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider font-sans">
+                {currentLang === 'id' ? 'Kata Sandi' : 'Password'}
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white pl-10 pr-10 py-3 text-xs sm:text-sm font-medium text-slate-900 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all font-sans shadow-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  title={showPassword ? 'Sembunyikan kata sandi' : 'Lihat kata sandi'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
+            {/* Checklist Ingat Saya di Perangkat Ini */}
+            <div className="pt-1">
+              <label className="inline-flex items-center gap-2.5 text-xs text-slate-600 font-semibold cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <span>{currentLang === 'id' ? 'Ingat saya di perangkat ini' : 'Remember me on this device'}</span>
+              </label>
+            </div>
+
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="w-full rounded-xl bg-blue-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md hover:bg-blue-700 transition-colors cursor-pointer mt-2 font-sans disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-md hover:shadow-lg transition-all cursor-pointer font-sans flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
-              {isLoggingIn && <RefreshCw className="h-4 w-4 animate-spin" />}
-              <span>{isLoggingIn ? 'Memverifikasi...' : 'Sign In'}</span>
+              {isLoggingIn ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>{currentLang === 'id' ? 'Memverifikasi Autentikasi...' : 'Verifying Authentication...'}</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4 text-blue-200" />
+                  <span>{currentLang === 'id' ? 'Masuk ke Ruang Kerja GM' : 'Enter Executive Portal'}</span>
+                </>
+              )}
             </button>
           </form>
         </div>
@@ -1727,12 +1803,23 @@ export default function AdminPanel({ currentLang, onInstallApp }: AdminPanelProp
                         try {
                           sessionStorage.setItem('gm_adminshp_auth', 'true');
                           sessionStorage.setItem('gm_adminshp_user', slot);
+                          localStorage.setItem('gm_adminshp_auth', 'true');
                           localStorage.setItem(`gm_adminshp_auth_${slot}`, 'true');
                           localStorage.setItem('gm_adminshp_user', slot);
+                          saveAuthSession('gm-bypass-token', {
+                            username: routeName,
+                            role: 'adminshp',
+                            name: `Admin ${name}`,
+                            slot: slot
+                          }, true);
                         } catch (e) {}
-                        toast.success(`Berhasil masuk ke portal Admin ${name}!`);
-                        window.history.pushState(null, '', `/${routeName}`);
-                        window.dispatchEvent(new PopStateEvent('popstate'));
+                        toast.success(`Berhasil beralih ke portal Admin ${name}!`);
+                        window.dispatchEvent(new CustomEvent('admin-auth-change'));
+                        window.dispatchEvent(new CustomEvent('adminshp-auth-change'));
+                        window.dispatchEvent(new Event('gm_auth_changed'));
+                        if (onSwitchToAdminShp) {
+                          onSwitchToAdminShp();
+                        }
                       }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 hover:bg-indigo-50 dark:hover:bg-indigo-950 hover:border-indigo-200 dark:hover:border-indigo-900 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all active:scale-95 cursor-pointer"
                     >

@@ -4,8 +4,33 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
+
+const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
+
+function sanitizeSupabaseKey(key: string | undefined): string {
+  if (!key) return '';
+  const trimmed = key.trim();
+  const parts = trimmed.split('.');
+  if (parts.length > 3) {
+    return parts.slice(0, 3).join('.');
+  }
+  return trimmed;
+}
+
+const rawSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const rawSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
+
+const supabaseAuthClient = (rawSupabaseUrl && rawSupabaseKey) ? createClient(rawSupabaseUrl.trim(), sanitizeSupabaseKey(rawSupabaseKey), {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+}) : null;
 
 export interface AuthPayload {
   username: string;
@@ -31,14 +56,6 @@ const DEFAULT_HASHES: Record<string, string> = {
   adminvira: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeg6FFV8lLJzpUmvJSjOJyaT9YKue6/WO', // gmadminshp3
   adminali: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeZZt6MOAEhIfCSRojMdQzzFr9mGp4o4G', // gmadminshp4
   finance: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeaFjsmEYNAhyXPTfk7w8x5wNToBctMMm', // 0101
-  worker1: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPe27BMbUEtYz8JmydQ1D/xa7zEk9G75XW', // gmworker1
-  worker2: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeikXyMraVHkCxOWtWFeSY3M9.F.d1sm2', // gmworker2
-  worker3: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPelxj/eTx4BuwV90svzq7ACHlCE6kkGlq', // gmworker3
-  worker4: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPesiyO6BYAbsY3CS91F3VEyR5Q9rFAu6W', // gmworker4
-  worker5: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPezmjAca25ftEh.IbDNS//jqyRCKurp6e', // gmworker5
-  worker6: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeHX5FdmfG8awRiYkwswVg4F8F2vUaCfu', // gmworker6
-  worker7: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeDmdWqDtnTtK0fY3kaYWBvH7k/jUTDuW', // gmworker7
-  worker8: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeeA6JiG5/v0LSdKS0GdEY0ndY1Ubdgim', // gmworker8
 };
 
 // Path to persistent auth overrides (e.g. updated passwords by super admin)
@@ -84,7 +101,7 @@ interface UserAccountDef {
 const USER_ACCOUNTS: UserAccountDef[] = [
   {
     username: 'admin',
-    aliases: ['superadmin'],
+    aliases: ['superadmin', 'gmadmin', 'admin@gmail.com', 'gmadmin@gmail.com'],
     role: 'admin',
     name: 'Super Admin GM',
     envVar: 'ADMIN_PASSWORD_HASH',
@@ -92,7 +109,7 @@ const USER_ACCOUNTS: UserAccountDef[] = [
   },
   {
     username: 'adminera',
-    aliases: ['adminshp1'],
+    aliases: ['adminshp1', 'adminera@gmail.com', 'adminshp1@gmail.com'],
     role: 'adminshp',
     name: 'Admin Era (SHP 1)',
     slot: 'adminshp1',
@@ -101,7 +118,7 @@ const USER_ACCOUNTS: UserAccountDef[] = [
   },
   {
     username: 'admincika',
-    aliases: ['adminshp2'],
+    aliases: ['adminshp2', 'admincika@gmail.com', 'adminshp2@gmail.com'],
     role: 'adminshp',
     name: 'Admin Cika (SHP 2)',
     slot: 'adminshp2',
@@ -110,7 +127,7 @@ const USER_ACCOUNTS: UserAccountDef[] = [
   },
   {
     username: 'adminvira',
-    aliases: ['adminshp3'],
+    aliases: ['adminshp3', 'adminvira@gmail.com', 'adminshp3@gmail.com'],
     role: 'adminshp',
     name: 'Admin Vira (SHP 3)',
     slot: 'adminshp3',
@@ -119,7 +136,7 @@ const USER_ACCOUNTS: UserAccountDef[] = [
   },
   {
     username: 'adminali',
-    aliases: ['adminshp4'],
+    aliases: ['adminshp4', 'adminali@gmail.com', 'adminshp4@gmail.com'],
     role: 'adminshp',
     name: 'Admin Ali (SHP 4)',
     slot: 'adminshp4',
@@ -134,18 +151,6 @@ const USER_ACCOUNTS: UserAccountDef[] = [
     envVar: 'FINANCE_PIN_HASH',
     defaultHashKey: 'finance',
   },
-  ...Array.from({ length: 8 }, (_, i) => {
-    const num = i + 1;
-    return {
-      username: `worker${num}`,
-      aliases: [`w${num}`],
-      role: 'worker' as const,
-      name: `Worker ${num}`,
-      slot: `worker${num}`,
-      envVar: `WORKER${num}_PASSWORD_HASH`,
-      defaultHashKey: `worker${num}`,
-    };
-  }),
 ];
 
 /**
@@ -284,7 +289,106 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Locate user definition
+    // 1. Primary Attempt: Supabase Auth (supports accounts created in Supabase Auth like adminali@gmail.com, adminera@gmail.com, etc.)
+    if (supabaseAuthClient) {
+      const candidateEmails: string[] = [];
+      if (normUser.includes('@')) {
+        candidateEmails.push(normUser);
+      } else {
+        if (normUser === 'adminera' || normUser === 'adminshp1') {
+          candidateEmails.push('adminera@gmail.com', 'adminshp1@gmail.com');
+        } else if (normUser === 'admincika' || normUser === 'adminshp2') {
+          candidateEmails.push('admincika@gmail.com', 'adminshp2@gmail.com');
+        } else if (normUser === 'adminvira' || normUser === 'adminshp3') {
+          candidateEmails.push('adminvira@gmail.com', 'adminshp3@gmail.com');
+        } else if (normUser === 'adminali' || normUser === 'adminshp4') {
+          candidateEmails.push('adminali@gmail.com', 'adminshp4@gmail.com');
+        } else if (normUser === 'admin' || normUser === 'superadmin' || normUser === 'gmadmin') {
+          candidateEmails.push('admin@gmail.com', 'gmadmin@gmail.com', 'admin@gmagency.com');
+        }
+        candidateEmails.push(`${normUser}@gmail.com`);
+      }
+
+      for (const testEmail of candidateEmails) {
+        try {
+          const { data, error } = await supabaseAuthClient.auth.signInWithPassword({
+            email: testEmail,
+            password: rawPassword,
+          });
+
+          if (data?.user && !error) {
+            const email = (data.user.email || testEmail).toLowerCase().trim();
+            const meta = (data.user.user_metadata || {}) as any;
+
+            let matchedRole: 'admin' | 'adminshp' | 'finance' | 'worker' = 'adminshp';
+            let matchedSlot: string | undefined = undefined;
+            let matchedName = 'Admin SHP';
+            let matchedUsername = email.split('@')[0];
+
+            if (email.includes('adminera') || email.includes('shp1') || meta.slot === 'adminshp1') {
+              matchedRole = 'adminshp';
+              matchedSlot = 'adminshp1';
+              matchedName = 'Admin Era (SHP 1)';
+              matchedUsername = 'adminera';
+            } else if (email.includes('admincika') || email.includes('shp2') || meta.slot === 'adminshp2') {
+              matchedRole = 'adminshp';
+              matchedSlot = 'adminshp2';
+              matchedName = 'Admin Cika (SHP 2)';
+              matchedUsername = 'admincika';
+            } else if (email.includes('adminvira') || email.includes('shp3') || meta.slot === 'adminshp3') {
+              matchedRole = 'adminshp';
+              matchedSlot = 'adminshp3';
+              matchedName = 'Admin Vira (SHP 3)';
+              matchedUsername = 'adminvira';
+            } else if (email.includes('adminali') || email.includes('shp4') || meta.slot === 'adminshp4') {
+              matchedRole = 'adminshp';
+              matchedSlot = 'adminshp4';
+              matchedName = 'Admin Ali (SHP 4)';
+              matchedUsername = 'adminali';
+            } else if (
+              meta.role === 'admin' ||
+              email.includes('gmadmin') ||
+              email.includes('superadmin') ||
+              email === 'admin@gmail.com' ||
+              (!email.includes('shp') && (email.startsWith('admin') || normUser === 'admin'))
+            ) {
+              matchedRole = 'admin';
+              matchedName = 'Super Admin GM';
+              matchedUsername = 'admin';
+            }
+
+            resetRateLimit(clientIp, normUser);
+
+            const payload: AuthPayload = {
+              username: matchedUsername,
+              role: matchedRole,
+              name: matchedName,
+              slot: matchedSlot,
+            };
+
+            const token = jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+
+            res.json({
+              success: true,
+              token,
+              user: {
+                username: matchedUsername,
+                role: matchedRole,
+                name: matchedName,
+                slot: matchedSlot,
+              },
+              authSource: 'supabase_auth',
+              expiresIn: TOKEN_EXPIRY,
+            });
+            return;
+          }
+        } catch (supaErr) {
+          // Ignore and continue to next candidate or fallback
+        }
+      }
+    }
+
+    // 2. Secondary Attempt: Locate user definition in internal database / bcrypt hashes
     const userDef = USER_ACCOUNTS.find(
       (u) => u.username === normUser || u.aliases.includes(normUser) || (u.slot && u.slot === normUser)
     );

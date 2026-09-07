@@ -1198,7 +1198,7 @@ export async function dbGetMapsReviews(limit: number = 50000, forceRefresh: bool
   const deletedMaps = getClientDeletedMapsReviews();
   let list: MapsReview[] = [];
 
-  const leanCols = 'id, store_name, client_name, review_type, target_count, maps_link, notes, proof_link, status, payment_status, created_by, created_at';
+  const leanCols = 'id, store_name, client_name, review_type, order_kind, target_count, maps_link, notes, proof_link, status, payment_status, created_by, created_at, reviewer_accounts';
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     list = await fetchSupabaseTableWithFallback<MapsReview>('maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit, leanCols);

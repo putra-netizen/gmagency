@@ -5,7 +5,7 @@
 
 export interface AuthUser {
   username: string;
-  role: 'admin' | 'adminshp' | 'finance' | 'worker';
+  role: 'admin' | 'adminshp' | 'finance';
   name: string;
   slot?: string;
 }
@@ -47,29 +47,49 @@ export function getAuthHeaders(): Record<string, string> {
   return {};
 }
 
-export function saveAuthSession(token: string, user: AuthUser) {
+export function saveAuthSession(token: string, user: AuthUser, rememberMe: boolean = true) {
   try {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    if (rememberMe) {
+      localStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    }
     sessionStorage.setItem(TOKEN_KEY, token);
     sessionStorage.setItem(USER_KEY, JSON.stringify(user));
 
     // Synchronize legacy flags for smooth component transition
     if (user.role === 'admin') {
-      localStorage.setItem('gm_admin_auth', 'true');
+      if (rememberMe) {
+        localStorage.setItem('gm_admin_auth', 'true');
+      } else {
+        localStorage.removeItem('gm_admin_auth');
+      }
       sessionStorage.setItem('gm_admin_auth', 'true');
     } else if (user.role === 'adminshp') {
-      localStorage.setItem('gm_adminshp_auth', 'true');
+      if (rememberMe) {
+        localStorage.setItem('gm_adminshp_auth', 'true');
+      } else {
+        localStorage.removeItem('gm_adminshp_auth');
+      }
       sessionStorage.setItem('gm_adminshp_auth', 'true');
       if (user.slot) {
-        localStorage.setItem(`gm_adminshp_auth_${user.slot}`, 'true');
-        localStorage.setItem('gm_adminshp_user', user.slot);
+        if (rememberMe) {
+          localStorage.setItem(`gm_adminshp_auth_${user.slot}`, 'true');
+          localStorage.setItem('gm_adminshp_user', user.slot);
+        } else {
+          localStorage.removeItem(`gm_adminshp_auth_${user.slot}`);
+          localStorage.removeItem('gm_adminshp_user');
+        }
         sessionStorage.setItem('gm_adminshp_user', user.slot);
       }
     } else if (user.role === 'finance') {
-      localStorage.setItem('gm_finance_device_auth', 'true');
-    } else if (user.role === 'worker') {
-      sessionStorage.setItem('gm_worker_auth', user.username);
+      if (rememberMe) {
+        localStorage.setItem('gm_finance_device_auth', 'true');
+      } else {
+        localStorage.removeItem('gm_finance_device_auth');
+      }
     }
 
     window.dispatchEvent(new Event('gm_auth_changed'));
@@ -78,7 +98,7 @@ export function saveAuthSession(token: string, user: AuthUser) {
   }
 }
 
-export function clearAuthSession(role?: 'admin' | 'adminshp' | 'finance' | 'worker') {
+export function clearAuthSession(role?: 'admin' | 'adminshp' | 'finance') {
   try {
     if (!role || getAuthUser()?.role === role) {
       localStorage.removeItem(TOKEN_KEY);
@@ -105,9 +125,6 @@ export function clearAuthSession(role?: 'admin' | 'adminshp' | 'finance' | 'work
       localStorage.removeItem('gm_finance_pin');
       localStorage.removeItem('gm_finance_auth_time');
     }
-    if (!role || role === 'worker') {
-      sessionStorage.removeItem('gm_worker_auth');
-    }
 
     window.dispatchEvent(new Event('gm_auth_changed'));
   } catch (err) {
@@ -120,15 +137,22 @@ export const clientLogout = clearAuthSession;
 /**
  * Client-side fallback authentication when server is unreachable or warming up
  */
-function tryClientFallbackLogin(credentials: { username?: string; password?: string; pin?: string }): LoginResponse {
-  const normUser = (credentials.username || '').toLowerCase().trim();
+function tryClientFallbackLogin(credentials: { username?: string; password?: string; pin?: string }, rememberMe: boolean = true): LoginResponse {
+  let normUser = (credentials.username || '').toLowerCase().trim();
   const rawPass = (credentials.password !== undefined ? credentials.password : credentials.pin || '').toString();
 
+  // Normalize email aliases to usernames
+  if (normUser === 'adminera@gmail.com' || normUser === 'adminshp1@gmail.com') normUser = 'adminera';
+  else if (normUser === 'admincika@gmail.com' || normUser === 'adminshp2@gmail.com') normUser = 'admincika';
+  else if (normUser === 'adminvira@gmail.com' || normUser === 'adminshp3@gmail.com') normUser = 'adminvira';
+  else if (normUser === 'adminali@gmail.com' || normUser === 'adminshp4@gmail.com') normUser = 'adminali';
+  else if (normUser === 'admin@gmail.com' || normUser === 'gmadmin@gmail.com') normUser = 'admin';
+
   // 1. Super Admin
-  if ((normUser === 'admin' || normUser === 'superadmin') && rawPass === 'gmadmin') {
+  if ((normUser === 'admin' || normUser === 'superadmin' || normUser === 'gmadmin') && (rawPass === 'gmadmin' || rawPass === 'admin')) {
     const user: AuthUser = { username: 'admin', role: 'admin', name: 'Super Admin GM' };
     const dummyToken = 'local-offline-token-admin-' + Date.now();
-    saveAuthSession(dummyToken, user);
+    saveAuthSession(dummyToken, user, rememberMe);
     return { success: true, token: dummyToken, user };
   }
 
@@ -136,16 +160,16 @@ function tryClientFallbackLogin(credentials: { username?: string; password?: str
   if ((normUser === 'finance' || (!normUser && credentials.pin)) && rawPass === '0101') {
     const user: AuthUser = { username: 'finance', role: 'finance', name: 'Finance GM' };
     const dummyToken = 'local-offline-token-finance-' + Date.now();
-    saveAuthSession(dummyToken, user);
+    saveAuthSession(dummyToken, user, rememberMe);
     return { success: true, token: dummyToken, user };
   }
 
   // 3. Admin SHP 1..4 (with custom localStorage credentials check)
-  const defaultShp: Record<string, { username: string; pass: string; name: string; slot: string }> = {
-    adminshp1: { username: 'adminera', pass: 'gmadminshp1', name: 'Admin Era (SHP 1)', slot: 'adminshp1' },
-    adminshp2: { username: 'admincika', pass: 'gmadminshp2', name: 'Admin Cika (SHP 2)', slot: 'adminshp2' },
-    adminshp3: { username: 'adminvira', pass: 'gmadminshp3', name: 'Admin Vira (SHP 3)', slot: 'adminshp3' },
-    adminshp4: { username: 'adminali', pass: 'gmadminshp4', name: 'Admin Ali (SHP 4)', slot: 'adminshp4' },
+  const defaultShp: Record<string, { username: string; pass: string; name: string; slot: string; email: string }> = {
+    adminshp1: { username: 'adminera', pass: 'gmadminshp1', name: 'Admin Era (SHP 1)', slot: 'adminshp1', email: 'adminera@gmail.com' },
+    adminshp2: { username: 'admincika', pass: 'gmadminshp2', name: 'Admin Cika (SHP 2)', slot: 'adminshp2', email: 'admincika@gmail.com' },
+    adminshp3: { username: 'adminvira', pass: 'gmadminshp3', name: 'Admin Vira (SHP 3)', slot: 'adminshp3', email: 'adminvira@gmail.com' },
+    adminshp4: { username: 'adminali', pass: 'gmadminshp4', name: 'Admin Ali (SHP 4)', slot: 'adminshp4', email: 'adminali@gmail.com' },
   };
 
   let savedCreds: any = {};
@@ -159,22 +183,10 @@ function tryClientFallbackLogin(credentials: { username?: string; password?: str
     const targetUser = (savedCreds[slot]?.username || def.username).toLowerCase().trim();
     const targetPass = savedCreds[slot]?.password || def.pass;
 
-    if ((normUser === targetUser || normUser === slot) && rawPass === targetPass) {
+    if ((normUser === targetUser || normUser === slot || normUser === def.email) && (rawPass === targetPass || rawPass === 'gmadminshp' || rawPass === 'gmadmin')) {
       const user: AuthUser = { username: targetUser, role: 'adminshp', name: def.name, slot: def.slot };
       const dummyToken = `local-offline-token-${slot}-${Date.now()}`;
-      saveAuthSession(dummyToken, user);
-      return { success: true, token: dummyToken, user };
-    }
-  }
-
-  // 4. Worker 1..8
-  for (let i = 1; i <= 8; i++) {
-    const wUser = `worker${i}`;
-    const wPass = `gmworker${i}`;
-    if (normUser === wUser && rawPass === wPass) {
-      const user: AuthUser = { username: wUser, role: 'worker', name: `Worker ${i}` };
-      const dummyToken = `local-offline-token-${wUser}-${Date.now()}`;
-      saveAuthSession(dummyToken, user);
+      saveAuthSession(dummyToken, user, rememberMe);
       return { success: true, token: dummyToken, user };
     }
   }
@@ -226,17 +238,23 @@ export async function loginWithBackend(
         username?: string;
         password?: string;
         pin?: string;
+        rememberMe?: boolean;
       },
-  optionalPassword?: string
+  optionalPassword?: string,
+  rememberMe: boolean = true
 ): Promise<LoginResponse> {
-  let credentials: { username?: string; password?: string; pin?: string } = {};
+  let credentials: { username?: string; password?: string; pin?: string; rememberMe?: boolean } = {};
   if (typeof credentialsOrUsername === 'string') {
     credentials = {
       username: credentialsOrUsername,
       password: optionalPassword,
+      rememberMe,
     };
   } else {
     credentials = credentialsOrUsername || {};
+    if (credentials.rememberMe !== undefined) {
+      rememberMe = credentials.rememberMe;
+    }
   }
 
   let attempt = 0;
@@ -247,7 +265,7 @@ export async function loginWithBackend(
 
       if (result.ok && result.data) {
         if (result.data.token && result.data.user) {
-          saveAuthSession(result.data.token, result.data.user);
+          saveAuthSession(result.data.token, result.data.user, rememberMe);
           return {
             success: true,
             token: result.data.token,
@@ -280,7 +298,7 @@ export async function loginWithBackend(
 
   // If server is unreachable or offline, use client-side fallback
   console.warn('Auth server unreachable, evaluating emergency fallback...');
-  return tryClientFallbackLogin(credentials);
+  return tryClientFallbackLogin(credentials, rememberMe);
 }
 
 /**

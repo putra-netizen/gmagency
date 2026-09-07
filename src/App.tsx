@@ -9,14 +9,14 @@ import Hero from './components/Hero';
 import ProductCard from './components/ProductCard';
 import CheckoutModal from './components/CheckoutModal';
 import AdminPanel from './components/AdminPanel';
-import WorkerPanel from './components/WorkerPanel';
 import AdminShpPanel from './components/AdminShpPanel';
 import ToastContainer from './components/ToastContainer';
 import { Product, Language, Order } from './types';
 import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected } from './lib/supabase';
 import { TRANSLATIONS } from './lib/translations';
 import { initGlobalAutoSync } from './utils/autoSyncManager';
-import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart } from 'lucide-react';
+import { getAuthUser } from './lib/auth';
+import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
@@ -30,36 +30,7 @@ export default function App() {
     }
   });
 
-  const isAdminShpPath = (path: string) => {
-    if (path === '/adminshp' || path.startsWith('/adminshp/')) return true;
-    const match = path.match(/^\/([^/]+)(\/.*)?$/);
-    if (!match) return false;
-    const firstSegment = match[1].toLowerCase();
-    
-    // Default routes
-    const defaultRoutes = ['adminshp', 'adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'];
-    if (defaultRoutes.includes(firstSegment)) return true;
-    
-    // Custom routes from gm_adminshp_creds
-    try {
-      const saved = localStorage.getItem('gm_adminshp_creds');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          for (const key of Object.keys(parsed)) {
-            const customUser = parsed[key]?.username?.trim()?.toLowerCase();
-            if (customUser && customUser === firstSegment) {
-              return true;
-            }
-          }
-        }
-      }
-    } catch (e) {}
-    
-    return false;
-  };
-
-  const [currentView, setCurrentView] = useState<'home' | 'admin' | 'worker' | 'adminshp'>(() => {
+  const [currentView, setCurrentView] = useState<'home' | 'admin' | 'not-found'>(() => {
     const path = window.location.pathname;
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
     if (isStandalone && (path === '/' || path === '' || path === '/home')) {
@@ -68,11 +39,53 @@ export default function App() {
       } catch (e) {}
       return 'admin';
     }
+    if (path === '/' || path === '' || path === '/home') return 'home';
     if (path === '/admin' || path.startsWith('/admin/')) return 'admin';
-    if (path === '/worker' || path.startsWith('/worker/')) return 'worker';
-    if (isAdminShpPath(path)) return 'adminshp';
-    return 'home';
+    return 'not-found';
   });
+
+  // Track authenticated admin role for unified portal
+  const [adminRole, setAdminRole] = useState<'admin' | 'adminshp' | null>(() => {
+    try {
+      const user = getAuthUser();
+      if (user?.role === 'admin') return 'admin';
+      if (user?.role === 'adminshp') return 'adminshp';
+      if (sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true') return 'admin';
+      if (sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true') return 'adminshp';
+      return null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const handleAuthChange = () => {
+      try {
+        const user = getAuthUser();
+        if (user?.role === 'admin') {
+          setAdminRole('admin');
+        } else if (user?.role === 'adminshp') {
+          setAdminRole('adminshp');
+        } else if (sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true') {
+          setAdminRole('admin');
+        } else if (sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true') {
+          setAdminRole('adminshp');
+        } else {
+          setAdminRole(null);
+        }
+      } catch (e) {
+        setAdminRole(null);
+      }
+    };
+    window.addEventListener('admin-auth-change', handleAuthChange);
+    window.addEventListener('adminshp-auth-change', handleAuthChange);
+    window.addEventListener('gm_auth_changed', handleAuthChange);
+    return () => {
+      window.removeEventListener('admin-auth-change', handleAuthChange);
+      window.removeEventListener('adminshp-auth-change', handleAuthChange);
+      window.removeEventListener('gm_auth_changed', handleAuthChange);
+    };
+  }, []);
 
   // PWA installation states
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -176,14 +189,10 @@ export default function App() {
   };
 
   // Sync route pathname (SPA routing)
-  const handleViewChange = (view: 'home' | 'admin' | 'worker' | 'adminshp') => {
+  const handleViewChange = (view: 'home' | 'admin') => {
     setCurrentView(view);
     if (view === 'admin') {
       window.history.pushState(null, '', '/admin');
-    } else if (view === 'worker') {
-      window.history.pushState(null, '', '/worker');
-    } else if (view === 'adminshp') {
-      window.history.pushState(null, '', '/adminshp');
     } else {
       window.history.pushState(null, '', '/home');
     }
@@ -205,19 +214,13 @@ export default function App() {
       if (isStandalone && (path === '/' || path === '' || path === '/home')) {
         window.history.replaceState(null, '', '/admin');
         setCurrentView('admin');
-      } else if (path === '/' || path === '') {
-        window.history.replaceState(null, '', '/home');
+      } else if (path === '/' || path === '' || path === '/home') {
         setCurrentView('home');
       } else if (path === '/admin' || path.startsWith('/admin/')) {
         setCurrentView('admin');
-      } else if (path === '/worker' || path.startsWith('/worker/')) {
-        setCurrentView('worker');
-      } else if (isAdminShpPath(path)) {
-        setCurrentView('adminshp');
-      } else if (path === '/home') {
-        setCurrentView('home');
       } else {
-        setCurrentView('home');
+        // Obsolete routes (e.g. /worker1-8, /adminshp, /adminshp1-4, etc.) show 404
+        setCurrentView('not-found');
       }
     };
     handleLocationChange();
@@ -359,20 +362,50 @@ export default function App() {
               )}
             </div>
           </div>
-        ) : currentView === 'worker' ? (
-          /* WORKER TASKS DASHBOARD SCREEN */
-          <div className="fade-in">
-            <WorkerPanel currentLang={currentLang} />
-          </div>
-        ) : currentView === 'adminshp' ? (
-          /* MANUAL entries Shopee Portal SCREEN */
-          <div className="fade-in">
-            <AdminShpPanel currentLang={currentLang} />
+        ) : currentView === 'not-found' ? (
+          /* 404 - HALAMAN TIDAK DITEMUKAN SCREEN */
+          <div className="min-h-[65vh] flex flex-col items-center justify-center px-4 py-16 text-center">
+            <div className="h-16 w-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mb-4 shadow-xs">
+              <AlertCircle className="h-8 w-8 stroke-[2.2]" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-2 font-sans tracking-tight">
+              404 - Halaman Tidak Ditemukan
+            </h1>
+            <p className="text-sm text-slate-500 max-w-md mb-6 leading-relaxed">
+              {currentLang === 'id'
+                ? 'Halaman atau portal yang Anda akses tidak tersedia. Akses seluruh portal manajemen GM Agency kini telah dipusatkan satu pintu di /admin.'
+                : 'The page you are trying to access is not available. All GM Agency management portals are now unified at /admin.'}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => handleViewChange('admin')}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                Buka Portal /admin
+              </button>
+              <button
+                onClick={() => handleViewChange('home')}
+                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all active:scale-95 cursor-pointer"
+              >
+                Kembali ke Beranda
+              </button>
+            </div>
           </div>
         ) : (
-          /* ADMIN DATABASE DASHBOARD SCREEN */
+          /* UNIFIED ADMIN PORTAL SCREEN (/admin) */
           <div className="fade-in">
-            <AdminPanel currentLang={currentLang} onInstallApp={handleInstallApp} />
+            {adminRole === 'adminshp' ? (
+              <AdminShpPanel
+                currentLang={currentLang}
+                onReturnToGmAdmin={() => setAdminRole('admin')}
+              />
+            ) : (
+              <AdminPanel
+                currentLang={currentLang}
+                onInstallApp={handleInstallApp}
+                onSwitchToAdminShp={() => setAdminRole('adminshp')}
+              />
+            )}
           </div>
         )}
       </main>

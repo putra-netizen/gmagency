@@ -10,11 +10,13 @@ import { Language } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
 import { Globe, ShieldAlert, Home, Grid, Settings, RefreshCw, LogOut, Sun, Moon, Menu, X, Wallet, Package, FileSpreadsheet, User, ShieldCheck, Database } from 'lucide-react';
 
+import { loginWithBackend, clientLogout, getAuthUser } from '../lib/auth';
+
 interface NavbarProps {
   currentLang: Language;
   onLangChange: (lang: Language) => void;
-  currentView: 'home' | 'admin' | 'worker' | 'adminshp';
-  onViewChange: (view: 'home' | 'admin' | 'worker' | 'adminshp') => void;
+  currentView: 'home' | 'admin' | 'not-found';
+  onViewChange: (view: 'home' | 'admin') => void;
   supabaseConnected: boolean;
   theme?: 'light' | 'dark';
   onThemeToggle?: () => void;
@@ -36,56 +38,29 @@ export default function Navbar({
 
   const [isAdminAuth, setIsAdminAuth] = useState(() => {
     try {
+      const user = getAuthUser();
+      if (user?.role === 'admin') return true;
       return sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true';
     } catch (e) {
       return false;
     }
   });
 
-  const isShpAuthenticated = () => {
+  const [isShpAuth, setIsShpAuth] = useState(() => {
     try {
-      const pathname = window.location.pathname;
-      if (pathname === '/adminshp') return false;
-      const clean = pathname.replace('/', '').toLowerCase();
-
-      let slot = null;
-      try {
-        const saved = localStorage.getItem('gm_adminshp_creds');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && typeof parsed === 'object') {
-            for (const key of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
-              if (parsed[key]?.username?.trim()?.toLowerCase() === clean) {
-                slot = key;
-                break;
-              }
-            }
-          }
-        }
-      } catch (e) {}
-
-      if (!slot) {
-        if (clean === 'adminera' || clean === 'adminshp1') slot = 'adminshp1';
-        else if (clean === 'admincika' || clean === 'adminshp2') slot = 'adminshp2';
-        else if (clean === 'adminvira' || clean === 'adminshp3') slot = 'adminshp3';
-        else if (clean === 'adminali' || clean === 'adminshp4') slot = 'adminshp4';
-      }
-
-      if (!slot) return false;
-
-      const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem(`gm_adminshp_auth_${slot}`) === 'true';
-      const authUser = sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user');
-      return isAuth && authUser === slot;
+      const user = getAuthUser();
+      if (user?.role === 'adminshp') return true;
+      return sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true';
     } catch (e) {
       return false;
     }
-  };
+  });
 
   const getShpDisplayName = (): string => {
     try {
-      const pathname = window.location.pathname;
-      const clean = pathname.replace('/', '').toLowerCase();
-      if (clean && clean !== 'adminshp') return clean.toUpperCase();
+      const user = getAuthUser();
+      if (user?.role === 'adminshp' && user?.name) return user.name.toUpperCase();
+      if (user?.role === 'adminshp' && user?.username) return user.username.toUpperCase();
       const slot = sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || 'adminshp1';
       const saved = localStorage.getItem('gm_adminshp_creds');
       if (saved) {
@@ -107,13 +82,19 @@ export default function Navbar({
       setCurrentPath(window.location.pathname);
     };
     const handleAuthChange = () => {
-      setIsAdminAuth(sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true');
+      const user = getAuthUser();
+      setIsAdminAuth(user?.role === 'admin' || sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true');
+      setIsShpAuth(user?.role === 'adminshp' || sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true');
     };
     window.addEventListener('popstate', handleRoute);
     window.addEventListener('admin-auth-change', handleAuthChange);
+    window.addEventListener('adminshp-auth-change', handleAuthChange);
+    window.addEventListener('gm_auth_changed', handleAuthChange);
     return () => {
       window.removeEventListener('popstate', handleRoute);
       window.removeEventListener('admin-auth-change', handleAuthChange);
+      window.removeEventListener('adminshp-auth-change', handleAuthChange);
+      window.removeEventListener('gm_auth_changed', handleAuthChange);
     };
   }, []);
 
@@ -241,10 +222,10 @@ export default function Navbar({
             )}
           </div>
         ) : (
-          /* Normal Logo brand encapsulated in white capsule wrapper (hidden on mobile only in adminshp, visible everywhere else) */
+          /* Normal Logo brand encapsulated in white capsule wrapper */
           <div 
             onClick={() => onViewChange('home')} 
-            className={`${currentView === 'adminshp' ? 'hidden md:flex' : 'flex'} cursor-pointer transition-all duration-200 active:scale-95 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full py-1 px-3 sm:py-1.5 sm:px-3.5 items-center justify-center shadow-xs hover:shadow-sm hover:bg-slate-50 dark:hover:bg-slate-900`}
+            className="flex cursor-pointer transition-all duration-200 active:scale-95 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full py-1 px-3 sm:py-1.5 sm:px-3.5 items-center justify-center shadow-xs hover:shadow-sm hover:bg-slate-50 dark:hover:bg-slate-900"
             id="brand-logo-container"
           >
             <GMLogo size="sm" showSubtitle={true} />
@@ -252,7 +233,7 @@ export default function Navbar({
         )}
 
         {/* Action controls */}
-        <div className={`flex items-center gap-1.5 sm:gap-3 ${currentView === 'adminshp' ? 'ml-auto md:ml-0' : ''}`} id="nav-actions">
+        <div className="flex items-center gap-1.5 sm:gap-3" id="nav-actions">
           {/* Supabase status pill -> Layanan 24 Jam */}
           {currentView === 'home' && (
             <div 
@@ -268,8 +249,8 @@ export default function Navbar({
             </div>
           )}
 
-          {/* Admin panel actions (Refresh and Sign Out) */}
-          {currentView === 'admin' && isAdminAuth && (
+          {/* Admin panel actions for GM Owner / Admin */}
+          {currentView === 'admin' && !isShpAuth && isAdminAuth && (
             <>
               {/* Refresh (icon only, minimal) */}
               <button
@@ -298,9 +279,9 @@ export default function Navbar({
           )}
 
           {/* AdminShp view actions (Connected icon, Refresh, Sign Out, and Profile Avatar on the far right) */}
-          {currentView === 'adminshp' && isShpAuthenticated() && (
+          {currentView === 'admin' && isShpAuth && (
             <div className="flex items-center gap-2 sm:gap-2.5">
-              {/* Supabase Connected Indicator - Ikon Database hijau connected */}
+              {/* Supabase Connected Indicator */}
               <div 
                 className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-xs"
                 title="Supabase Database Connected"
@@ -334,7 +315,7 @@ export default function Navbar({
                 <span className="hidden sm:inline">Sign Out</span>
               </button>
 
-              {/* AdminSHP Profile Identity Badge (Di kanan sendiri / paling kanan) */}
+              {/* AdminSHP Profile Identity Badge */}
               <div 
                 className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl bg-slate-100/90 text-slate-800 border border-slate-200 text-xs font-bold font-sans shadow-xs select-none"
                 title={`User: ${getShpDisplayName()}`}
@@ -348,18 +329,6 @@ export default function Navbar({
                 </span>
               </div>
             </div>
-          )}
-
-          {/* Navigation View switcher (Only visible in worker mode to return home, hidden for admin and adminshp to keep it clean) */}
-          {currentView !== 'home' && currentView !== 'admin' && currentView !== 'adminshp' && (
-            <button
-              onClick={() => onViewChange('home')}
-              className="flex items-center gap-1 sm:gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 shadow-sm cursor-pointer border bg-slate-100 text-slate-750 hover:bg-slate-200 border-slate-200"
-              id="view-toggle-button"
-            >
-              <Home className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{t.navHome}</span>
-            </button>
           )}
 
           {/* Theme switcher (Only visible in home view) */}
@@ -378,8 +347,8 @@ export default function Navbar({
             </button>
           )}
 
-          {/* Language toggle switcher (Hidden on admin and adminshp view) */}
-          {currentView !== 'admin' && currentView !== 'adminshp' && (
+          {/* Language toggle switcher (Shown only on home view) */}
+          {currentView === 'home' && (
             <div className={`flex items-center overflow-hidden rounded-lg p-0.5 border ${
               currentView === 'home'
                 ? (theme === 'dark' ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white shadow-sm')

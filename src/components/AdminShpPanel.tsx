@@ -20,7 +20,7 @@ import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview, ReportMap } from '../types';
-import { loginWithBackend, clientLogout } from '../lib/auth';
+import { loginWithBackend, clientLogout, getAuthUser } from '../lib/auth';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { ModernFilterSelect } from './ModernFilterSelect';
 import { 
@@ -62,7 +62,8 @@ import {
   Filter,
   Activity,
   Link2,
-  ListTodo
+  ListTodo,
+  Mail
 } from 'lucide-react';
 import { pauseAutoSyncFor } from '../utils/autoSyncManager';
 import { 
@@ -75,6 +76,7 @@ import { sanitizeUrl } from '../utils/security';
 
 interface AdminShpPanelProps {
   currentLang: 'id' | 'en';
+  onReturnToGmAdmin?: () => void;
 }
 
 const WORKERS = ['rehan', 'deky', 'panca', 'anggun', 'riyanto', 'bintang'];
@@ -352,43 +354,31 @@ const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, de
   );
 };
 
-export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
+export default function AdminShpPanel({ currentLang, onReturnToGmAdmin }: AdminShpPanelProps) {
   // Authentication states
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      const pathname = window.location.pathname;
-      if (pathname === '/adminshp') return false; // Force NOT authenticated on portal!
-      
-      const slot = getSlotFromRouteName(pathname);
-      if (!slot) return false;
-
-      const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem(`gm_adminshp_auth_${slot}`) === 'true';
-      const authUser = sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user');
-      return isAuth && authUser === slot;
+      const user = getAuthUser();
+      if (user?.role === 'adminshp' || user?.role === 'admin') return true;
+      const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true';
+      return isAuth;
     } catch (e) {
       return false;
     }
   });
   const [currentAdminUser, setCurrentAdminUser] = useState<string>(() => {
     try {
-      const pathname = window.location.pathname;
-      if (pathname === '/adminshp') return ''; // Force empty user on portal!
-      
-      const slot = getSlotFromRouteName(pathname);
-      if (!slot) return '';
-
-      return sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || '';
+      const user = getAuthUser();
+      if (user?.slot) return user.slot;
+      return sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || 'adminshp1';
     } catch (e) {
-      return '';
+      return 'adminshp1';
     }
   });
-  const [adminUsername, setAdminUsername] = useState(() => {
-    const pathname = window.location.pathname;
-    const slot = getSlotFromRouteName(pathname);
-    return slot ? getSlotRouteName(slot) : '';
-  });
+  const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [authError, setAuthError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -632,55 +622,32 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     }
   };
 
-  // Listen to route changes and sync with username pre-fill & session security
+  // Listen to auth changes
   useEffect(() => {
     const handleRouteSync = () => {
-      const pathname = window.location.pathname;
-      const slot = getSlotFromRouteName(pathname);
-      const routeName = slot ? getSlotRouteName(slot) : null;
-
-      if (slot && routeName) {
-        // If they visited /adminshp1 but it's customized as /adminera, we sync the URL pathname
-        const currentSegment = pathname.replace(/^\//, '').trim().toLowerCase();
-        if (currentSegment !== routeName) {
-          window.history.replaceState(null, '', `/${routeName}`);
+      try {
+        const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true';
+        const user = getAuthUser();
+        if (isAuth || user?.role === 'adminshp' || user?.role === 'admin') {
+          setIsAuthenticated(true);
+          const slot = user?.slot || sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || 'adminshp1';
+          setCurrentAdminUser(slot);
         }
-
-        // If the matched user is different from the currently logged in session,
-        // we automatically logout the current user to keep logs and accounts separate.
-        if (isAuthenticated && currentAdminUser !== slot) {
-          setIsAuthenticated(false);
-          setCurrentAdminUser('');
-          try {
-            sessionStorage.removeItem('gm_adminshp_auth');
-            sessionStorage.removeItem('gm_adminshp_user');
-          } catch (e) {
-            console.warn(e);
-          }
-        }
-        setAdminUsername(routeName);
-      } else if (pathname === '/adminshp') {
-        // General adminshp portal - force clean login form and clear session
-        if (isAuthenticated) setIsAuthenticated(false);
-        if (currentAdminUser) setCurrentAdminUser('');
-        if (adminUsername) setAdminUsername('');
-        if (adminPassword) setAdminPassword('');
-        if (authError) setAuthError('');
-        try {
-          sessionStorage.removeItem('gm_adminshp_auth');
-          sessionStorage.removeItem('gm_adminshp_user');
-        } catch (e) {
-          console.warn(e);
-        }
+      } catch (e) {
+        console.warn(e);
       }
     };
 
-    handleRouteSync();
-    window.addEventListener('popstate', handleRouteSync);
+    window.addEventListener('admin-auth-change', handleRouteSync);
+    window.addEventListener('adminshp-auth-change', handleRouteSync);
+    window.addEventListener('gm_auth_changed', handleRouteSync);
+
     return () => {
-      window.removeEventListener('popstate', handleRouteSync);
+      window.removeEventListener('admin-auth-change', handleRouteSync);
+      window.removeEventListener('adminshp-auth-change', handleRouteSync);
+      window.removeEventListener('gm_auth_changed', handleRouteSync);
     };
-  }, [isAuthenticated, currentAdminUser]);
+  }, []);
 
   // Fetch all initial data if authenticated
   const loadData = async (silent: boolean = false, forceRefresh: boolean = false) => {
@@ -811,7 +778,7 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     setAuthError('');
 
     try {
-      const res = await loginWithBackend(u, p);
+      const res = await loginWithBackend(u, p, rememberMe);
       if (res.success && res.user && (res.user.role === 'adminshp' || res.user.role === 'admin')) {
         const matchedSlot = res.user.slot || res.user.username;
         setIsAuthenticated(true);
@@ -822,18 +789,26 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
         try {
           sessionStorage.setItem('gm_adminshp_auth', 'true');
           sessionStorage.setItem('gm_adminshp_user', matchedSlot);
-          localStorage.setItem(`gm_adminshp_auth_${matchedSlot}`, 'true');
-          localStorage.setItem('gm_adminshp_user', matchedSlot);
+          if (rememberMe) {
+            localStorage.setItem(`gm_adminshp_auth_${matchedSlot}`, 'true');
+            localStorage.setItem('gm_adminshp_user', matchedSlot);
+            localStorage.setItem('gm_adminshp_auth', 'true');
+          } else {
+            localStorage.removeItem(`gm_adminshp_auth_${matchedSlot}`);
+            localStorage.removeItem('gm_adminshp_user');
+            localStorage.removeItem('gm_adminshp_auth');
+          }
         } catch (err) {
           console.warn('Storage restricted', err);
         }
         setAuthError('');
         logAdminShpAction(matchedSlot, 'Login', `Berhasil login ke sistem portal adminshp`);
+        toast.success(currentLang === 'id' ? 'Autentikasi berhasil! Mengalihkan ke panel...' : 'Authentication successful! Redirecting...');
       } else {
-        setAuthError(res.error || (currentLang === 'id' ? 'Username atau password salah!' : 'Invalid username or password!'));
+        setAuthError(res.error || (currentLang === 'id' ? 'Email/username atau kata sandi tidak sesuai!' : 'Invalid email/username or password!'));
       }
     } catch (err: any) {
-      setAuthError(err.message || 'Gagal terhubung ke server auth');
+      setAuthError(err.message || 'Gagal terhubung ke server autentikasi');
     } finally {
       setIsLoggingIn(false);
     }
@@ -849,17 +824,19 @@ export default function AdminShpPanel({ currentLang }: AdminShpPanelProps) {
     try {
       sessionStorage.removeItem('gm_adminshp_auth');
       sessionStorage.removeItem('gm_adminshp_user');
-      if (currentAdminUser) {
-        localStorage.removeItem(`gm_adminshp_auth_${currentAdminUser}`);
-      }
+      localStorage.removeItem('gm_adminshp_auth');
       localStorage.removeItem('gm_adminshp_user');
+      for (const slot of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
+        localStorage.removeItem(`gm_adminshp_auth_${slot}`);
+      }
     } catch (err) {
       console.warn('Storage restricted', err);
     }
     setAdminUsername('');
     setAdminPassword('');
-    window.history.pushState(null, '', '/adminshp');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    window.dispatchEvent(new CustomEvent('admin-auth-change'));
+    window.dispatchEvent(new CustomEvent('adminshp-auth-change'));
+    window.dispatchEvent(new Event('gm_auth_changed'));
   };
 
   // Helper to copy text to clipboard
@@ -1350,82 +1327,114 @@ Format Chat : ${data.notes || '-'}`;
   // Render Login Portal if not authenticated
   if (!isAuthenticated) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 sm:px-6 lg:px-8" id="adminshp-login-portal">
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
-          <div className="text-center space-y-2">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-500 mb-2 border border-orange-500/20">
-              <Lock className="h-5 w-5" />
+      <div className="min-h-[82vh] flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8 bg-slate-50/70" id="adminshp-login-portal">
+        <motion.div 
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.25 }}
+          className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-white p-7 sm:p-9 shadow-xl shadow-slate-200/50 space-y-6"
+        >
+          {/* Header section inspired by Image 2 (Light, custom wording) */}
+          <div className="flex items-start gap-3.5 border-b border-slate-100 pb-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-600 shadow-xs">
+              <ShieldCheck className="h-6 w-6 stroke-[2.2]" />
             </div>
-            <h2 className="text-xl font-black text-white uppercase tracking-tight font-sans">
-              Admin Shopee Portal
-            </h2>
-            <p className="text-xs text-slate-400 font-medium font-sans">
-              Silakan login dengan akun admin Anda
-            </p>
+            <div>
+              <h2 className="text-xl font-black text-slate-950 uppercase tracking-tight font-sans">
+                {currentLang === 'id' ? 'Portal Admin SHP' : 'Admin SHP Portal'}
+              </h2>
+            </div>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             {authError && (
-              <div className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 p-3.5 text-xs font-bold text-red-400">
-                <AlertCircle className="h-4 w-4 shrink-0" />
+              <div className="flex items-center gap-2.5 rounded-xl bg-red-50 border border-red-200/80 p-3.5 text-xs font-bold text-red-700">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
                 <span>{authError}</span>
               </div>
             )}
 
+            {/* Email / Username input */}
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Username</label>
-              <input
-                type="text"
-                required
-                value={adminUsername}
-                onChange={(e) => setAdminUsername(e.target.value)}
-                placeholder="adminshp1"
-                className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-sans"
-              />
+              <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider font-sans">
+                {currentLang === 'id' ? 'Email / Username Admin' : 'Admin Email / Username'}
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={adminUsername}
+                  onChange={(e) => setAdminUsername(e.target.value)}
+                  placeholder="Email atau username"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white pl-10 pr-4 py-3 text-xs sm:text-sm font-medium text-slate-900 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all font-sans shadow-xs"
+                />
+              </div>
             </div>
 
+            {/* Password input */}
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Password</label>
+              <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider font-sans">
+                {currentLang === 'id' ? 'Kata Sandi' : 'Password'}
+              </label>
               <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                  <Lock className="h-4 w-4" />
+                </div>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 font-sans pr-10"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/60 focus:bg-white pl-10 pr-10 py-3 text-xs sm:text-sm font-medium text-slate-900 placeholder-slate-400 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all font-sans shadow-xs"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                  title={showPassword ? 'Sembunyikan kata sandi' : 'Lihat kata sandi'}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
 
+            {/* Checklist Ingat Saya di Perangkat Ini */}
+            <div className="pt-1">
+              <label className="inline-flex items-center gap-2.5 text-xs text-slate-600 font-semibold cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <span>{currentLang === 'id' ? 'Ingat saya di perangkat ini' : 'Remember me on this device'}</span>
+              </label>
+            </div>
+
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="w-full rounded-xl bg-orange-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md hover:bg-orange-700 transition-all cursor-pointer mt-2 font-sans flex items-center justify-center gap-1.5 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-xl bg-slate-900 hover:bg-slate-800 py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-md hover:shadow-lg transition-all cursor-pointer font-sans flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {isLoggingIn ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Memverifikasi...</span>
+                  <span>{currentLang === 'id' ? 'Memverifikasi Autentikasi...' : 'Verifying Authentication...'}</span>
                 </>
               ) : (
                 <>
-                  <span>Authenticate Portal</span>
-                  <ChevronRight className="h-4 w-4" />
+                  <Lock className="h-4 w-4 text-slate-300" />
+                  <span>{currentLang === 'id' ? 'Masuk ke Dashboard' : 'Enter Dashboard'}</span>
                 </>
               )}
             </button>
           </form>
-
-
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -1580,10 +1589,21 @@ Format Chat : ${data.notes || '-'}`;
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 font-sans" id="shopee-portal-container">
       {/* Header Portal */}
-      <div className="mb-6 border-b border-slate-100 pb-5">
-        <h1 className="text-xl sm:text-2xl font-black text-slate-850 tracking-tight font-sans uppercase">
-          WORKING SPACE - SHOPEE INPUT
-        </h1>
+      <div className="mb-6 border-b border-slate-100 pb-5 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-850 tracking-tight font-sans uppercase">
+            WORKING SPACE - SHOPEE INPUT
+          </h1>
+        </div>
+        {onReturnToGmAdmin && (
+          <button
+            onClick={onReturnToGmAdmin}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-black uppercase tracking-wider transition-all shadow-xs active:scale-95 cursor-pointer"
+          >
+            <ShieldCheck className="h-4 w-4 text-indigo-600" />
+            <span>Kembali ke GM Admin</span>
+          </button>
+        )}
       </div>
 
       {/* Tab Switches */}
