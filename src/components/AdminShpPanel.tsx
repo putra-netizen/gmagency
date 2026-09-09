@@ -3056,7 +3056,7 @@ Format Chat : ${data.notes || '-'}`;
                             <th className="px-4 py-3.5">Alasan</th>
                             <th className="px-4 py-3.5">Format Pesanan</th>
                             <th className="px-4 py-3.5">Link Bukti</th>
-                            <th className="px-4 py-3.5 text-center">Status / Bayar</th>
+                            <th className="px-4 py-3.5 text-center">Aksi</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
@@ -3211,22 +3211,8 @@ Format Chat : ${data.notes || '-'}`;
                                     )}
                                   </td>
 
-                                  {/* Status Bayar / Aksi */}
+                                  {/* Aksi */}
                                   <td className="px-4 py-3 text-center space-y-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUpdateReportPaymentStatus(item.id, item.payment_status === 'PAID' ? 'UNPAID' : 'PAID')}
-                                      className={`w-full px-2 py-1.5 text-[10px] font-black rounded-lg border flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs ${
-                                        item.payment_status === 'PAID'
-                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
-                                          : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
-                                      }`}
-                                      title="Klik untuk ubah status pembayaran (PAID / UNPAID)"
-                                    >
-                                      <span className={`h-2 w-2 rounded-full ${item.payment_status === 'PAID' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                                      <span>{item.payment_status === 'PAID' ? 'PAID' : 'UNPAID'}</span>
-                                    </button>
-
                                     <button
                                       type="button"
                                       onClick={() => copyToClipboard(formatStr, item.id)}

@@ -28,20 +28,76 @@ import { loginHandler, meHandler, requireAuth, requireRole, saveAuthOverride } f
 const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
 
-function sanitizeSupabaseKey(key: string | undefined): string {
-  if (!key) return '';
-  const trimmed = key.trim();
-  const parts = trimmed.split('.');
-  if (parts.length > 3) {
-    return parts.slice(0, 3).join('.');
+function decodeBase64String(str: string): string {
+  try {
+    return Buffer.from(str, 'base64').toString('utf-8');
+  } catch {
+    return '';
   }
+}
+
+function sanitizeSupabaseUrl(url: string | undefined): string {
+  if (!url || typeof url !== 'string') return DEFAULT_SUPABASE_URL;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return DEFAULT_SUPABASE_URL;
+  if (trimmed.includes('deimhhnkpucajdsgoafd')) return DEFAULT_SUPABASE_URL;
   return trimmed;
+}
+
+function sanitizeSupabaseKey(key: string | undefined): string {
+  if (!key || typeof key !== 'string') return DEFAULT_SUPABASE_ANON_KEY;
+  const trimmed = key.trim();
+
+  const isValidJwtForNewProject = (jwtString: string): boolean => {
+    const parts = jwtString.split('.');
+    if (parts.length !== 3) return false;
+    try {
+      const headerStr = decodeBase64String(parts[0]);
+      const payloadStr = decodeBase64String(parts[1]);
+      if (!headerStr || !payloadStr) return false;
+      const header = JSON.parse(headerStr);
+      const payload = JSON.parse(payloadStr);
+      return Boolean(header.alg && payload.ref === 'reonysrsoaepzykwwfzw');
+    } catch {
+      return false;
+    }
+  };
+
+  if (isValidJwtForNewProject(trimmed)) {
+    return trimmed;
+  }
+
+  const parts = trimmed.split('.');
+  for (let i = 0; i <= parts.length - 3; i++) {
+    const candidate = parts.slice(i, i + 3).join('.');
+    if (isValidJwtForNewProject(candidate)) {
+      return candidate;
+    }
+  }
+
+  const standardHeader = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+  for (let i = 0; i < parts.length - 1; i++) {
+    try {
+      const payloadStr = decodeBase64String(parts[i]);
+      if (payloadStr) {
+        const payload = JSON.parse(payloadStr);
+        if (payload.ref === 'reonysrsoaepzykwwfzw') {
+          const candidate = `${standardHeader}.${parts[i]}.${parts[i + 1]}`;
+          if (isValidJwtForNewProject(candidate)) {
+            return candidate;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return DEFAULT_SUPABASE_ANON_KEY;
 }
 
 const rawSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
 const rawSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
-const supabaseUrl = (rawSupabaseUrl || '').trim();
+const supabaseUrl = sanitizeSupabaseUrl(rawSupabaseUrl);
 const supabaseAnonKey = sanitizeSupabaseKey(rawSupabaseKey);
 
 const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);

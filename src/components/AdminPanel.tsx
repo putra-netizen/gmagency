@@ -293,10 +293,10 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
   // Custom credentials state for adminshp1..4
   const [adminshpCreds, setAdminshpCreds] = useState<Record<string, { username: string; password: string }>>(() => {
     const defaults = {
-      adminshp1: { username: 'adminera', password: 'gmadminshp1' },
-      adminshp2: { username: 'admincika', password: 'gmadminshp2' },
-      adminshp3: { username: 'adminvira', password: 'gmadminshp3' },
-      adminshp4: { username: 'adminali', password: 'gmadminshp4' }
+      adminshp1: { username: 'adminera', password: '' },
+      adminshp2: { username: 'admincika', password: '' },
+      adminshp3: { username: 'adminvira', password: '' },
+      adminshp4: { username: 'adminali', password: '' }
     };
     try {
       const saved = localStorage.getItem('gm_adminshp_creds');
@@ -306,12 +306,8 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
           const result: any = {};
           for (const key of ['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4']) {
             const u = parsed[key]?.username;
-            const p = parsed[key]?.password;
-            if (!u || u === key || u === 'adminshp1' || u === 'adminshp2' || u === 'adminshp3' || u === 'adminshp4') {
-              result[key] = (defaults as any)[key];
-            } else {
-              result[key] = { username: u, password: p || (defaults as any)[key].password };
-            }
+            const p = parsed[key]?.password || '';
+            result[key] = { username: u || (defaults as any)[key].username, password: p };
           }
           return result;
         }
@@ -4058,7 +4054,11 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                               type="button"
                               onClick={async () => {
                                 const newUsername = editingCreds[slot].username.trim().toLowerCase() || slot;
-                                const newPassword = editingCreds[slot].password.trim() || `gm${slot}`;
+                                const newPassword = editingCreds[slot].password.trim();
+                                if (!newPassword) {
+                                  toast.error('Masukkan password baru terlebih dahulu.');
+                                  return;
+                                }
                                 const updated = {
                                   ...adminshpCreds,
                                   [slot]: {

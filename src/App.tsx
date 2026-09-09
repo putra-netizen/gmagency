@@ -10,12 +10,14 @@ import ProductCard from './components/ProductCard';
 import CheckoutModal from './components/CheckoutModal';
 import AdminPanel from './components/AdminPanel';
 import AdminShpPanel from './components/AdminShpPanel';
+import { WorkerPanel } from './components/WorkerPanel';
+import { FinanceView } from './components/FinanceView';
 import ToastContainer from './components/ToastContainer';
 import { Product, Language, Order } from './types';
-import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected } from './lib/supabase';
+import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected, supabase } from './lib/supabase';
 import { TRANSLATIONS } from './lib/translations';
 import { initGlobalAutoSync } from './utils/autoSyncManager';
-import { getAuthUser } from './lib/auth';
+import { getAuthUser, resolveUserRole } from './lib/auth';
 import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -44,14 +46,11 @@ export default function App() {
     return 'not-found';
   });
 
-  // Track authenticated admin role for unified portal
-  const [adminRole, setAdminRole] = useState<'admin' | 'adminshp' | null>(() => {
+  // Track authenticated role for portal: 'admin' | 'adminshp' | 'finance' | 'worker' | null
+  const [adminRole, setAdminRole] = useState<'admin' | 'adminshp' | 'finance' | 'worker' | null>(() => {
     try {
       const user = getAuthUser();
-      if (user?.role === 'admin') return 'admin';
-      if (user?.role === 'adminshp') return 'adminshp';
-      if (sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true') return 'admin';
-      if (sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true') return 'adminshp';
+      if (user?.role) return user.role;
       return null;
     } catch (e) {
       return null;
@@ -59,17 +58,29 @@ export default function App() {
   });
 
   useEffect(() => {
+    // 1. Initial check with official Supabase getSession
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const authUser = await resolveUserRole(session.user);
+        setAdminRole(authUser.role);
+      }
+    }).catch(console.error);
+
+    // 2. Official Supabase onAuthStateChange listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const authUser = await resolveUserRole(session.user);
+        setAdminRole(authUser.role);
+      } else if (event === 'SIGNED_OUT') {
+        setAdminRole(null);
+      }
+    });
+
     const handleAuthChange = () => {
       try {
         const user = getAuthUser();
-        if (user?.role === 'admin') {
-          setAdminRole('admin');
-        } else if (user?.role === 'adminshp') {
-          setAdminRole('adminshp');
-        } else if (sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true') {
-          setAdminRole('admin');
-        } else if (sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true') {
-          setAdminRole('adminshp');
+        if (user?.role) {
+          setAdminRole(user.role);
         } else {
           setAdminRole(null);
         }
@@ -80,7 +91,9 @@ export default function App() {
     window.addEventListener('admin-auth-change', handleAuthChange);
     window.addEventListener('adminshp-auth-change', handleAuthChange);
     window.addEventListener('gm_auth_changed', handleAuthChange);
+
     return () => {
+      subscription.unsubscribe();
       window.removeEventListener('admin-auth-change', handleAuthChange);
       window.removeEventListener('adminshp-auth-change', handleAuthChange);
       window.removeEventListener('gm_auth_changed', handleAuthChange);
@@ -392,7 +405,7 @@ export default function App() {
             </div>
           </div>
         ) : (
-          /* UNIFIED ADMIN PORTAL SCREEN (/admin) */
+          /* UNIFIED MANAGEMENT PORTAL SCREEN (/admin) */
           <div className="fade-in">
             {adminRole === 'adminshp' ? (
               <AdminShpPanel

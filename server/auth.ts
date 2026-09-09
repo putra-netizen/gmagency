@@ -11,39 +11,76 @@ dotenv.config();
 const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
 
-function sanitizeSupabaseKey(key: string | undefined): string {
-  if (!key) return '';
-  const trimmed = key.trim();
-  const parts = trimmed.split('.');
-  if (parts.length > 3) {
-    // If concatenated JWTs exist, locate the valid 3-part JWT for reonysrsoaepzykwwfzw
-    for (let i = 0; i <= parts.length - 3; i++) {
-      const candidate = parts.slice(i, i + 3).join('.');
-      try {
-        const payload = JSON.parse(Buffer.from(parts[i + 1], 'base64').toString());
-        if (payload.ref === 'reonysrsoaepzykwwfzw') {
-          return candidate;
-        }
-      } catch {}
-    }
-    // Check if second part has payload for reonysrsoaepzykwwfzw
-    for (let i = 0; i < parts.length; i++) {
-      try {
-        const payload = JSON.parse(Buffer.from(parts[i], 'base64').toString());
-        if (payload.ref === 'reonysrsoaepzykwwfzw') {
-          return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + parts[i] + '.' + parts[i + 1];
-        }
-      } catch {}
-    }
-    return parts.slice(0, 3).join('.');
+function decodeBase64String(str: string): string {
+  try {
+    return Buffer.from(str, 'base64').toString('utf-8');
+  } catch {
+    return '';
   }
+}
+
+function sanitizeSupabaseUrl(url: string | undefined): string {
+  if (!url || typeof url !== 'string') return DEFAULT_SUPABASE_URL;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return DEFAULT_SUPABASE_URL;
+  if (trimmed.includes('deimhhnkpucajdsgoafd')) return DEFAULT_SUPABASE_URL;
   return trimmed;
+}
+
+function sanitizeSupabaseKey(key: string | undefined): string {
+  if (!key || typeof key !== 'string') return DEFAULT_SUPABASE_ANON_KEY;
+  const trimmed = key.trim();
+
+  const isValidJwtForNewProject = (jwtString: string): boolean => {
+    const parts = jwtString.split('.');
+    if (parts.length !== 3) return false;
+    try {
+      const headerStr = decodeBase64String(parts[0]);
+      const payloadStr = decodeBase64String(parts[1]);
+      if (!headerStr || !payloadStr) return false;
+      const header = JSON.parse(headerStr);
+      const payload = JSON.parse(payloadStr);
+      return Boolean(header.alg && payload.ref === 'reonysrsoaepzykwwfzw');
+    } catch {
+      return false;
+    }
+  };
+
+  if (isValidJwtForNewProject(trimmed)) {
+    return trimmed;
+  }
+
+  const parts = trimmed.split('.');
+  for (let i = 0; i <= parts.length - 3; i++) {
+    const candidate = parts.slice(i, i + 3).join('.');
+    if (isValidJwtForNewProject(candidate)) {
+      return candidate;
+    }
+  }
+
+  const standardHeader = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+  for (let i = 0; i < parts.length - 1; i++) {
+    try {
+      const payloadStr = decodeBase64String(parts[i]);
+      if (payloadStr) {
+        const payload = JSON.parse(payloadStr);
+        if (payload.ref === 'reonysrsoaepzykwwfzw') {
+          const candidate = `${standardHeader}.${parts[i]}.${parts[i + 1]}`;
+          if (isValidJwtForNewProject(candidate)) {
+            return candidate;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return DEFAULT_SUPABASE_ANON_KEY;
 }
 
 const rawSupabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
 const rawSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
-const supabaseAuthClient = (rawSupabaseUrl && rawSupabaseKey) ? createClient(rawSupabaseUrl.trim(), sanitizeSupabaseKey(rawSupabaseKey), {
+const supabaseAuthClient = (rawSupabaseUrl && rawSupabaseKey) ? createClient(sanitizeSupabaseUrl(rawSupabaseUrl), sanitizeSupabaseKey(rawSupabaseKey), {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
@@ -79,16 +116,8 @@ export interface AuthenticatedRequest extends Request {
 const JWT_SECRET = process.env.JWT_SECRET || 'gm-agency-jwt-secure-auth-secret-key-2026';
 const TOKEN_EXPIRY = '8h';
 
-// Default pre-computed bcrypt hashes (cost factor 10)
-const DEFAULT_HASHES: Record<string, string> = {
-  admin: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPe9Uay/rVD/hcTr0CfReJxe1ke6ZV6m1W', // gmadmin
-  gmowner: '$2b$10$LySzgnlNMXSuxarT2nGY7.fPIxvKVSExLKHIJkGams0DtPyJukRLa', // lintani123
-  adminera: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeMgYckjaHTtnq9UGd1vIAJlaOiyahgt6', // gmadminshp1
-  admincika: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeIikqqSsB6dhUmb.kst4Aa/lV1eIjL8K', // gmadminshp2
-  adminvira: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeg6FFV8lLJzpUmvJSjOJyaT9YKue6/WO', // gmadminshp3
-  adminali: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeZZt6MOAEhIfCSRojMdQzzFr9mGp4o4G', // gmadminshp4
-  finance: '$2b$10$W4Kg8T2kKFHG8IlMvRgLPeaFjsmEYNAhyXPTfk7w8x5wNToBctMMm', // 0101
-};
+// Default pre-computed bcrypt hashes (empty by default - all credentials managed via Supabase Auth)
+const DEFAULT_HASHES: Record<string, string> = {};
 
 // Path to persistent auth overrides (e.g. updated passwords by super admin)
 const AUTH_OVERRIDES_FILE = path.join(process.cwd(), 'src', 'data', 'auth_overrides.json');
@@ -462,15 +491,8 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Verify bcrypt hash with fallback support for known master keys
-    let isMatch = await bcrypt.compare(rawPassword, targetHash);
-    if (!isMatch && (userDef.username === 'admin' || userDef.username === 'gmowner')) {
-      if (rawPassword === 'lintani123' || rawPassword === 'gmadmin') {
-        isMatch = true;
-      } else {
-        isMatch = await bcrypt.compare(rawPassword, DEFAULT_HASHES.gmowner);
-      }
-    }
+    // Verify bcrypt hash
+    const isMatch = await bcrypt.compare(rawPassword, targetHash);
     if (!isMatch) {
       const fail = recordFailedAttempt(clientIp, normUser);
       if (fail.isBlocked) {

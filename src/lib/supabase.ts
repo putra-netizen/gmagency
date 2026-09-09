@@ -28,38 +28,90 @@ const MOCK_ORDERS_TO_SEED: Order[] = [];
 const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
 
-export function sanitizeSupabaseKey(key: string | undefined): string {
-  if (!key) return DEFAULT_SUPABASE_ANON_KEY;
-  const trimmed = key.trim();
-  const parts = trimmed.split('.');
-  if (parts.length > 3) {
-    for (let i = 0; i <= parts.length - 3; i++) {
-      const candidate = parts.slice(i, i + 3).join('.');
-      try {
-        const payload = JSON.parse(atob(parts[i + 1]));
-        if (payload.ref === 'reonysrsoaepzykwwfzw') {
-          return candidate;
-        }
-      } catch {}
+function decodeBase64String(str: string): string {
+  try {
+    if (typeof atob === 'function') {
+      return atob(str);
     }
-    for (let i = 0; i < parts.length; i++) {
-      try {
-        const payload = JSON.parse(atob(parts[i]));
-        if (payload.ref === 'reonysrsoaepzykwwfzw') {
-          return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.' + parts[i] + '.' + parts[i + 1];
-        }
-      } catch {}
+  } catch {}
+  try {
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(str, 'base64').toString('utf-8');
     }
-    return DEFAULT_SUPABASE_ANON_KEY;
+  } catch {}
+  return '';
+}
+
+export function sanitizeSupabaseUrl(url: string | undefined): string {
+  const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
+  if (!url || typeof url !== 'string') return DEFAULT_SUPABASE_URL;
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return DEFAULT_SUPABASE_URL;
+  if (trimmed.includes('deimhhnkpucajdsgoafd')) {
+    return DEFAULT_SUPABASE_URL;
   }
   return trimmed;
+}
+
+export function sanitizeSupabaseKey(key: string | undefined): string {
+  const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
+  if (!key || typeof key !== 'string') return DEFAULT_SUPABASE_ANON_KEY;
+  const trimmed = key.trim();
+
+  const isValidJwtForNewProject = (jwtString: string): boolean => {
+    const parts = jwtString.split('.');
+    if (parts.length !== 3) return false;
+    try {
+      const headerStr = decodeBase64String(parts[0]);
+      const payloadStr = decodeBase64String(parts[1]);
+      if (!headerStr || !payloadStr) return false;
+      const header = JSON.parse(headerStr);
+      const payload = JSON.parse(payloadStr);
+      return Boolean(header.alg && payload.ref === 'reonysrsoaepzykwwfzw');
+    } catch {
+      return false;
+    }
+  };
+
+  // 1. Direct valid JWT check
+  if (isValidJwtForNewProject(trimmed)) {
+    return trimmed;
+  }
+
+  // 2. If multiple JWTs are concatenated or parts exist, search for valid 3-part slice
+  const parts = trimmed.split('.');
+  for (let i = 0; i <= parts.length - 3; i++) {
+    const candidate = parts.slice(i, i + 3).join('.');
+    if (isValidJwtForNewProject(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 3. If standard header was stripped during concatenation: header + payload + signature
+  const standardHeader = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+  for (let i = 0; i < parts.length - 1; i++) {
+    try {
+      const payloadStr = decodeBase64String(parts[i]);
+      if (payloadStr) {
+        const payload = JSON.parse(payloadStr);
+        if (payload.ref === 'reonysrsoaepzykwwfzw') {
+          const candidate = `${standardHeader}.${parts[i]}.${parts[i + 1]}`;
+          if (isValidJwtForNewProject(candidate)) {
+            return candidate;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return DEFAULT_SUPABASE_ANON_KEY;
 }
 
 const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
 const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
-const supabaseUrl = (rawSupabaseUrl || '').trim();
-const supabaseAnonKey = sanitizeSupabaseKey(rawSupabaseAnonKey);
+export const supabaseUrl = sanitizeSupabaseUrl(rawSupabaseUrl);
+export const supabaseAnonKey = sanitizeSupabaseKey(rawSupabaseAnonKey);
 
 const checkValidUrl = (url: string | undefined): boolean => {
   if (!url) return false;
@@ -73,11 +125,31 @@ const checkValidUrl = (url: string | undefined): boolean => {
 export const isSupabaseConfigured = checkValidUrl(supabaseUrl) && Boolean(supabaseAnonKey);
 export const supabase: any = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
   }
 }) : null;
+
+// Debug log for runtime inspection (safe, only ref and key prefix/suffix are logged)
+try {
+  const parts = supabaseAnonKey.split('.');
+  let keyRef = 'unknown';
+  if (parts.length >= 2) {
+    const pStr = decodeBase64String(parts[1]);
+    if (pStr) keyRef = JSON.parse(pStr).ref || 'unknown';
+  }
+  console.log('[Supabase Client] Runtime Connected:', {
+    url: supabaseUrl,
+    projectRef: keyRef,
+    keyPrefix: supabaseAnonKey.substring(0, 15) + '...',
+    keySuffix: '...' + supabaseAnonKey.substring(supabaseAnonKey.length - 8),
+    keyLength: supabaseAnonKey.length,
+    isConfigured: isSupabaseConfigured
+  });
+} catch (e) {
+  console.warn('[Supabase Client] Logger failed:', e);
+}
 let supabaseFailed = false;
 
 export function isSupabaseQuotaError(err: any): boolean {
