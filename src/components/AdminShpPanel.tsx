@@ -77,6 +77,7 @@ import { sanitizeUrl } from '../utils/security';
 interface AdminShpPanelProps {
   currentLang: 'id' | 'en';
   onReturnToGmAdmin?: () => void;
+  viewAsSlot?: string | null;
 }
 
 const WORKERS = ['rehan', 'deky', 'panca', 'anggun', 'riyanto', 'bintang'];
@@ -364,10 +365,14 @@ const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, de
   );
 };
 
-export default function AdminShpPanel({ currentLang, onReturnToGmAdmin }: AdminShpPanelProps) {
+export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSlot }: AdminShpPanelProps) {
+  const activeViewAsSlot = viewAsSlot || (typeof window !== 'undefined' ? sessionStorage.getItem('gm_view_as_shp') : null);
+  const isViewAsMode = Boolean(activeViewAsSlot);
+
   // Authentication states
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (isViewAsMode) return true;
     try {
       const user = getAuthUser();
       if (user?.role === 'adminshp' || user?.role === 'admin') return true;
@@ -378,6 +383,7 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin }: AdminS
     }
   });
   const [currentAdminUser, setCurrentAdminUser] = useState<string>(() => {
+    if (activeViewAsSlot) return activeViewAsSlot;
     try {
       const user = getAuthUser();
       if (user?.slot) return user.slot;
@@ -636,6 +642,12 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin }: AdminS
   useEffect(() => {
     const handleRouteSync = () => {
       try {
+        const viewAs = sessionStorage.getItem('gm_view_as_shp');
+        if (viewAs) {
+          setIsAuthenticated(true);
+          setCurrentAdminUser(viewAs);
+          return;
+        }
         const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true';
         const user = getAuthUser();
         if (isAuth || user?.role === 'adminshp' || user?.role === 'admin') {
@@ -1605,15 +1617,6 @@ Format Chat : ${data.notes || '-'}`;
             WORKING SPACE - SHOPEE INPUT
           </h1>
         </div>
-        {onReturnToGmAdmin && (
-          <button
-            onClick={onReturnToGmAdmin}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-black uppercase tracking-wider transition-all shadow-xs active:scale-95 cursor-pointer"
-          >
-            <ShieldCheck className="h-4 w-4 text-indigo-600" />
-            <span>Kembali ke GM Admin</span>
-          </button>
-        )}
       </div>
 
       {/* Tab Switches */}
@@ -2306,9 +2309,8 @@ Format Chat : ${data.notes || '-'}`;
                     </div>
                     <div>
                       <h2 className="text-base font-black text-slate-900 leading-snug">
-                        REVIEW MAPS
+                        REVIEW ORDERS
                       </h2>
-                      <p className="text-[11px] text-slate-400 font-medium">Input pesanan review Google Maps &amp; Tripadvisor</p>
                     </div>
                   </div>
                   
@@ -2320,7 +2322,7 @@ Format Chat : ${data.notes || '-'}`;
                         : 'bg-purple-600 text-white hover:bg-purple-700 shadow-sm shadow-purple-600/20'
                     }`}
                   >
-                    {isReviewMapsFormExpanded ? 'Hide Form' : 'Input Pesanan Review Maps'}
+                    {isReviewMapsFormExpanded ? 'Hide Form' : 'Input Pesanan Review Orders'}
                   </button>
                 </div>
 
@@ -2349,22 +2351,6 @@ Format Chat : ${data.notes || '-'}`;
                                 onChange={e => setFormReviewMaps(prev => ({ ...prev, storeName: e.target.value }))}
                                 className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-600/10 font-sans"
                               />
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {['KN', 'SPL', 'MP', 'PC', 'ADI', 'KYF', 'TWG', 'AC', 'GDM', 'VJ', 'LKS', 'ACS', 'NA', 'NRW', 'WNL'].map(st => (
-                                  <button
-                                    key={st}
-                                    type="button"
-                                    onClick={() => setFormReviewMaps(prev => ({ ...prev, storeName: st }))}
-                                    className={`px-2 py-0.5 text-[9px] font-black rounded-lg transition-all ${
-                                      formReviewMaps.storeName === st
-                                        ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-600'
-                                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                                    } cursor-pointer`}
-                                  >
-                                    {st}
-                                  </button>
-                                ))}
-                              </div>
                             </div>
 
                             <div className="space-y-1">
@@ -2460,7 +2446,7 @@ Format Chat : ${data.notes || '-'}`;
                   <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
                       <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
-                        DATA REVIEW MAPS (G MAPS & TRIPAD)
+                        DATA REVIEW ORDERS
                       </h3>
                     </div>
                     <div className="flex items-center gap-2">
@@ -2505,6 +2491,7 @@ Format Chat : ${data.notes || '-'}`;
                           { value: 'all', label: 'Semua Review' },
                           { value: 'GMAPS', label: 'Google Maps' },
                           { value: 'TRIPAD', label: 'Tripadvisor' },
+                          { value: 'REVIEW APPS', label: 'Apps' },
                         ]}
                       />
 
@@ -2552,7 +2539,7 @@ Format Chat : ${data.notes || '-'}`;
                           <th className="px-4 py-3.5">Clue / Catatan</th>
                           <th className="px-4 py-3.5">Format Pesanan</th>
                           <th className="px-4 py-3.5">Link Bukti</th>
-                          <th className="px-4 py-3.5 text-center">Status / Bayar</th>
+                          <th className="px-4 py-3.5 text-center">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
@@ -2707,22 +2694,8 @@ Format Chat : ${data.notes || '-'}`;
                                   )}
                                 </td>
 
-                                {/* Status Bayar / Aksi */}
+                                {/* Aksi */}
                                 <td className="px-4 py-3 text-center space-y-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdatePaymentStatus(item.id, item.payment_status === 'PAID' ? 'UNPAID' : 'PAID')}
-                                    className={`w-full px-2 py-1.5 text-[10px] font-black rounded-lg border flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs ${
-                                      item.payment_status === 'PAID'
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
-                                        : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
-                                    }`}
-                                    title="Klik untuk ubah status pembayaran (PAID / UNPAID)"
-                                  >
-                                    <span className={`h-2 w-2 rounded-full ${item.payment_status === 'PAID' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                                    <span>{item.payment_status === 'PAID' ? 'PAID' : 'UNPAID'}</span>
-                                  </button>
-
                                   <button
                                     type="button"
                                     onClick={() => copyToClipboard(formatStr, item.id)}
@@ -2806,9 +2779,8 @@ Format Chat : ${data.notes || '-'}`;
                     </div>
                     <div>
                       <h2 className="text-base font-black text-slate-900 leading-snug">
-                        REPORT MAPS
+                        REPORT ORDERS
                       </h2>
-                      <p className="text-[11px] text-slate-400 font-medium">Input pesanan report Google Maps &amp; Tripadvisor</p>
                     </div>
                   </div>
                   
@@ -2820,7 +2792,7 @@ Format Chat : ${data.notes || '-'}`;
                         : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-600/20'
                     }`}
                   >
-                    {isReportMapsFormExpanded ? 'Hide Form' : 'Input Pesanan Report Maps'}
+                    {isReportMapsFormExpanded ? 'Hide Form' : 'Input Pesanan Report Orders'}
                   </button>
                 </div>
 
@@ -2849,22 +2821,6 @@ Format Chat : ${data.notes || '-'}`;
                                 onChange={e => setFormReportMaps(prev => ({ ...prev, storeName: e.target.value }))}
                                 className="w-full rounded-xl bg-white border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 font-sans"
                               />
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {['KN', 'SPL', 'MP', 'PC', 'ADI', 'KYF', 'TWG', 'AC', 'GDM', 'VJ', 'LKS', 'ACS', 'NA', 'NRW', 'WNL'].map(st => (
-                                  <button
-                                    key={st}
-                                    type="button"
-                                    onClick={() => setFormReportMaps(prev => ({ ...prev, storeName: st }))}
-                                    className={`px-2 py-0.5 text-[9px] font-black rounded-lg transition-all ${
-                                      formReportMaps.storeName === st
-                                        ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-600'
-                                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:text-slate-900'
-                                    } cursor-pointer`}
-                                  >
-                                    {st}
-                                  </button>
-                                ))}
-                              </div>
                             </div>
 
                             <div className="space-y-1">
@@ -2963,7 +2919,7 @@ Format Chat : ${data.notes || '-'}`;
                     <div className="bg-slate-50/40 border-b border-slate-100 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5">
                         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider font-sans">
-                          DATA REPORT MAPS (G MAPS & TRIPAD)
+                          DATA REPORT ORDERS
                         </h3>
                       </div>
                       <div className="flex items-center gap-2">

@@ -26,15 +26,16 @@ import { FinanceView } from './FinanceView';
 import { parseAccountsList } from '../utils/csvExport';
 import { pauseAutoSyncFor } from '../utils/autoSyncManager';
 import { sanitizeUrl } from '../utils/security';
-import { loginWithBackend, clientLogout, getAuthHeaders, saveAuthSession } from '../lib/auth';
+import { loginWithBackend, clientLogout, getAuthHeaders, saveAuthSession, setViewAsShpSlot } from '../lib/auth';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, EyeOff, Link2, Phone, Calendar, RefreshCw, 
-  Briefcase, Save, AlertCircle, FileText, Check, Database, X, Globe,
+  Briefcase, Save, AlertCircle, AlertTriangle, FileText, Check, Database, X, Globe,
   ExternalLink, Image as ImageIcon, Settings, ShoppingCart, Copy, ArrowLeft,
   Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
   FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft, Wallet,
-  Filter, Activity, Layers, SlidersHorizontal, Tag, Lock, Mail, ShieldCheck
+  Filter, Activity, Layers, SlidersHorizontal, Tag, Lock, Mail, ShieldCheck,
+  MessageSquare
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -1938,7 +1939,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
             {/* Quick Access Admin-SHP Bypass Portal */}
             <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse shrink-0" />
+                <ChevronRight className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" strokeWidth={2.5} />
                 <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
                   Akses Cepat Portal Admin:
                 </span>
@@ -1953,23 +1954,10 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                     <button
                       key={slot}
                       onClick={() => {
-                        try {
-                          sessionStorage.setItem('gm_adminshp_auth', 'true');
-                          sessionStorage.setItem('gm_adminshp_user', slot);
-                          localStorage.setItem('gm_adminshp_auth', 'true');
-                          localStorage.setItem(`gm_adminshp_auth_${slot}`, 'true');
-                          localStorage.setItem('gm_adminshp_user', slot);
-                          saveAuthSession('gm-bypass-token', {
-                            username: routeName,
-                            role: 'adminshp',
-                            name: `Admin ${name}`,
-                            slot: slot
-                          }, true);
-                        } catch (e) {}
-                        toast.success(`Berhasil beralih ke portal Admin ${name}!`);
-                        window.dispatchEvent(new CustomEvent('admin-auth-change'));
-                        window.dispatchEvent(new CustomEvent('adminshp-auth-change'));
-                        window.dispatchEvent(new Event('gm_auth_changed'));
+                        // OPSI A (AMAN): View-as mode murni tanpa memodifikasi token Supabase Auth
+                        // Sesi Supabase Auth Super Admin tetap utuh dan aktif.
+                        setViewAsShpSlot(slot);
+                        toast.success(`Mode Peninjau: Melihat sebagai Admin ${name}`);
                         if (onSwitchToAdminShp) {
                           onSwitchToAdminShp();
                         }
@@ -1985,95 +1973,136 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
               </div>
             </div>
 
-            {/* 1. KINERJA OPERASIONAL DASHBOARD CARD - Clean, Realtime, No Financial Revenue Info */}
+            {/* 1. KINERJA OPERASIONAL DASHBOARD CARD - Clean, Realtime, Per-Category Progress */}
             {(() => {
-              // Calculate realtime operational stats (Web + Shopee)
-              const onProgressCount = 
-                orders.filter(o => o.payment_status !== 'PAID' && o.worker_status !== 'done').length +
-                shopeeOrders.filter(s => s.status !== 'DONE').length;
+              // Calculate category-specific progress (DONE / TOTAL) based on status dropdown
+              const shopeeTotal = shopeeOrders.length;
+              const shopeeDone = shopeeOrders.filter(s => s.status === 'DONE').length;
 
-              const completedCount = 
-                orders.filter(o => o.payment_status === 'PAID' || o.worker_status === 'done').length +
-                shopeeOrders.filter(s => s.status === 'DONE').length;
+              const reviewsTotal = mapsReviews.length;
+              const reviewsDone = mapsReviews.filter(r => r.status === 'DONE').length;
 
-              const totalOpOrders = orders.length + shopeeOrders.length;
-              const completedOpPercentage = totalOpOrders > 0 ? Math.round((completedCount / totalOpOrders) * 100) : 0;
+              const reportsTotal = reportMaps.length;
+              const reportsDone = reportMaps.filter(r => r.status === 'DONE').length;
+
+              const webTotal = orders.length;
+              const webDone = orders.filter(o => o.worker_status === 'done' || o.payment_status === 'PAID').length;
+
+              const showWebCard = webTotal > 0;
 
               return (
                 <div id="stats-operational-overview" className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-4 sm:p-6 md:p-8 shadow-xs mb-6 sm:mb-8">
                   <div className="flex flex-wrap items-center justify-between gap-4 mb-4 sm:mb-6">
                     <div>
                       <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <ChevronRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" strokeWidth={2.5} />
                         Kinerja Operasional Dashboard
                       </h2>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                    {/* Web Orders */}
+                  <div className={`grid gap-3 sm:gap-4 ${showWebCard ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+                    {/* 1. Report Sosmed & Spam WA */}
                     <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
                       <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
                         <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 shrink-0">
-                          <ShoppingBag className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-[10px] sm:text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">Web Orders</span>
+                        <span className="text-[10px] sm:text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider truncate">
+                          Report Sosmed & Spam WA
+                        </span>
                       </div>
                       <div>
-                        <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                          {orders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
-                        </span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                            {shopeeDone}
+                          </span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">
+                            /{shopeeTotal}
+                          </span>
+                          <span className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 ml-1">
+                            completed orders
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Shopee Orders */}
+                    {/* 2. Review Orders */}
                     <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
                       <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
-                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 shrink-0">
-                          <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 shrink-0">
+                          <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-[10px] sm:text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">Shopee Orders</span>
+                        <span className="text-[10px] sm:text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider truncate">
+                          Review Orders
+                        </span>
                       </div>
                       <div>
-                        <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                          {shopeeOrders.length} <span className="text-xs font-medium text-slate-400">pesanan</span>
-                        </span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                            {reviewsDone}
+                          </span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">
+                            /{reviewsTotal}
+                          </span>
+                          <span className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 ml-1">
+                            completed orders
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* On Progress Orders */}
-                    <div className="bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                    {/* 3. Report Orders */}
+                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
                       <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
-                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400 shrink-0">
-                          <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-pulse" />
+                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 shrink-0">
+                          <ShieldAlert className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
-                        <span className="text-[10px] sm:text-[11px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider truncate">On Progress</span>
+                        <span className="text-[10px] sm:text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider truncate">
+                          Report Orders
+                        </span>
                       </div>
                       <div>
-                        <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                          {onProgressCount} <span className="text-xs font-bold text-amber-600 dark:text-amber-400">proses</span>
-                        </span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                            {reportsDone}
+                          </span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">
+                            /{reportsTotal}
+                          </span>
+                          <span className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 ml-1">
+                            completed orders
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Completed Orders */}
-                    <div className="bg-emerald-50/40 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
-                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
-                          <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    {/* 4. Web Orders (Hidden if 0, automatically shown when > 0) */}
+                    {showWebCard && (
+                      <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                        <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                          <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 shrink-0">
+                            <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          </div>
+                          <span className="text-[10px] sm:text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider truncate">
+                            Web Orders
+                          </span>
                         </div>
-                        <span className="text-[10px] sm:text-[11px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wider truncate">Completed</span>
+                        <div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                              {webDone}
+                            </span>
+                            <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">
+                              /{webTotal}
+                            </span>
+                            <span className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 ml-1">
+                              completed orders
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100 block">
-                          {completedCount}
-                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-1.5">({completedOpPercentage}%)</span>
-                        </span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block mt-0.5">
-                          Khusus status "DONE"
-                        </span>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               );
@@ -2239,7 +2268,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                    <ChevronRight className="h-3.5 w-3.5 text-amber-500 shrink-0" strokeWidth={2.5} />
                     <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
                       {currentLang === 'id' ? 'Pesanan Terbaru (Belum Lunas / Pending)' : 'Newest Orders (Unpaid / Pending)'}
                     </h3>
@@ -2498,7 +2527,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-emerald-50/30 border-b border-emerald-100 px-5 py-3.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <ChevronRight className="h-3.5 w-3.5 text-emerald-500 shrink-0" strokeWidth={2.5} />
                     <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
                       {currentLang === 'id' ? 'Pesanan Lunas & Distribusi Tugas Worker (FIFO)' : 'Paid Orders & Worker Tasks (FIFO)'}
                     </h3>
@@ -2775,7 +2804,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
+                    <ChevronRight className="h-3.5 w-3.5 text-orange-500 shrink-0" strokeWidth={2.5} />
                     <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
                       Daftar Report Sosmed & Spam WA (Manual Portal)
                     </h3>
@@ -3002,29 +3031,30 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
               
               {/* Search & Sort Bar */}
               <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between bg-slate-50/80 p-4 rounded-2xl border border-slate-100/80 shadow-xs">
-                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center w-full lg:w-auto">
-                  <div className="relative w-full sm:w-80 group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                      <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
-                    </div>
-                    <input
-                      type="text"
-                      value={searchReview}
-                      onChange={(e) => setSearchReview(e.target.value)}
-                      placeholder="Cari store, klien, tipe review, notes..."
-                      className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
-                    />
-                    {searchReview && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchReview('')}
-                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                <div className="relative w-full lg:w-80 group">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Search className="w-4 h-4 text-purple-500 group-focus-within:text-purple-600 transition-colors" />
                   </div>
+                  <input
+                    type="text"
+                    value={searchReview}
+                    onChange={(e) => setSearchReview(e.target.value)}
+                    placeholder="Cari store, klien, tipe review, notes..."
+                    className="w-full bg-white text-xs sm:text-sm text-slate-800 rounded-full pl-10 pr-4 py-2 sm:py-2.5 outline-none border border-purple-200/80 shadow-[0_0_14px_rgba(168,85,247,0.14)] focus:shadow-[0_0_20px_rgba(168,85,247,0.28)] focus:border-purple-400 font-sans transition-all"
+                  />
+                  {searchReview && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchReview('')}
+                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
 
+                {/* Minimalist sorting / filtering controls */}
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
                   {/* Tipe Review Filter (Modern Pill with Purple Backlight) */}
                   <ModernFilterSelect
                     value={reviewTypeFilter}
@@ -3039,10 +3069,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                       { value: 'REVIEW APPS', label: 'Review Apps' },
                     ]}
                   />
-                </div>
 
-                {/* Minimalist sorting / filtering controls */}
-                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-start lg:justify-end">
                   {/* Status / Progres Filter */}
                   <ModernFilterSelect
                     value={sortReview}
@@ -3071,7 +3098,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                    <ChevronRight className="h-3.5 w-3.5 text-blue-500 shrink-0" strokeWidth={2.5} />
                     <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
                       Review Orders Worker (G Maps, Tripadvisor & Review Apps)
                     </h3>
@@ -3485,7 +3512,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+                    <ChevronRight className="h-3.5 w-3.5 text-purple-500 shrink-0" strokeWidth={2.5} />
                     <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider font-sans">
                       Daftar Report Orders (Inputan Admin SHP)
                     </h3>

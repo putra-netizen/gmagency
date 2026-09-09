@@ -25,9 +25,72 @@ export interface LoginResponse {
 
 const USER_KEY = 'gm_auth_user';
 const TOKEN_KEY = 'gm_auth_token';
+export const VIEW_AS_SHP_KEY = 'gm_view_as_shp';
+
+// Purge stale bypass tokens and sanitize adminshp state if user is actually admin
+try {
+  if (typeof window !== 'undefined') {
+    const rawToken = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+    const hasAdminAuth = localStorage.getItem('gm_admin_auth') === 'true' || sessionStorage.getItem('gm_admin_auth') === 'true';
+    if (rawToken === 'gm-bypass-token') {
+      localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
+      if (hasAdminAuth) {
+        localStorage.removeItem('gm_adminshp_auth');
+        sessionStorage.removeItem('gm_adminshp_auth');
+        localStorage.removeItem('gm_adminshp_user');
+        sessionStorage.removeItem('gm_adminshp_user');
+        const restoredUser: AuthUser = {
+          username: 'admin',
+          role: 'admin',
+          name: 'Super Admin',
+          email: 'admin@gmagency.internal'
+        };
+        localStorage.setItem(USER_KEY, JSON.stringify(restoredUser));
+        sessionStorage.setItem(USER_KEY, JSON.stringify(restoredUser));
+      }
+    } else if (hasAdminAuth) {
+      const rawUser = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
+      if (rawUser) {
+        try {
+          const parsed = JSON.parse(rawUser);
+          if (parsed?.role === 'admin') {
+            localStorage.removeItem('gm_adminshp_auth');
+            sessionStorage.removeItem('gm_adminshp_auth');
+            localStorage.removeItem('gm_adminshp_user');
+            sessionStorage.removeItem('gm_adminshp_user');
+          }
+        } catch (e) {}
+      }
+    }
+  }
+} catch (e) {}
 
 // In-memory active user cache
 let cachedAuthUser: AuthUser | null = null;
+
+export function getViewAsShpSlot(): string | null {
+  try {
+    return sessionStorage.getItem(VIEW_AS_SHP_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setViewAsShpSlot(slot: string | null): void {
+  try {
+    if (slot) {
+      sessionStorage.setItem(VIEW_AS_SHP_KEY, slot);
+    } else {
+      sessionStorage.removeItem(VIEW_AS_SHP_KEY);
+    }
+  } catch (err) {
+    console.warn('Storage restricted:', err);
+  }
+  window.dispatchEvent(new Event('gm_auth_changed'));
+  window.dispatchEvent(new Event('admin-auth-change'));
+  window.dispatchEvent(new Event('adminshp-auth-change'));
+}
 
 /**
  * Resolve simple username input (e.g. "admin", "adminshp1", "worker3", "finance")
@@ -245,6 +308,7 @@ export async function clearAuthSession(role?: 'admin' | 'adminshp' | 'finance' |
     sessionStorage.removeItem('gm_finance_device_auth');
     localStorage.removeItem('gm_finance_pin');
     localStorage.removeItem('gm_finance_auth_time');
+    sessionStorage.removeItem(VIEW_AS_SHP_KEY);
 
     window.dispatchEvent(new Event('gm_auth_changed'));
     window.dispatchEvent(new Event('admin-auth-change'));

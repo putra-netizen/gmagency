@@ -17,7 +17,7 @@ import { Product, Language, Order } from './types';
 import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected, supabase } from './lib/supabase';
 import { TRANSLATIONS } from './lib/translations';
 import { initGlobalAutoSync } from './utils/autoSyncManager';
-import { getAuthUser, resolveUserRole } from './lib/auth';
+import { getAuthUser, resolveUserRole, getViewAsShpSlot, setViewAsShpSlot } from './lib/auth';
 import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -57,6 +57,10 @@ export default function App() {
     }
   });
 
+  const [viewAsShpSlot, setViewAsShpSlotState] = useState<string | null>(() => {
+    return getViewAsShpSlot();
+  });
+
   useEffect(() => {
     // 1. Initial check with official Supabase getSession
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -73,6 +77,8 @@ export default function App() {
         setAdminRole(authUser.role);
       } else if (event === 'SIGNED_OUT') {
         setAdminRole(null);
+        setViewAsShpSlot(null);
+        setViewAsShpSlotState(null);
       }
     });
 
@@ -84,8 +90,10 @@ export default function App() {
         } else {
           setAdminRole(null);
         }
+        setViewAsShpSlotState(getViewAsShpSlot());
       } catch (e) {
         setAdminRole(null);
+        setViewAsShpSlotState(null);
       }
     };
     window.addEventListener('admin-auth-change', handleAuthChange);
@@ -407,16 +415,30 @@ export default function App() {
         ) : (
           /* UNIFIED MANAGEMENT PORTAL SCREEN (/admin) */
           <div className="fade-in">
-            {adminRole === 'adminshp' ? (
+            {adminRole === 'adminshp' || (adminRole === 'admin' && viewAsShpSlot) ? (
               <AdminShpPanel
                 currentLang={currentLang}
-                onReturnToGmAdmin={() => setAdminRole('admin')}
+                viewAsSlot={viewAsShpSlot}
+                onReturnToGmAdmin={() => {
+                  setViewAsShpSlot(null);
+                  setViewAsShpSlotState(null);
+                  if (adminRole !== 'admin') {
+                    const user = getAuthUser();
+                    if (user?.role === 'admin') {
+                      setAdminRole('admin');
+                    }
+                  }
+                }}
               />
             ) : (
               <AdminPanel
                 currentLang={currentLang}
                 onInstallApp={handleInstallApp}
-                onSwitchToAdminShp={() => setAdminRole('adminshp')}
+                onSwitchToAdminShp={() => {
+                  const slot = getViewAsShpSlot() || 'adminshp1';
+                  setViewAsShpSlot(slot);
+                  setViewAsShpSlotState(slot);
+                }}
               />
             )}
           </div>
