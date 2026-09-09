@@ -1978,15 +1978,23 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
               // Calculate category-specific progress (DONE / TOTAL) based on status dropdown
               const shopeeTotal = shopeeOrders.length;
               const shopeeDone = shopeeOrders.filter(s => s.status === 'DONE').length;
+              const shopeePct = shopeeTotal > 0 ? Math.round((shopeeDone / shopeeTotal) * 100) : 0;
 
               const reviewsTotal = mapsReviews.length;
               const reviewsDone = mapsReviews.filter(r => r.status === 'DONE').length;
+              const reviewsPct = reviewsTotal > 0 ? Math.round((reviewsDone / reviewsTotal) * 100) : 0;
 
               const reportsTotal = reportMaps.length;
               const reportsDone = reportMaps.filter(r => r.status === 'DONE').length;
+              const reportsPct = reportsTotal > 0 ? Math.round((reportsDone / reportsTotal) * 100) : 0;
 
               const webTotal = orders.length;
               const webDone = orders.filter(o => o.worker_status === 'done' || o.payment_status === 'PAID').length;
+              const webPct = webTotal > 0 ? Math.round((webDone / webTotal) * 100) : 0;
+
+              const totalAll = shopeeTotal + reviewsTotal + reportsTotal + webTotal;
+              const totalDone = shopeeDone + reviewsDone + reportsDone + webDone;
+              const overallPct = totalAll > 0 ? Math.round((totalDone / totalAll) * 100) : 0;
 
               const showWebCard = webTotal > 0;
 
@@ -2001,10 +2009,10 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                     </div>
                   </div>
                   
-                  <div className={`grid gap-3 sm:gap-4 ${showWebCard ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+                  <div className={`grid gap-3 sm:gap-4 ${showWebCard ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
                     {/* 1. Report Sosmed & Spam WA */}
-                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2.5">
                         <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 shrink-0">
                           <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
@@ -2013,23 +2021,24 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                         </span>
                       </div>
                       <div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                            {shopeeDone}
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 font-sans">
+                            {shopeeTotal}
                           </span>
                           <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">
-                            /{shopeeTotal}
+                            pesanan
                           </span>
-                          <span className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 ml-1">
-                            completed orders
-                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          <span>{shopeeDone} selesai</span>
+                          <span className="text-slate-300 dark:text-slate-600 font-normal">({shopeePct}%)</span>
                         </div>
                       </div>
                     </div>
 
                     {/* 2. Review Orders */}
-                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2.5">
                         <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 shrink-0">
                           <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
@@ -2038,23 +2047,24 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                         </span>
                       </div>
                       <div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                            {reviewsDone}
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 font-sans">
+                            {reviewsTotal}
                           </span>
                           <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">
-                            /{reviewsTotal}
+                            pesanan
                           </span>
-                          <span className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 ml-1">
-                            completed orders
-                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          <span>{reviewsDone} selesai</span>
+                          <span className="text-slate-300 dark:text-slate-600 font-normal">({reviewsPct}%)</span>
                         </div>
                       </div>
                     </div>
 
                     {/* 3. Report Orders */}
-                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                    <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2.5">
                         <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 shrink-0">
                           <ShieldAlert className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         </div>
@@ -2063,24 +2073,25 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                         </span>
                       </div>
                       <div>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                            {reportsDone}
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 font-sans">
+                            {reportsTotal}
                           </span>
                           <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">
-                            /{reportsTotal}
+                            pesanan
                           </span>
-                          <span className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 ml-1">
-                            completed orders
-                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          <span>{reportsDone} selesai</span>
+                          <span className="text-slate-300 dark:text-slate-600 font-normal">({reportsPct}%)</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* 4. Web Orders (Hidden if 0, automatically shown when > 0) */}
+                    {/* Web Orders (if > 0) */}
                     {showWebCard && (
-                      <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-                        <div className="flex items-center gap-2 sm:gap-2.5 mb-2">
+                      <div className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                        <div className="flex items-center gap-2 sm:gap-2.5 mb-2.5">
                           <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 shrink-0">
                             <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                           </div>
@@ -2089,20 +2100,46 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                           </span>
                         </div>
                         <div>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                              {webDone}
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 font-sans">
+                              {webTotal}
                             </span>
                             <span className="text-xs sm:text-sm font-bold text-slate-400 dark:text-slate-500">
-                              /{webTotal}
+                              pesanan
                             </span>
-                            <span className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-500 ml-1">
-                              completed orders
-                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <span>{webDone} selesai</span>
+                            <span className="text-slate-300 dark:text-slate-600 font-normal">({webPct}%)</span>
                           </div>
                         </div>
                       </div>
                     )}
+
+                    {/* 4. COMPLETED (Green Card matching Tablet UI) */}
+                    <div className="bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                      <div className="flex items-center gap-2 sm:gap-2.5 mb-2.5">
+                        <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 shrink-0">
+                          <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        </div>
+                        <span className="text-[10px] sm:text-[11px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-wider truncate">
+                          COMPLETED
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl sm:text-3xl font-black text-emerald-900 dark:text-emerald-100 font-sans">
+                            {totalDone}
+                          </span>
+                          <span className="text-sm sm:text-base font-bold text-emerald-700 dark:text-emerald-400">
+                            ({overallPct}%)
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                          Khusus status "DONE"
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
