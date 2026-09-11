@@ -72,12 +72,12 @@ try {
 export function getSlotIndicatorName(slot?: string): string {
   if (!slot) return '';
   const clean = slot.trim().toLowerCase();
-  if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com') return 'era';
-  if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com') return 'cika';
-  if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com') return 'vira';
-  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com') return 'ali';
-  if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com' || clean === 'superadmin') return 'owner';
-  if (clean === 'finance' || clean === 'gmfinance') return 'finance';
+  if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com' || clean === 'adminera@gmagency.internal') return 'era';
+  if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com' || clean === 'admincika@gmagency.internal') return 'cika';
+  if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com' || clean === 'adminvira@gmagency.internal') return 'vira';
+  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com' || clean === 'adminali@gmagency.internal') return 'ali';
+  if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com' || clean === 'admin@gmagency.internal' || clean === 'superadmin') return 'owner';
+  if (clean === 'finance' || clean === 'gmfinance' || clean === 'finance@gmagency.internal') return 'finance';
   return clean;
 }
 
@@ -86,7 +86,7 @@ let cachedAuthUser: AuthUser | null = null;
 
 export function getViewAsShpSlot(): string | null {
   try {
-    return sessionStorage.getItem(VIEW_AS_SHP_KEY);
+    return sessionStorage.getItem(VIEW_AS_SHP_KEY) || localStorage.getItem(VIEW_AS_SHP_KEY);
   } catch {
     return null;
   }
@@ -94,10 +94,12 @@ export function getViewAsShpSlot(): string | null {
 
 export function setViewAsShpSlot(slot: string | null): void {
   try {
-    if (slot) {
-      sessionStorage.setItem(VIEW_AS_SHP_KEY, slot);
+    if (slot && slot.trim()) {
+      sessionStorage.setItem(VIEW_AS_SHP_KEY, slot.trim());
+      localStorage.setItem(VIEW_AS_SHP_KEY, slot.trim());
     } else {
       sessionStorage.removeItem(VIEW_AS_SHP_KEY);
+      localStorage.removeItem(VIEW_AS_SHP_KEY);
     }
   } catch (err) {
     console.warn('Storage restricted:', err);
@@ -238,14 +240,31 @@ export async function resolveUserRole(user: any): Promise<AuthUser> {
 
 /**
  * Single Source of Truth for resolving the active creator/inputer ('era', 'cika', 'vira', 'ali', 'owner', etc.)
- * Always checks active Supabase Auth session first, then active user state, and logs all debug data to browser console.
+ * 
+ * 1. Cek dulu apakah sedang dalam mode "View As" (state viewAsShp yang tersimpan saat Super Admin Quick Access).
+ * 2. Kalau YA sedang View As seseorang, return identitas yang di-VIEW AS itu (misal 'vira'), BUKAN identitas asli Super Admin yang login.
+ *    (PENTING: session/token autentikasi Supabase TETAP milik Super Admin sepenuhnya, hanya atribusi created_by yang diarahkan).
+ * 3. Kalau TIDAK sedang View As (login normal biasa oleh Admin SHP itu sendiri atau Super Admin sendiri), tetap gunakan logic session Supabase Auth asli.
  */
 export async function resolveActiveInputerIdentity(): Promise<string> {
   console.group('🔍 [DEBUG resolveActiveInputerIdentity] Resolving Active Creator Identity');
   
-  const rawViewAs = typeof window !== 'undefined' ? sessionStorage.getItem(VIEW_AS_SHP_KEY) : null;
-  console.log('[DEBUG 1] Raw sessionStorage VIEW_AS_SHP_KEY:', rawViewAs);
+  // 1. CEK DULU APAKAH SEDANG DALAM MODE "VIEW AS"
+  const rawViewAs = getViewAsShpSlot();
+  console.log('[DEBUG 1] Active VIEW_AS_SHP_KEY (viewAsShp):', rawViewAs);
 
+  if (rawViewAs && typeof rawViewAs === 'string' && rawViewAs.trim()) {
+    const targetIdentity = getSlotIndicatorName(rawViewAs.trim());
+    if (targetIdentity) {
+      console.log('🎯 [DEBUG resolveActiveInputerIdentity] VIEW AS MODE ACTIVE -> returning target identity:', `"${targetIdentity}"`);
+      console.log('🎯 [DEBUG resolveActiveInputerIdentity FINAL RETURN]:', `"${targetIdentity}"`);
+      console.groupEnd();
+      return targetIdentity;
+    }
+  }
+
+  // 2. JIKA TIDAK SEDANG VIEW AS (LOGIN NORMAL BIASA OLEH ADMIN SHP ATAU SUPER ADMIN SENDIRI)
+  // Tetap gunakan logic yang sudah ada (identitas dari session Supabase Auth asli)
   let sessionUser: any = null;
   let liveUser: any = null;
 
@@ -299,24 +318,50 @@ export async function resolveActiveInputerIdentity(): Promise<string> {
 
   let finalIdentity = '';
 
-  // Decision Logic:
-  // If active user is an adminshp employee (e.g. Vira, Cika, Era, Ali), their authenticated session is sovereign.
-  if (resolvedFromSupabase && resolvedFromSupabase.role === 'adminshp') {
-    finalIdentity = resolvedFromSupabase.inputer || (resolvedFromSupabase.slot ? getSlotIndicatorName(resolvedFromSupabase.slot) : getSlotIndicatorName(resolvedFromSupabase.username));
-    console.log('[DEBUG 6] Matched active Supabase adminshp session ->', finalIdentity);
-  } else if (storedUser && storedUser.role === 'adminshp') {
-    finalIdentity = storedUser.inputer || (storedUser.slot ? getSlotIndicatorName(storedUser.slot) : getSlotIndicatorName(storedUser.username));
-    console.log('[DEBUG 6] Matched stored adminshp user ->', finalIdentity);
-  } else if (rawViewAs && (resolvedFromSupabase?.role === 'admin' || storedUser?.role === 'admin')) {
-    // Only Super Admin can use "View As" mode override
-    finalIdentity = getSlotIndicatorName(rawViewAs);
-    console.log('[DEBUG 6] Super Admin viewAs override applied ->', finalIdentity);
-  } else if (resolvedFromSupabase?.role === 'admin' || storedUser?.role === 'admin') {
+  // Decision Logic for Normal (Non-View As) Mode:
+  // Primary authority: Supabase authenticated session
+  if (resolvedFromSupabase) {
+    if (resolvedFromSupabase.role === 'admin') {
+      finalIdentity = 'owner';
+      console.log('[DEBUG 6] Matched authenticated Supabase Super Admin session ->', finalIdentity);
+    } else if (resolvedFromSupabase.role === 'adminshp') {
+      finalIdentity = resolvedFromSupabase.inputer || (resolvedFromSupabase.slot ? getSlotIndicatorName(resolvedFromSupabase.slot) : getSlotIndicatorName(resolvedFromSupabase.username));
+      console.log('[DEBUG 6] Matched authenticated Supabase adminshp session ->', finalIdentity);
+    } else if (resolvedFromSupabase.role === 'finance') {
+      finalIdentity = 'finance';
+      console.log('[DEBUG 6] Matched authenticated Supabase finance session ->', finalIdentity);
+    }
+  }
+
+  // Secondary fallback: stored user in memory / local state
+  if (!finalIdentity && storedUser) {
+    if (storedUser.role === 'admin') {
+      finalIdentity = 'owner';
+      console.log('[DEBUG 6] Fallback to stored Super Admin user ->', finalIdentity);
+    } else if (storedUser.role === 'adminshp') {
+      finalIdentity = storedUser.inputer || (storedUser.slot ? getSlotIndicatorName(storedUser.slot) : getSlotIndicatorName(storedUser.username));
+      console.log('[DEBUG 6] Fallback to stored adminshp user ->', finalIdentity);
+    } else if (storedUser.role === 'finance') {
+      finalIdentity = 'finance';
+      console.log('[DEBUG 6] Fallback to stored finance user ->', finalIdentity);
+    }
+  }
+
+  // Tertiary fallback: localStorage flags
+  if (!finalIdentity) {
+    const hasAdminAuth = typeof window !== 'undefined' && (sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true');
+    if (hasAdminAuth) {
+      finalIdentity = 'owner';
+    } else {
+      const shpUser = typeof window !== 'undefined' ? (sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user')) : null;
+      if (shpUser) {
+        finalIdentity = getSlotIndicatorName(shpUser);
+      }
+    }
+  }
+
+  if (!finalIdentity) {
     finalIdentity = 'owner';
-    console.log('[DEBUG 6] Super Admin active session ->', finalIdentity);
-  } else if (rawViewAs) {
-    finalIdentity = getSlotIndicatorName(rawViewAs);
-    console.log('[DEBUG 6] Fallback to viewAs ->', finalIdentity);
   }
 
   console.log('🎯 [DEBUG resolveActiveInputerIdentity FINAL RETURN]:', `"${finalIdentity}"`);

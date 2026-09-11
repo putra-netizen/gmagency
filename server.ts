@@ -537,14 +537,18 @@ app.put('/api/orders/:id', requireAuth, async (req, res) => {
 
 app.delete('/api/orders/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
+  if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null') {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+  const cleanId = id.trim();
   const db = readDatabase();
   
   if (!db.deleted_orders) db.deleted_orders = [];
-  if (!db.deleted_orders.includes(id)) {
-    db.deleted_orders.push(id);
+  if (!db.deleted_orders.includes(cleanId)) {
+    db.deleted_orders.push(cleanId);
   }
 
-  db.orders = (db.orders || []).filter((o: Order) => o.id !== id);
+  db.orders = (db.orders || []).filter((o: Order) => o.id !== cleanId);
   writeDatabase(db);
 
   res.json({ success: true, message: 'Order deleted and blacklisted' });
@@ -657,6 +661,10 @@ app.put('/api/shopee_orders/:id', requireAuth, async (req, res) => {
 
 app.delete('/api/shopee_orders/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
+  if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null') {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+  const cleanId = id.trim();
 
   if (supabase && !serverSupabaseFailed) {
     for (const tbl of ['shopee_orders', 'shopee-orders']) {
@@ -664,7 +672,7 @@ app.delete('/api/shopee_orders/:id', requireAuth, async (req, res) => {
         await supabase
           .from(tbl)
           .delete()
-          .eq('id', id);
+          .eq('id', cleanId);
         clearServerSupabaseCache(tbl);
       } catch {}
     }
@@ -673,11 +681,11 @@ app.delete('/api/shopee_orders/:id', requireAuth, async (req, res) => {
   const db = readDatabase();
   
   if (!db.deleted_shopee_orders) db.deleted_shopee_orders = [];
-  if (!db.deleted_shopee_orders.includes(id)) {
-    db.deleted_shopee_orders.push(id);
+  if (!db.deleted_shopee_orders.includes(cleanId)) {
+    db.deleted_shopee_orders.push(cleanId);
   }
 
-  db.shopee_orders = (db.shopee_orders || []).filter((o: any) => o.id !== id);
+  db.shopee_orders = (db.shopee_orders || []).filter((o: any) => o.id !== cleanId);
   writeDatabase(db);
 
   res.json({ success: true, message: 'Shopee order deleted and blacklisted' });
@@ -884,6 +892,10 @@ app.put('/api/maps_reviews/:id', requireAuth, handlePutMapsOrders);
 
 const handleDeleteMapsOrders = async (req: any, res: any) => {
   const { id } = req.params;
+  if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null') {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+  const cleanId = id.trim();
 
   if (supabase && !serverSupabaseFailed) {
     for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
@@ -891,7 +903,7 @@ const handleDeleteMapsOrders = async (req: any, res: any) => {
         const { error } = await supabase
           .from(tbl)
           .delete()
-          .eq('id', id);
+          .eq('id', cleanId);
         if (!error) {
           clearServerSupabaseCache(tbl);
         }
@@ -909,15 +921,15 @@ const handleDeleteMapsOrders = async (req: any, res: any) => {
   const db = readDatabase();
   
   if (!db.deleted_maps_reviews) db.deleted_maps_reviews = [];
-  if (!db.deleted_maps_reviews.includes(id)) {
-    db.deleted_maps_reviews.push(id);
+  if (!db.deleted_maps_reviews.includes(cleanId)) {
+    db.deleted_maps_reviews.push(cleanId);
   }
 
   if (db.maps_orders) {
-    db.maps_orders = db.maps_orders.filter((o: any) => o.id !== id);
+    db.maps_orders = db.maps_orders.filter((o: any) => o.id !== cleanId);
   }
   if (db.maps_reviews) {
-    db.maps_reviews = db.maps_reviews.filter((o: any) => o.id !== id);
+    db.maps_reviews = db.maps_reviews.filter((o: any) => o.id !== cleanId);
   }
   writeDatabase(db);
 
@@ -1043,13 +1055,17 @@ app.put('/api/report_maps/:id', requireAuth, async (req, res) => {
 
 app.delete('/api/report_maps/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
+  if (!id || typeof id !== 'string' || !id.trim() || id === 'undefined' || id === 'null') {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
+  const cleanId = id.trim();
 
   if (supabase && !serverSupabaseFailed) {
     try {
       const { error } = await supabase
         .from('report_maps')
         .delete()
-        .eq('id', id);
+        .eq('id', cleanId);
       if (!error) {
         clearServerSupabaseCache('report_maps');
       }
@@ -1058,11 +1074,11 @@ app.delete('/api/report_maps/:id', requireAuth, async (req, res) => {
 
   const db = readDatabase();
   if (!db.deleted_report_maps) db.deleted_report_maps = [];
-  if (!db.deleted_report_maps.includes(id)) {
-    db.deleted_report_maps.push(id);
+  if (!db.deleted_report_maps.includes(cleanId)) {
+    db.deleted_report_maps.push(cleanId);
   }
 
-  db.report_maps = (db.report_maps || []).filter((o: any) => o.id !== id);
+  db.report_maps = (db.report_maps || []).filter((o: any) => o.id !== cleanId);
   writeDatabase(db);
 
   res.json({ success: true, message: 'Report map deleted' });

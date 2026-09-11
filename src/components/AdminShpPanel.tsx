@@ -21,7 +21,7 @@ import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview, ReportMap } from '../types';
-import { loginWithBackend, clientLogout, getAuthUser, getSlotIndicatorName, resolveActiveInputerIdentity } from '../lib/auth';
+import { loginWithBackend, clientLogout, getAuthUser, getSlotIndicatorName, resolveActiveInputerIdentity, getViewAsShpSlot, setViewAsShpSlot } from '../lib/auth';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { ModernFilterSelect } from './ModernFilterSelect';
 import { 
@@ -357,7 +357,7 @@ const DebouncedTextarea: React.FC<DebouncedTextareaProps> = ({ value, onSave, de
 };
 
 export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSlot }: AdminShpPanelProps) {
-  const activeViewAsSlot = viewAsSlot || (typeof window !== 'undefined' ? sessionStorage.getItem('gm_view_as_shp') : null);
+  const activeViewAsSlot = viewAsSlot || getViewAsShpSlot();
   const isViewAsMode = Boolean(activeViewAsSlot);
 
   // Authentication states
@@ -374,7 +374,7 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
     }
   });
   const [currentAdminUser, setCurrentAdminUser] = useState<string>(() => {
-    if (activeViewAsSlot) return activeViewAsSlot;
+    if (activeViewAsSlot) return getSlotIndicatorName(activeViewAsSlot);
     try {
       const user = getAuthUser();
       if (user?.inputer && user.inputer !== 'adminshp') return user.inputer;
@@ -387,6 +387,13 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
       return '';
     }
   });
+
+  useEffect(() => {
+    if (activeViewAsSlot) {
+      setCurrentAdminUser(getSlotIndicatorName(activeViewAsSlot));
+      setIsAuthenticated(true);
+    }
+  }, [activeViewAsSlot]);
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -825,6 +832,7 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
     try {
       const res = await loginWithBackend(u, p, rememberMe);
       if (res.success && res.user && (res.user.role === 'adminshp' || res.user.role === 'admin')) {
+        setViewAsShpSlot(null);
         const matchedSlot = res.user.slot || res.user.username;
         setIsAuthenticated(true);
         setCurrentAdminUser(matchedSlot);
@@ -1088,10 +1096,17 @@ Format Chat : ${data.notes || '-'}`;
   };
 
   const executeDeleteShopeeOrder = async (id: string) => {
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      toast.error(currentLang === 'id' ? 'ID pesanan tidak valid' : 'Invalid order ID');
+      return;
+    }
+    const cleanId = id.trim();
+    pauseAutoSyncFor(15000);
     try {
-      await dbDeleteShopeeOrder(id);
-      setShopeeOrders(prev => prev.filter(o => o.id !== id));
+      await dbDeleteShopeeOrder(cleanId);
+      setShopeeOrders(prev => prev.filter(o => o.id !== cleanId));
       setDeleteConfirm(null);
+      toast.success(currentLang === 'id' ? 'Pesanan berhasil dihapus' : 'Order successfully deleted');
     } catch (err) {
       console.error(err);
       toast.error(currentLang === 'id' ? `Gagal menghapus order: ${err instanceof Error ? err.message : String(err)}` : `Failed to delete order: ${err instanceof Error ? err.message : String(err)}`);
@@ -1285,9 +1300,15 @@ Format Chat : ${data.notes || '-'}`;
   };
 
   const executeDeleteReportMap = async (id: string) => {
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      toast.error('ID data tidak valid');
+      return;
+    }
+    const cleanId = id.trim();
+    pauseAutoSyncFor(15000);
     try {
-      await dbDeleteReportMap(id);
-      setReportMaps(prev => prev.filter(r => r.id !== id));
+      await dbDeleteReportMap(cleanId);
+      setReportMaps(prev => prev.filter(r => r.id !== cleanId));
       setDeleteConfirm(null);
       toast.success('Data Report Maps berhasil dihapus.');
     } catch (err) {
@@ -1383,10 +1404,17 @@ Format Chat : ${data.notes || '-'}`;
   };
 
   const executeDeleteMapsReview = async (id: string) => {
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      toast.error('ID data tidak valid');
+      return;
+    }
+    const cleanId = id.trim();
+    pauseAutoSyncFor(15000);
     try {
-      await dbDeleteMapsReview(id);
-      setMapsReviews(prev => prev.filter(r => r.id !== id));
+      await dbDeleteMapsReview(cleanId);
+      setMapsReviews(prev => prev.filter(r => r.id !== cleanId));
       setDeleteConfirm(null);
+      toast.success('Data review berhasil dihapus.');
     } catch (err) {
       console.error(err);
       toast.error('Gagal menghapus data.');

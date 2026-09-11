@@ -35,7 +35,7 @@ import {
   Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
   FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft, Wallet,
   Filter, Activity, Layers, SlidersHorizontal, Tag, Lock, Mail, ShieldCheck,
-  MessageSquare
+  MessageSquare, RotateCcw
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -728,9 +728,15 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
   };
 
   const executeDeleteReportMap = async (id: string) => {
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      toast.error('ID report map tidak valid');
+      return;
+    }
+    const cleanId = id.trim();
+    pauseAutoSyncFor(15000);
     try {
-      await dbDeleteReportMap(id);
-      setReportMaps(prev => prev.filter(m => m.id !== id));
+      await dbDeleteReportMap(cleanId);
+      setReportMaps(prev => prev.filter(m => m.id !== cleanId));
       toast.success('Report Maps berhasil dihapus');
       setDeleteConfirm(null);
     } catch (err) {
@@ -1237,10 +1243,16 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
   };
 
   const handleDeleteMapsReview = async (id: string) => {
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      toast.error('ID review tidak valid');
+      return;
+    }
+    const cleanId = id.trim();
     if (confirm('Apakah Anda yakin ingin menghapus laporan review ini?')) {
+      pauseAutoSyncFor(15000);
       try {
-        await dbDeleteMapsReview(id);
-        setMapsReviews(prev => prev.filter(r => r.id !== id));
+        await dbDeleteMapsReview(cleanId);
+        setMapsReviews(prev => prev.filter(r => r.id !== cleanId));
         toast.success(currentLang === 'id' ? 'Laporan review berhasil dihapus!' : 'Review report successfully deleted!');
       } catch (err) {
         console.error(err);
@@ -1341,9 +1353,15 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
   };
 
   const executeDeleteShopeeOrder = async (id: string) => {
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      toast.error('ID pesanan tidak valid');
+      return;
+    }
+    const cleanId = id.trim();
+    pauseAutoSyncFor(15000);
     try {
-      await dbDeleteShopeeOrder(id);
-      setShopeeOrders(prev => prev.filter(o => o.id !== id));
+      await dbDeleteShopeeOrder(cleanId);
+      setShopeeOrders(prev => prev.filter(o => o.id !== cleanId));
       setDeleteConfirm(null);
       toast.success(currentLang === 'id' ? 'Pesanan Shopee berhasil dihapus!' : 'Shopee order successfully deleted!');
     } catch (err) {
@@ -1390,9 +1408,15 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
   };
 
   const executeDeleteOrder = async (orderId: string) => {
+    if (!orderId || typeof orderId !== 'string' || !orderId.trim()) {
+      toast.error('ID pesanan tidak valid');
+      return;
+    }
+    const cleanId = orderId.trim();
+    pauseAutoSyncFor(15000);
     try {
-      await dbDeleteOrder(orderId);
-      setOrders(prev => prev.filter(o => o.id !== orderId));
+      await dbDeleteOrder(cleanId);
+      setOrders(prev => prev.filter(o => o.id !== cleanId));
       
       const updatedStats = await dbGetDashboardStats();
       setStats(updatedStats);
@@ -2790,6 +2814,65 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                 </div>
               </div>
 
+              {/* Active Filter Indicator & Reset Bar */}
+              {(searchShopee || shopeeTypeFilter !== 'all' || sortShopee !== 'all' || timeFilterShopee.mode !== 'all') && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-2xl text-xs text-amber-900 font-sans shadow-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                      <Filter className="w-3.5 h-3.5 text-amber-600" /> Filter Aktif:
+                    </span>
+                    {searchShopee && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Pencarian: &ldquo;{searchShopee}&rdquo;
+                        <button type="button" onClick={() => setSearchShopee('')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {shopeeTypeFilter !== 'all' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Tipe: {shopeeTypeFilter === 'report' ? 'Report Sosmed' : 'Spam WA'}
+                        <button type="button" onClick={() => setShopeeTypeFilter('all')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {sortShopee !== 'all' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Status: {sortShopee.toUpperCase()}
+                        <button type="button" onClick={() => setSortShopee('all')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {timeFilterShopee.mode !== 'all' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Waktu Terfilter
+                        <button type="button" onClick={() => setTimeFilterShopee({ mode: 'all' })} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    <span className="text-[11px] text-amber-700 ml-1">
+                      (Menampilkan {filteredShopeeOrders.length} dari {shopeeOrders.length} pesanan)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchShopee('');
+                      setShopeeTypeFilter('all');
+                      setSortShopee('all');
+                      setTimeFilterShopee({ mode: 'all' });
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shadow-xs shrink-0 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset Semua Filter
+                  </button>
+                </div>
+              )}
+
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -2827,8 +2910,31 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                       {filteredShopeeOrders.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
-                            Belum ada pesanan Shopee yang cocok / diinput.
+                          <td colSpan={7} className="px-6 py-12 text-center text-slate-500 font-sans">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <Search className="h-8 w-8 text-slate-300 mb-1" />
+                              <p className="font-semibold text-sm">Tidak ada pesanan Shopee ditemukan.</p>
+                              {(searchShopee || shopeeTypeFilter !== 'all' || sortShopee !== 'all' || timeFilterShopee.mode !== 'all') ? (
+                                <div className="flex flex-col items-center gap-2 mt-1">
+                                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg max-w-md">
+                                    Pesanan lain tersembunyi karena filter atau kata kunci pencarian sedang aktif.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSearchShopee('');
+                                      setShopeeTypeFilter('all');
+                                      setSortShopee('all');
+                                      setTimeFilterShopee({ mode: 'all' });
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    Reset Filter &amp; Tampilkan Semua ({shopeeOrders.length})
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       ) : (
@@ -3084,6 +3190,65 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                 </div>
               </div>
 
+              {/* Active Filter Indicator & Reset Bar for Maps Review */}
+              {(searchReview || reviewTypeFilter !== 'SEMUA' || sortReview !== 'all' || timeFilterReview.mode !== 'all') && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-2xl text-xs text-amber-900 font-sans shadow-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                      <Filter className="w-3.5 h-3.5 text-amber-600" /> Filter Aktif:
+                    </span>
+                    {searchReview && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Pencarian: &ldquo;{searchReview}&rdquo;
+                        <button type="button" onClick={() => setSearchReview('')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {reviewTypeFilter !== 'SEMUA' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Tipe: {reviewTypeFilter}
+                        <button type="button" onClick={() => setReviewTypeFilter('SEMUA')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {sortReview !== 'all' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Status: {sortReview.toUpperCase()}
+                        <button type="button" onClick={() => setSortReview('all')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {timeFilterReview.mode !== 'all' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Waktu Terfilter
+                        <button type="button" onClick={() => setTimeFilterReview({ mode: 'all' })} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    <span className="text-[11px] text-amber-700 ml-1">
+                      (Menampilkan {filteredMapsReviews.length} dari {mapsReviews.length} laporan)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchReview('');
+                      setReviewTypeFilter('SEMUA');
+                      setSortReview('all');
+                      setTimeFilterReview({ mode: 'all' });
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shadow-xs shrink-0 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset Semua Filter
+                  </button>
+                </div>
+              )}
+
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -3123,8 +3288,31 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                       {filteredMapsReviews.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
-                            Belum ada laporan review yang cocok / terdaftar.
+                          <td colSpan={8} className="px-6 py-12 text-center text-slate-500 font-sans">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <Search className="h-8 w-8 text-slate-300 mb-1" />
+                              <p className="font-semibold text-sm">Belum ada laporan review yang cocok / terdaftar.</p>
+                              {(searchReview || reviewTypeFilter !== 'SEMUA' || sortReview !== 'all' || timeFilterReview.mode !== 'all') ? (
+                                <div className="flex flex-col items-center gap-2 mt-1">
+                                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg max-w-md">
+                                    Laporan lain tersembunyi karena filter atau kata kunci pencarian sedang aktif.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSearchReview('');
+                                      setReviewTypeFilter('SEMUA');
+                                      setSortReview('all');
+                                      setTimeFilterReview({ mode: 'all' });
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    Reset Filter &amp; Tampilkan Semua ({mapsReviews.length})
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       ) : (
@@ -3497,6 +3685,65 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                 </div>
               </div>
 
+              {/* Active Filter Indicator & Reset Bar for Report Maps */}
+              {(searchMapReport || mapReportServiceFilter !== 'all' || sortMapReport !== 'all' || timeFilterMapReport.mode !== 'all') && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-amber-50/90 border border-amber-200/90 rounded-2xl text-xs text-amber-900 font-sans shadow-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                      <Filter className="w-3.5 h-3.5 text-amber-600" /> Filter Aktif:
+                    </span>
+                    {searchMapReport && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Pencarian: &ldquo;{searchMapReport}&rdquo;
+                        <button type="button" onClick={() => setSearchMapReport('')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {mapReportServiceFilter !== 'all' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Layanan: {mapReportServiceFilter}
+                        <button type="button" onClick={() => setMapReportServiceFilter('all')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {sortMapReport !== 'all' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Status: {sortMapReport.toUpperCase()}
+                        <button type="button" onClick={() => setSortMapReport('all')} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {timeFilterMapReport.mode !== 'all' && (
+                      <span className="inline-flex items-center gap-1 bg-white border border-amber-300 px-2.5 py-0.5 rounded-full font-medium text-slate-800 shadow-xs">
+                        Waktu Terfilter
+                        <button type="button" onClick={() => setTimeFilterMapReport({ mode: 'all' })} className="text-slate-400 hover:text-slate-700 ml-0.5 cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    <span className="text-[11px] text-amber-700 ml-1">
+                      (Menampilkan {filteredMapReports.length} dari {reportMaps.length} data)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchMapReport('');
+                      setMapReportServiceFilter('all');
+                      setSortMapReport('all');
+                      setTimeFilterMapReport({ mode: 'all' });
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shadow-xs shrink-0 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset Semua Filter
+                  </button>
+                </div>
+              )}
+
               {/* Table Container */}
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-slate-50/60 border-b border-slate-100 px-5 py-3.5 flex items-center justify-between">
@@ -3535,8 +3782,31 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                     <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                       {filteredMapReports.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-slate-400 font-semibold font-sans">
-                            Belum ada inputan Report Maps yang cocok / diinput oleh Admin SHP.
+                          <td colSpan={7} className="px-6 py-12 text-center text-slate-500 font-sans">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <Search className="h-8 w-8 text-slate-300 mb-1" />
+                              <p className="font-semibold text-sm">Belum ada inputan Report Maps yang cocok / diinput oleh Admin SHP.</p>
+                              {(searchMapReport || mapReportServiceFilter !== 'all' || sortMapReport !== 'all' || timeFilterMapReport.mode !== 'all') ? (
+                                <div className="flex flex-col items-center gap-2 mt-1">
+                                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg max-w-md">
+                                    Data lain tersembunyi karena filter atau kata kunci pencarian sedang aktif.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSearchMapReport('');
+                                      setMapReportServiceFilter('all');
+                                      setSortMapReport('all');
+                                      setTimeFilterMapReport({ mode: 'all' });
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors cursor-pointer"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    Reset Filter &amp; Tampilkan Semua ({reportMaps.length})
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       ) : (

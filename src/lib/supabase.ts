@@ -306,10 +306,12 @@ export function getClientDeletedOrders(): string[] {
 }
 
 export function blacklistClientOrder(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) return;
+  const cleanId = id.trim();
   try {
-    const list = getClientDeletedOrders();
-    if (!list.includes(id)) {
-      list.push(id);
+    const list = getClientDeletedOrders().filter(Boolean);
+    if (!list.includes(cleanId)) {
+      list.push(cleanId);
       localStorage.setItem('gmsolution_blacklist_orders', JSON.stringify(list));
     }
   } catch (err) {
@@ -320,17 +322,19 @@ export function blacklistClientOrder(id: string) {
 export function getClientDeletedShopeeOrders(): string[] {
   try {
     const data = localStorage.getItem('gmsolution_blacklist_shopee_orders');
-    return data ? JSON.parse(data) : [];
+    return data ? JSON.parse(data).filter(Boolean) : [];
   } catch {
     return [];
   }
 }
 
 export function blacklistClientShopeeOrder(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) return;
+  const cleanId = id.trim();
   try {
-    const list = getClientDeletedShopeeOrders();
-    if (!list.includes(id)) {
-      list.push(id);
+    const list = getClientDeletedShopeeOrders().filter(Boolean);
+    if (!list.includes(cleanId)) {
+      list.push(cleanId);
       localStorage.setItem('gmsolution_blacklist_shopee_orders', JSON.stringify(list));
     }
   } catch (err) {
@@ -341,17 +345,19 @@ export function blacklistClientShopeeOrder(id: string) {
 export function getClientDeletedMapsReviews(): string[] {
   try {
     const data = localStorage.getItem('gmsolution_blacklist_maps_reviews');
-    return data ? JSON.parse(data) : [];
+    return data ? JSON.parse(data).filter(Boolean) : [];
   } catch {
     return [];
   }
 }
 
 export function blacklistClientMapsReview(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) return;
+  const cleanId = id.trim();
   try {
-    const list = getClientDeletedMapsReviews();
-    if (!list.includes(id)) {
-      list.push(id);
+    const list = getClientDeletedMapsReviews().filter(Boolean);
+    if (!list.includes(cleanId)) {
+      list.push(cleanId);
       localStorage.setItem('gmsolution_blacklist_maps_reviews', JSON.stringify(list));
     }
   } catch (err) {
@@ -629,9 +635,11 @@ function updateLocalStorageOrder(order: Order) {
 }
 
 function deleteLocalStorageOrder(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) return;
+  const cleanId = id.trim();
   try {
     const list = getLocalOrders();
-    const filtered = list.filter(o => o.id !== id);
+    const filtered = list.filter(o => o.id !== cleanId);
     localStorage.setItem('gmsolution_local_orders', JSON.stringify(filtered));
   } catch (e) {
     console.error(e);
@@ -665,9 +673,11 @@ function updateLocalStorageShopeeOrder(order: ShopeeOrder) {
 }
 
 function deleteLocalStorageShopeeOrder(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) return;
+  const cleanId = id.trim();
   try {
     const list = getLocalShopeeOrders();
-    const filtered = list.filter(o => o.id !== id);
+    const filtered = list.filter(o => o.id !== cleanId);
     localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(filtered));
   } catch (e) {
     console.error(e);
@@ -758,9 +768,11 @@ export function updateLocalStorageMapsReview(review: MapsReview) {
 }
 
 function deleteLocalStorageMapsReview(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) return;
+  const cleanId = id.trim();
   try {
     const list = getLocalMapsReviews();
-    const filtered = list.filter(r => r.id !== id);
+    const filtered = list.filter(r => r.id !== cleanId);
     localStorage.setItem('gmsolution_local_maps_reviews', JSON.stringify(filtered));
   } catch (e) {
     console.error(e);
@@ -1011,11 +1023,16 @@ export async function dbUpdateOrder(id: string, orderData: Partial<Order>): Prom
 }
 
 export async function dbDeleteOrder(id: string): Promise<boolean> {
-  blacklistClientOrder(id);
-  deleteLocalStorageOrder(id);
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    console.warn('dbDeleteOrder called with invalid ID:', id);
+    return false;
+  }
+  const cleanId = id.trim();
+  blacklistClientOrder(cleanId);
+  deleteLocalStorageOrder(cleanId);
 
   try {
-    await fetch(`/api/orders/${id}`, {
+    await fetch(`/api/orders/${cleanId}`, {
       method: 'DELETE',
       headers: { ...getAuthHeaders() },
     });
@@ -1113,9 +1130,11 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
   console.log('[DEBUG SUPABASE dbCreateShopeeOrder] Input orderData.created_by:', orderData.created_by);
 
   let creator = orderData.created_by?.trim() ? getSlotIndicatorName(orderData.created_by.trim()) : '';
-  if (!creator || creator === 'adminshp1' || creator === 'admin' || creator === 'era') {
-    const verified = await resolveActiveInputerIdentity();
-    if (verified) creator = verified;
+  const verified = await resolveActiveInputerIdentity();
+  if (verified) {
+    creator = verified;
+  } else if (!creator) {
+    creator = 'owner';
   }
 
   console.log('[DEBUG SUPABASE dbCreateShopeeOrder] Resolved final creator:', creator);
@@ -1261,9 +1280,14 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
 }
 
 export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    console.warn('dbDeleteShopeeOrder called with invalid ID:', id);
+    return false;
+  }
+  const cleanId = id.trim();
   clearSupabaseCache('shopee_orders');
   clearSupabaseCache('shopee-orders');
-  blacklistClientShopeeOrder(id);
+  blacklistClientShopeeOrder(cleanId);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     for (const tbl of ['shopee_orders', 'shopee-orders']) {
@@ -1271,20 +1295,20 @@ export async function dbDeleteShopeeOrder(id: string): Promise<boolean> {
         await supabase
           .from(tbl)
           .update({ created_by: '__DELETED__' })
-          .eq('id', id);
+          .eq('id', cleanId);
 
         await supabase
           .from(tbl)
           .delete()
-          .eq('id', id);
+          .eq('id', cleanId);
       } catch {}
     }
   }
 
-  deleteLocalStorageShopeeOrder(id);
+  deleteLocalStorageShopeeOrder(cleanId);
 
   try {
-    await fetch(`/api/shopee_orders/${id}`, {
+    await fetch(`/api/shopee_orders/${cleanId}`, {
       method: 'DELETE'
     });
   } catch (err) {
@@ -1343,9 +1367,11 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
   console.log('[DEBUG SUPABASE dbCreateMapsReview] Input reviewData.created_by:', reviewData.created_by);
 
   let creator = reviewData.created_by?.trim() ? getSlotIndicatorName(reviewData.created_by.trim()) : '';
-  if (!creator || creator === 'adminshp1' || creator === 'admin' || creator === 'era') {
-    const verified = await resolveActiveInputerIdentity();
-    if (verified) creator = verified;
+  const verified = await resolveActiveInputerIdentity();
+  if (verified) {
+    creator = verified;
+  } else if (!creator) {
+    creator = 'owner';
   }
 
   console.log('[DEBUG SUPABASE dbCreateMapsReview] Resolved final creator:', creator);
@@ -1513,10 +1539,15 @@ export async function dbUpdateMapsReview(id: string, reviewData: Partial<MapsRev
 }
 
 export async function dbDeleteMapsReview(id: string): Promise<boolean> {
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    console.warn('dbDeleteMapsReview called with invalid ID:', id);
+    return false;
+  }
+  const cleanId = id.trim();
   clearSupabaseCache('maps_orders');
   clearSupabaseCache('maps_order');
   clearSupabaseCache('maps_reviews');
-  blacklistClientMapsReview(id);
+  blacklistClientMapsReview(cleanId);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
@@ -1524,20 +1555,20 @@ export async function dbDeleteMapsReview(id: string): Promise<boolean> {
         await supabase
           .from(tbl)
           .update({ created_by: '__DELETED__' })
-          .eq('id', id);
+          .eq('id', cleanId);
 
         await supabase
           .from(tbl)
           .delete()
-          .eq('id', id);
+          .eq('id', cleanId);
       } catch {}
     }
   }
 
-  deleteLocalStorageMapsReview(id);
+  deleteLocalStorageMapsReview(cleanId);
 
   try {
-    await fetch(`/api/maps_orders/${id}`, {
+    await fetch(`/api/maps_orders/${cleanId}`, {
       method: 'DELETE',
       headers: { ...getAuthHeaders() }
     });
@@ -1609,17 +1640,19 @@ export function normalizeReportMap(item: any): ReportMap {
 export function getClientDeletedReportMaps(): string[] {
   try {
     const data = localStorage.getItem('gmsolution_blacklist_report_maps');
-    return data ? JSON.parse(data) : [];
+    return data ? JSON.parse(data).filter(Boolean) : [];
   } catch {
     return [];
   }
 }
 
 export function blacklistClientReportMap(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) return;
+  const cleanId = id.trim();
   try {
-    const list = getClientDeletedReportMaps();
-    if (!list.includes(id)) {
-      list.push(id);
+    const list = getClientDeletedReportMaps().filter(Boolean);
+    if (!list.includes(cleanId)) {
+      list.push(cleanId);
       localStorage.setItem('gmsolution_blacklist_report_maps', JSON.stringify(list));
     }
   } catch (err) {
@@ -1659,9 +1692,11 @@ export function updateLocalStorageReportMap(item: ReportMap) {
 }
 
 export function deleteLocalStorageReportMap(id: string) {
+  if (!id || typeof id !== 'string' || !id.trim()) return;
+  const cleanId = id.trim();
   try {
     const list = getLocalReportMaps();
-    const filtered = list.filter(r => r.id !== id);
+    const filtered = list.filter(r => r.id !== cleanId);
     localStorage.setItem('gmsolution_local_report_maps', JSON.stringify(filtered));
   } catch (e) {
     console.error(e);
@@ -1707,9 +1742,11 @@ export async function dbCreateReportMap(data: Partial<ReportMap>): Promise<Repor
   console.log('[DEBUG SUPABASE dbCreateReportMap] Input data.created_by:', data.created_by);
 
   let creator = data.created_by?.trim() ? getSlotIndicatorName(data.created_by.trim()) : '';
-  if (!creator || creator === 'adminshp1' || creator === 'admin' || creator === 'era') {
-    const verified = await resolveActiveInputerIdentity();
-    if (verified) creator = verified;
+  const verified = await resolveActiveInputerIdentity();
+  if (verified) {
+    creator = verified;
+  } else if (!creator) {
+    creator = 'owner';
   }
 
   console.log('[DEBUG SUPABASE dbCreateReportMap] Resolved final creator:', creator);
@@ -1828,27 +1865,32 @@ export async function dbUpdateReportMap(id: string, updateData: Partial<ReportMa
 }
 
 export async function dbDeleteReportMap(id: string): Promise<boolean> {
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    console.warn('dbDeleteReportMap called with invalid ID:', id);
+    return false;
+  }
+  const cleanId = id.trim();
   clearSupabaseCache('report_maps');
-  blacklistClientReportMap(id);
+  blacklistClientReportMap(cleanId);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {
       await supabase
         .from('report_maps')
         .update({ created_by: '__DELETED__' })
-        .eq('id', id);
+        .eq('id', cleanId);
 
       await supabase
         .from('report_maps')
         .delete()
-        .eq('id', id);
+        .eq('id', cleanId);
     } catch {}
   }
 
-  deleteLocalStorageReportMap(id);
+  deleteLocalStorageReportMap(cleanId);
 
   try {
-    await fetch(`/api/report_maps/${id}`, {
+    await fetch(`/api/report_maps/${cleanId}`, {
       method: 'DELETE',
       headers: { ...getAuthHeaders() }
     });
