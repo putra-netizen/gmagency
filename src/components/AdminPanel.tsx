@@ -430,6 +430,9 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
         window.dispatchEvent(new CustomEvent('adminshp-auth-change'));
         window.dispatchEvent(new Event('gm_auth_changed'));
         if (res.user?.role === 'adminshp' && onSwitchToAdminShp) {
+          if (res.user.slot) {
+            setViewAsShpSlot(res.user.slot);
+          }
           onSwitchToAdminShp();
         }
         toast.success(currentLang === 'id' ? 'Autentikasi berhasil! Selamat datang.' : 'Authentication successful! Welcome.');

@@ -14,13 +14,14 @@ import {
   dbCreateReportMap,
   dbUpdateReportMap,
   dbDeleteReportMap,
-  dbIsSupabaseConnected
+  dbIsSupabaseConnected,
+  supabase
 } from '../lib/supabase';
 import { logAdminShpAction } from '../utils/adminshpLogs';
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview, ReportMap } from '../types';
-import { loginWithBackend, clientLogout, getAuthUser } from '../lib/auth';
+import { loginWithBackend, clientLogout, getAuthUser, getSlotIndicatorName, resolveActiveInputerIdentity } from '../lib/auth';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { ModernFilterSelect } from './ModernFilterSelect';
 import { 
@@ -220,16 +221,6 @@ const Pagination: React.FC<PaginationProps> = ({
   );
 };
 
-const getSlotIndicatorName = (slot: string): string => {
-  const clean = slot?.trim()?.toLowerCase();
-  if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com') return 'era';
-  if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com') return 'cika';
-  if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com') return 'vira';
-  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com') return 'ali';
-  if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com') return 'owner';
-  return slot;
-};
-
 const isSameInputer = (creator?: string, currentUser?: string): boolean => {
   if (!creator) return true;
   if (!currentUser) return false;
@@ -386,10 +377,14 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
     if (activeViewAsSlot) return activeViewAsSlot;
     try {
       const user = getAuthUser();
-      if (user?.slot) return user.slot;
-      return sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || 'adminshp1';
+      if (user?.inputer && user.inputer !== 'adminshp') return user.inputer;
+      if (user?.slot) return getSlotIndicatorName(user.slot);
+      if (user?.role === 'admin') return 'owner';
+      const derived = getSlotIndicatorName(user?.name || user?.username || user?.email);
+      if (derived) return derived;
+      return '';
     } catch (e) {
-      return 'adminshp1';
+      return '';
     }
   });
   const [adminUsername, setAdminUsername] = useState('');
@@ -640,34 +635,62 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
 
   // Listen to auth changes
   useEffect(() => {
-    const handleRouteSync = () => {
+    const handleRouteSync = async () => {
       try {
-        const viewAs = sessionStorage.getItem('gm_view_as_shp');
-        if (viewAs) {
+        // 1. Live Supabase / active user resolution first
+        const verified = await resolveActiveInputerIdentity();
+        if (verified) {
           setIsAuthenticated(true);
-          setCurrentAdminUser(viewAs);
+          setCurrentAdminUser(verified);
           return;
         }
-        const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true';
+
         const user = getAuthUser();
+        if (user?.role === 'adminshp') {
+          setIsAuthenticated(true);
+          const resolved = user?.inputer || (user?.slot ? getSlotIndicatorName(user.slot) : getSlotIndicatorName(user?.name || user?.username || user?.email));
+          if (resolved) {
+            setCurrentAdminUser(resolved);
+            return;
+          }
+        }
+
+        // 2. View As mode (only valid for super admin)
+        const viewAs = sessionStorage.getItem('gm_view_as_shp');
+        if (viewAs && (!user || user.role === 'admin')) {
+          setIsAuthenticated(true);
+          setCurrentAdminUser(getSlotIndicatorName(viewAs));
+          return;
+        }
+
+        const isAuth = sessionStorage.getItem('gm_adminshp_auth') === 'true' || localStorage.getItem('gm_adminshp_auth') === 'true';
         if (isAuth || user?.role === 'adminshp' || user?.role === 'admin') {
           setIsAuthenticated(true);
-          const slot = user?.slot || sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || 'adminshp1';
-          setCurrentAdminUser(slot);
+          const resolved = user?.inputer || (user?.slot ? getSlotIndicatorName(user.slot) : getSlotIndicatorName(user?.name || user?.username || user?.email));
+          if (resolved) {
+            setCurrentAdminUser(resolved);
+          }
         }
       } catch (e) {
         console.warn(e);
       }
     };
 
+    handleRouteSync();
+
     window.addEventListener('admin-auth-change', handleRouteSync);
     window.addEventListener('adminshp-auth-change', handleRouteSync);
     window.addEventListener('gm_auth_changed', handleRouteSync);
+
+    const { data: authListener } = supabase?.auth?.onAuthStateChange ? supabase.auth.onAuthStateChange(() => {
+      handleRouteSync();
+    }) : { data: null };
 
     return () => {
       window.removeEventListener('admin-auth-change', handleRouteSync);
       window.removeEventListener('adminshp-auth-change', handleRouteSync);
       window.removeEventListener('gm_auth_changed', handleRouteSync);
+      authListener?.subscription?.unsubscribe();
     };
   }, []);
 
@@ -924,6 +947,12 @@ Format Chat : ${data.notes || '-'}`;
 
     try {
       const formattedText = generateSosmedFormat(formSosmed);
+      console.log('📦 [DEBUG FRONTEND] handleSubmitSosmed (REPORT SOSMED / TIKTOK) CALLED');
+      console.log('[DEBUG FRONTEND] Raw formSosmed payload:', formSosmed);
+      const activeCreator = await resolveActiveInputerIdentity() || getSlotIndicatorName(currentAdminUser) || 'admin';
+      console.log('[DEBUG FRONTEND] handleSubmitSosmed resolved activeCreator:', activeCreator);
+      console.log('[DEBUG FRONTEND] Sending to dbCreateShopeeOrder with created_by =', activeCreator);
+
       const newOrder = await dbCreateShopeeOrder({
         order_type: 'REPORT_ALL_SOSMED',
         store_name: formSosmed.storeName,
@@ -933,7 +962,7 @@ Format Chat : ${data.notes || '-'}`;
         target_link: formSosmed.targetLink,
         notes: formSosmed.notes,
         formatted_text: formattedText,
-        created_by: getSlotIndicatorName(currentAdminUser),
+        created_by: activeCreator,
         status: 'READY'
       });
 
@@ -977,6 +1006,12 @@ Format Chat : ${data.notes || '-'}`;
 
     try {
       const formattedText = generateSpamFormat(formSpam);
+      console.log('📦 [DEBUG FRONTEND] handleSubmitSpam (SPAM WA) CALLED');
+      console.log('[DEBUG FRONTEND] Raw formSpam payload:', formSpam);
+      const activeCreator = await resolveActiveInputerIdentity() || getSlotIndicatorName(currentAdminUser) || 'admin';
+      console.log('[DEBUG FRONTEND] handleSubmitSpam resolved activeCreator:', activeCreator);
+      console.log('[DEBUG FRONTEND] Sending to dbCreateShopeeOrder with created_by =', activeCreator);
+
       const newOrder = await dbCreateShopeeOrder({
         order_type: 'SPAM_WA',
         store_name: formSpam.storeName,
@@ -986,7 +1021,7 @@ Format Chat : ${data.notes || '-'}`;
         target_link: formSpam.targetLink,
         notes: formSpam.notes,
         formatted_text: formattedText,
-        created_by: getSlotIndicatorName(currentAdminUser),
+        created_by: activeCreator,
         status: 'READY'
       });
 
@@ -1072,6 +1107,12 @@ Format Chat : ${data.notes || '-'}`;
     }
 
     try {
+      console.log('📦 [DEBUG FRONTEND] handleSubmitReviewMaps CALLED');
+      console.log('[DEBUG FRONTEND] Raw formReviewMaps payload:', formReviewMaps);
+      const activeCreator = await resolveActiveInputerIdentity() || getSlotIndicatorName(currentAdminUser) || 'admin';
+      console.log('[DEBUG FRONTEND] handleSubmitReviewMaps resolved activeCreator:', activeCreator);
+      console.log('[DEBUG FRONTEND] Sending to dbCreateMapsReview with created_by =', activeCreator);
+
       const newReview = await dbCreateMapsReview({
         id: 'map-' + Date.now().toString().slice(-6),
         order_kind: 'REVIEW',
@@ -1085,7 +1126,7 @@ Format Chat : ${data.notes || '-'}`;
         proof_link: '',
         status: 'READY',
         payment_status: '',
-        created_by: getSlotIndicatorName(currentAdminUser)
+        created_by: activeCreator
       });
 
       setMapsReviews(prev => [newReview, ...prev]);
@@ -1135,6 +1176,12 @@ Format Chat : ${data.notes || '-'}`;
     }
 
     try {
+      console.log('📦 [DEBUG FRONTEND] handleSubmitReportMaps CALLED');
+      console.log('[DEBUG FRONTEND] Raw formReportMaps payload:', formReportMaps);
+      const activeCreator = await resolveActiveInputerIdentity() || getSlotIndicatorName(currentAdminUser) || 'admin';
+      console.log('[DEBUG FRONTEND] handleSubmitReportMaps resolved activeCreator:', activeCreator);
+      console.log('[DEBUG FRONTEND] Sending to dbCreateReportMap with created_by =', activeCreator);
+
       const newReport = await dbCreateReportMap({
         id: 'rep-' + Date.now().toString().slice(-6),
         maps_link: formReportMaps.mapsLink,
@@ -1147,7 +1194,7 @@ Format Chat : ${data.notes || '-'}`;
         proof_link: '',
         status: 'READY',
         payment_status: 'UNPAID',
-        created_by: getSlotIndicatorName(currentAdminUser)
+        created_by: activeCreator
       });
 
       setReportMaps(prev => [newReport, ...prev]);

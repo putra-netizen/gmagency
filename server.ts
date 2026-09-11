@@ -23,7 +23,7 @@ import { createServer as createViteServer } from 'vite';
 import { INITIAL_PRODUCTS } from './src/data/initialProducts';
 import { Order, Product, PaymentStatus, MapsReview, ShopeeOrder } from './src/types';
 import { createClient } from '@supabase/supabase-js';
-import { loginHandler, meHandler, requireAuth, requireRole, saveAuthOverride } from './server/auth';
+import { loginHandler, meHandler, requireAuth, requireRole, saveAuthOverride, getSlotIndicatorName } from './server/auth';
 
 const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
@@ -569,10 +569,25 @@ app.get('/api/shopee_orders', async (req, res) => {
   res.json(filteredLocal);
 });
 
-app.post('/api/shopee_orders', requireAuth, async (req, res) => {
+app.post('/api/shopee_orders', requireAuth, async (req: any, res) => {
+  let finalCreator = req.body.created_by?.trim() ? getSlotIndicatorName(req.body.created_by) : '';
+  const authInputer = req.user?.inputer || (req.user?.slot ? getSlotIndicatorName(req.user.slot) : (req.user?.role === 'admin' ? 'owner' : ''));
+  if (authInputer && authInputer !== 'adminshp') {
+    finalCreator = authInputer;
+  } else if (!finalCreator) {
+    finalCreator = authInputer || 'owner';
+  }
+
+  console.log('⚡ [BACKEND API] POST /api/shopee_orders:', {
+    reqUser: req.user,
+    bodyCreatedBy: req.body.created_by,
+    resolvedFinalCreator: finalCreator
+  });
+
   const newOrder = {
     id: req.body.id || ('shp-' + Date.now().toString().slice(-6)),
     ...req.body,
+    created_by: finalCreator,
     created_at: req.body.created_at || new Date().toISOString()
   };
 
@@ -736,9 +751,18 @@ const handlePostMapsOrders = async (req: any, res: any) => {
   const cleanAccounts = parseServerReviewerAccounts(req.body.reviewer_accounts);
   const isReport = req.body.order_kind === 'REPORT' || (req.body.id && String(req.body.id).startsWith('rep-'));
 
+  let finalCreator = req.body.created_by?.trim() ? getSlotIndicatorName(req.body.created_by) : '';
+  const authInputer = req.user?.inputer || (req.user?.slot ? getSlotIndicatorName(req.user.slot) : (req.user?.role === 'admin' ? 'owner' : ''));
+  if (authInputer && authInputer !== 'adminshp') {
+    finalCreator = authInputer;
+  } else if (!finalCreator) {
+    finalCreator = authInputer || 'owner';
+  }
+
   const newReview = {
     id: req.body.id || ((isReport ? 'rep-' : 'map-') + Date.now().toString().slice(-6)),
     ...req.body,
+    created_by: finalCreator,
     order_kind: isReport ? 'REPORT' : 'REVIEW',
     reviewer_accounts: cleanAccounts,
     proof_link: req.body.proof_link || '',
@@ -927,7 +951,21 @@ app.get('/api/report_maps', async (req, res) => {
   res.json(filteredLocal);
 });
 
-app.post('/api/report_maps', requireAuth, async (req, res) => {
+app.post('/api/report_maps', requireAuth, async (req: any, res) => {
+  let finalCreator = req.body.created_by?.trim() ? getSlotIndicatorName(req.body.created_by) : '';
+  const authInputer = req.user?.inputer || (req.user?.slot ? getSlotIndicatorName(req.user.slot) : (req.user?.role === 'admin' ? 'owner' : ''));
+  if (authInputer && authInputer !== 'adminshp') {
+    finalCreator = authInputer;
+  } else if (!finalCreator) {
+    finalCreator = authInputer || 'owner';
+  }
+
+  console.log('⚡ [BACKEND API] POST /api/report_maps:', {
+    reqUser: req.user,
+    bodyCreatedBy: req.body.created_by,
+    resolvedFinalCreator: finalCreator
+  });
+
   const newReport = {
     id: req.body.id || ('rep-' + Date.now().toString().slice(-6)),
     maps_link: req.body.maps_link || '',
@@ -940,7 +978,7 @@ app.post('/api/report_maps', requireAuth, async (req, res) => {
     proof_link: req.body.proof_link || '',
     status: req.body.status || 'READY',
     payment_status: req.body.payment_status || 'UNPAID',
-    created_by: req.body.created_by || '',
+    created_by: finalCreator,
     created_at: req.body.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString()
   };

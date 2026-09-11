@@ -8,7 +8,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Product, Order, DashboardStats, ShopeeOrder, MapsReview, ReportMap } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
-import { getAuthHeaders } from './auth';
+import { getAuthHeaders, resolveActiveInputerIdentity, getSlotIndicatorName } from './auth';
 
 export function isDummyOrder(o: any): boolean {
   if (!o) return true;
@@ -1108,6 +1108,18 @@ export async function dbGetShopeeOrders(limit: number = 50000, forceRefresh: boo
 
 export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Promise<ShopeeOrder> {
   const orderId = orderData.id || 'shp-' + Date.now().toString().slice(-6);
+
+  console.log('⚡ [DEBUG SUPABASE dbCreateShopeeOrder] CALLED');
+  console.log('[DEBUG SUPABASE dbCreateShopeeOrder] Input orderData.created_by:', orderData.created_by);
+
+  let creator = orderData.created_by?.trim() ? getSlotIndicatorName(orderData.created_by.trim()) : '';
+  if (!creator || creator === 'adminshp1' || creator === 'admin' || creator === 'era') {
+    const verified = await resolveActiveInputerIdentity();
+    if (verified) creator = verified;
+  }
+
+  console.log('[DEBUG SUPABASE dbCreateShopeeOrder] Resolved final creator:', creator);
+
   const completeOrder: ShopeeOrder = {
     id: orderId,
     order_type: orderData.order_type || 'REPORT_ALL_SOSMED',
@@ -1122,7 +1134,7 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
     work_order: orderData.work_order || '',
     created_at: orderData.created_at || new Date().toISOString(),
     status: orderData.status || 'PENDING',
-    created_by: orderData.created_by || ''
+    created_by: creator
   };
 
   const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(completeOrder.notes, completeOrder.status);
@@ -1131,6 +1143,8 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
     status: dbStatus,
     notes: dbNotes
   };
+
+  console.log('[DEBUG SUPABASE dbCreateShopeeOrder] Submitting to Supabase with payload created_by =', dbOrder.created_by);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     for (const tbl of ['shopee_orders', 'shopee-orders']) {
@@ -1325,6 +1339,17 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
     .map(a => (typeof a === 'string' ? a.trim() : String(a).trim()))
     .filter(a => a.length > 0);
 
+  console.log('⚡ [DEBUG SUPABASE dbCreateMapsReview] CALLED');
+  console.log('[DEBUG SUPABASE dbCreateMapsReview] Input reviewData.created_by:', reviewData.created_by);
+
+  let creator = reviewData.created_by?.trim() ? getSlotIndicatorName(reviewData.created_by.trim()) : '';
+  if (!creator || creator === 'adminshp1' || creator === 'admin' || creator === 'era') {
+    const verified = await resolveActiveInputerIdentity();
+    if (verified) creator = verified;
+  }
+
+  console.log('[DEBUG SUPABASE dbCreateMapsReview] Resolved final creator:', creator);
+
   const completeReview: MapsReview = {
     id: mapId,
     client_name: reviewData.client_name || '',
@@ -1337,7 +1362,7 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
     store_name: reviewData.store_name || '',
     notes: reviewData.notes || '',
     review_type: reviewData.review_type || 'G_MAPS',
-    created_by: reviewData.created_by || '',
+    created_by: creator,
     payment_status: reviewData.payment_status || 'UNPAID',
     order_kind: reviewData.order_kind || (String(mapId).startsWith('rep-') ? 'REPORT' : 'REVIEW')
   };
@@ -1348,6 +1373,8 @@ export async function dbCreateMapsReview(reviewData: Partial<MapsReview>): Promi
     status: dbStatus,
     notes: dbNotes
   };
+
+  console.log('[DEBUG SUPABASE dbCreateMapsReview] Submitting to Supabase with payload created_by =', dbReview.created_by);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     for (const tbl of ['maps_orders', 'maps_order', 'maps_reviews']) {
@@ -1676,6 +1703,17 @@ export async function dbGetReportMaps(limit: number = 50000, forceRefresh: boole
 export async function dbCreateReportMap(data: Partial<ReportMap>): Promise<ReportMap> {
   const repId = data.id || ('rep-' + Date.now().toString().slice(-6));
 
+  console.log('⚡ [DEBUG SUPABASE dbCreateReportMap] CALLED');
+  console.log('[DEBUG SUPABASE dbCreateReportMap] Input data.created_by:', data.created_by);
+
+  let creator = data.created_by?.trim() ? getSlotIndicatorName(data.created_by.trim()) : '';
+  if (!creator || creator === 'adminshp1' || creator === 'admin' || creator === 'era') {
+    const verified = await resolveActiveInputerIdentity();
+    if (verified) creator = verified;
+  }
+
+  console.log('[DEBUG SUPABASE dbCreateReportMap] Resolved final creator:', creator);
+
   const completeReport: ReportMap = {
     id: repId,
     maps_link: data.maps_link || '',
@@ -1688,10 +1726,12 @@ export async function dbCreateReportMap(data: Partial<ReportMap>): Promise<Repor
     proof_link: data.proof_link || '',
     status: data.status || 'READY',
     payment_status: data.payment_status || 'UNPAID',
-    created_by: data.created_by || '',
+    created_by: creator,
     created_at: data.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
+
+  console.log('[DEBUG SUPABASE dbCreateReportMap] Submitting to Supabase with payload created_by =', completeReport.created_by);
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     try {

@@ -435,9 +435,12 @@ export default function App() {
                 currentLang={currentLang}
                 onInstallApp={handleInstallApp}
                 onSwitchToAdminShp={() => {
-                  const slot = getViewAsShpSlot() || 'adminshp1';
-                  setViewAsShpSlot(slot);
-                  setViewAsShpSlotState(slot);
+                  const user = getAuthUser();
+                  const slot = user?.slot || (user?.inputer && user.inputer !== 'adminshp' ? (user.inputer === 'vira' ? 'adminshp3' : user.inputer === 'cika' ? 'adminshp2' : user.inputer === 'ali' ? 'adminshp4' : user.inputer === 'era' ? 'adminshp1' : null) : null) || getViewAsShpSlot();
+                  if (slot) {
+                    setViewAsShpSlot(slot);
+                    setViewAsShpSlotState(slot);
+                  }
                 }}
               />
             )}

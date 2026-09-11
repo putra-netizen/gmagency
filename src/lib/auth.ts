@@ -66,6 +66,21 @@ try {
   }
 } catch (e) {}
 
+/**
+ * Standardize slot or username to order inputer identifier ('era', 'cika', 'vira', 'ali', 'owner', 'finance')
+ */
+export function getSlotIndicatorName(slot?: string): string {
+  if (!slot) return '';
+  const clean = slot.trim().toLowerCase();
+  if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com') return 'era';
+  if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com') return 'cika';
+  if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com') return 'vira';
+  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com') return 'ali';
+  if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com' || clean === 'superadmin') return 'owner';
+  if (clean === 'finance' || clean === 'gmfinance') return 'finance';
+  return clean;
+}
+
 // In-memory active user cache
 let cachedAuthUser: AuthUser | null = null;
 
@@ -154,7 +169,7 @@ export async function resolveUserRole(user: any): Promise<AuthUser> {
   const meta = user?.user_metadata || {};
   let role: 'admin' | 'adminshp' | 'finance' | 'worker' = 'admin';
   let slot: string | undefined = undefined;
-  let username = email.split('@')[0] || 'user';
+  let username = (email.split('@')[0] || meta.username || 'user').toLowerCase();
   let name = meta.full_name || meta.name || username;
 
   try {
@@ -169,37 +184,40 @@ export async function resolveUserRole(user: any): Promise<AuthUser> {
       slot = roleRow.slot;
       name = roleRow.display_name || name;
       username = roleRow.username || username;
-    } else {
-      // Pattern fallback
-      if (email.includes('era') || email.includes('cika') || email.includes('vira') || email.includes('ali') || email.includes('adminshp')) {
-        role = 'adminshp';
-        if (email.includes('era') || email.includes('adminshp1')) slot = 'adminshp1';
-        else if (email.includes('cika') || email.includes('adminshp2')) slot = 'adminshp2';
-        else if (email.includes('vira') || email.includes('adminshp3')) slot = 'adminshp3';
-        else if (email.includes('ali') || email.includes('adminshp4')) slot = 'adminshp4';
-      } else {
-        role = 'admin';
-      }
     }
-  } catch {
-    if (email.includes('era') || email.includes('cika') || email.includes('vira') || email.includes('ali') || email.includes('adminshp')) {
+  } catch {}
+
+  // If slot or role is not fully specified, use comprehensive string pattern detection
+  const searchStr = `${email} ${username} ${name} ${meta.role || ''} ${meta.slot || ''}`.toLowerCase();
+  if (!slot) {
+    if (searchStr.includes('adminshp1') || searchStr.includes('adminera') || searchStr.includes('era')) {
+      slot = 'adminshp1';
       role = 'adminshp';
-      if (email.includes('era') || email.includes('adminshp1')) slot = 'adminshp1';
-      else if (email.includes('cika') || email.includes('adminshp2')) slot = 'adminshp2';
-      else if (email.includes('vira') || email.includes('adminshp3')) slot = 'adminshp3';
-      else if (email.includes('ali') || email.includes('adminshp4')) slot = 'adminshp4';
-    } else {
-      role = 'admin';
+    } else if (searchStr.includes('adminshp2') || searchStr.includes('admincika') || searchStr.includes('cika')) {
+      slot = 'adminshp2';
+      role = 'adminshp';
+    } else if (searchStr.includes('adminshp3') || searchStr.includes('adminvira') || searchStr.includes('vira')) {
+      slot = 'adminshp3';
+      role = 'adminshp';
+    } else if (searchStr.includes('adminshp4') || searchStr.includes('adminali') || searchStr.includes('ali')) {
+      slot = 'adminshp4';
+      role = 'adminshp';
     }
+  }
+
+  if (searchStr.includes('admin') || searchStr.includes('owner') || searchStr.includes('gmowner')) {
+    if (!slot) role = 'admin';
+  } else if (searchStr.includes('finance')) {
+    role = 'finance';
   }
 
   // Determine slot indicator name for order inputer
   let inputer = 'owner';
   if (role === 'adminshp') {
-    if (slot === 'adminshp1' || username.includes('era')) inputer = 'era';
-    else if (slot === 'adminshp2' || username.includes('cika')) inputer = 'cika';
-    else if (slot === 'adminshp3' || username.includes('vira')) inputer = 'vira';
-    else if (slot === 'adminshp4' || username.includes('ali')) inputer = 'ali';
+    if (slot === 'adminshp1' || searchStr.includes('era')) inputer = 'era';
+    else if (slot === 'adminshp2' || searchStr.includes('cika')) inputer = 'cika';
+    else if (slot === 'adminshp3' || searchStr.includes('vira')) inputer = 'vira';
+    else if (slot === 'adminshp4' || searchStr.includes('ali')) inputer = 'ali';
     else inputer = 'adminshp';
   } else if (role === 'finance') {
     inputer = 'finance';
@@ -216,6 +234,95 @@ export async function resolveUserRole(user: any): Promise<AuthUser> {
     slot,
     inputer,
   };
+}
+
+/**
+ * Single Source of Truth for resolving the active creator/inputer ('era', 'cika', 'vira', 'ali', 'owner', etc.)
+ * Always checks active Supabase Auth session first, then active user state, and logs all debug data to browser console.
+ */
+export async function resolveActiveInputerIdentity(): Promise<string> {
+  console.group('🔍 [DEBUG resolveActiveInputerIdentity] Resolving Active Creator Identity');
+  
+  const rawViewAs = typeof window !== 'undefined' ? sessionStorage.getItem(VIEW_AS_SHP_KEY) : null;
+  console.log('[DEBUG 1] Raw sessionStorage VIEW_AS_SHP_KEY:', rawViewAs);
+
+  let sessionUser: any = null;
+  let liveUser: any = null;
+
+  // Step A: Query Supabase Auth Session
+  try {
+    const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+    sessionUser = sessionData?.session?.user || null;
+    console.log('[DEBUG 2] supabase.auth.getSession() result:', {
+      hasSession: !!sessionData?.session,
+      user_id: sessionUser?.id,
+      email: sessionUser?.email,
+      user_metadata: sessionUser?.user_metadata,
+      error: sessionErr?.message || null
+    });
+  } catch (err) {
+    console.warn('[DEBUG 2] Exception in getSession():', err);
+  }
+
+  // Step B: Query Supabase Auth live User
+  try {
+    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    liveUser = userData?.user || null;
+    console.log('[DEBUG 3] supabase.auth.getUser() result:', {
+      hasUser: !!liveUser,
+      user_id: liveUser?.id,
+      email: liveUser?.email,
+      user_metadata: liveUser?.user_metadata,
+      error: userErr?.message || null
+    });
+  } catch (err) {
+    console.warn('[DEBUG 3] Exception in getUser():', err);
+  }
+
+  // Active Supabase Auth user (liveUser preferred, fallback sessionUser)
+  const currentSupabaseUser = liveUser || sessionUser;
+
+  // Step C: Resolve user role & slot from Supabase User if available
+  let resolvedFromSupabase: AuthUser | null = null;
+  if (currentSupabaseUser) {
+    try {
+      resolvedFromSupabase = await resolveUserRole(currentSupabaseUser);
+      console.log('[DEBUG 4] resolveUserRole(currentSupabaseUser):', resolvedFromSupabase);
+    } catch (err) {
+      console.warn('[DEBUG 4] Exception in resolveUserRole():', err);
+    }
+  }
+
+  // Step D: Stored / In-memory user
+  const storedUser = getAuthUser();
+  console.log('[DEBUG 5] getAuthUser() from storage/memory:', storedUser);
+
+  let finalIdentity = '';
+
+  // Decision Logic:
+  // If active user is an adminshp employee (e.g. Vira, Cika, Era, Ali), their authenticated session is sovereign.
+  if (resolvedFromSupabase && resolvedFromSupabase.role === 'adminshp') {
+    finalIdentity = resolvedFromSupabase.inputer || (resolvedFromSupabase.slot ? getSlotIndicatorName(resolvedFromSupabase.slot) : getSlotIndicatorName(resolvedFromSupabase.username));
+    console.log('[DEBUG 6] Matched active Supabase adminshp session ->', finalIdentity);
+  } else if (storedUser && storedUser.role === 'adminshp') {
+    finalIdentity = storedUser.inputer || (storedUser.slot ? getSlotIndicatorName(storedUser.slot) : getSlotIndicatorName(storedUser.username));
+    console.log('[DEBUG 6] Matched stored adminshp user ->', finalIdentity);
+  } else if (rawViewAs && (resolvedFromSupabase?.role === 'admin' || storedUser?.role === 'admin')) {
+    // Only Super Admin can use "View As" mode override
+    finalIdentity = getSlotIndicatorName(rawViewAs);
+    console.log('[DEBUG 6] Super Admin viewAs override applied ->', finalIdentity);
+  } else if (resolvedFromSupabase?.role === 'admin' || storedUser?.role === 'admin') {
+    finalIdentity = 'owner';
+    console.log('[DEBUG 6] Super Admin active session ->', finalIdentity);
+  } else if (rawViewAs) {
+    finalIdentity = getSlotIndicatorName(rawViewAs);
+    console.log('[DEBUG 6] Fallback to viewAs ->', finalIdentity);
+  }
+
+  console.log('🎯 [DEBUG resolveActiveInputerIdentity FINAL RETURN]:', `"${finalIdentity}"`);
+  console.groupEnd();
+
+  return finalIdentity;
 }
 
 export function getAuthToken(): string | null {
@@ -262,15 +369,21 @@ export function saveAuthSession(token: string, user: AuthUser, rememberMe: boole
     if (user.role === 'admin') {
       sessionStorage.setItem('gm_admin_auth', 'true');
       if (rememberMe) localStorage.setItem('gm_admin_auth', 'true');
+      localStorage.removeItem('gm_adminshp_user');
+      sessionStorage.removeItem('gm_adminshp_user');
     } else if (user.role === 'adminshp') {
       sessionStorage.setItem('gm_adminshp_auth', 'true');
       if (rememberMe) localStorage.setItem('gm_adminshp_auth', 'true');
-      if (user.slot) {
-        sessionStorage.setItem('gm_adminshp_user', user.slot);
+      const targetSlot = user.slot || (user.inputer === 'vira' ? 'adminshp3' : user.inputer === 'cika' ? 'adminshp2' : user.inputer === 'ali' ? 'adminshp4' : user.inputer === 'era' ? 'adminshp1' : undefined);
+      if (targetSlot) {
+        sessionStorage.setItem('gm_adminshp_user', targetSlot);
+        sessionStorage.setItem(VIEW_AS_SHP_KEY, targetSlot);
         if (rememberMe) {
-          localStorage.setItem('gm_adminshp_user', user.slot);
-          localStorage.setItem(`gm_adminshp_auth_${user.slot}`, 'true');
+          localStorage.setItem('gm_adminshp_user', targetSlot);
+          localStorage.setItem(`gm_adminshp_auth_${targetSlot}`, 'true');
         }
+      } else {
+        sessionStorage.removeItem(VIEW_AS_SHP_KEY);
       }
     } else if (user.role === 'finance') {
       sessionStorage.setItem('gm_finance_device_auth', 'true');
@@ -372,15 +485,15 @@ export async function loginWithBackend(
     // Also try alternative domains in case user created them with @gmail.com or other domain
     candidateEmails.push(`${lower}@gmail.com`);
     if (lower === 'admin' || lower === 'gmadmin' || lower === 'owner') {
-      candidateEmails.push('gmowner@gmail.com', 'admin@gmail.com');
+      candidateEmails.push('gmowner@gmail.com', 'admin@gmail.com', 'internal@gmagency.com');
     } else if (lower === 'adminshp1' || lower === 'era') {
-      candidateEmails.push('adminera@gmail.com');
+      candidateEmails.push('adminera@gmail.com', 'adminera@gmagency.com');
     } else if (lower === 'adminshp2' || lower === 'cika') {
-      candidateEmails.push('admincika@gmail.com');
+      candidateEmails.push('admincika@gmail.com', 'admincika@gmagency.com');
     } else if (lower === 'adminshp3' || lower === 'vira') {
-      candidateEmails.push('adminvira@gmail.com');
+      candidateEmails.push('adminvira@gmail.com', 'adminvira@gmagency.com');
     } else if (lower === 'adminshp4' || lower === 'ali') {
-      candidateEmails.push('adminali@gmail.com');
+      candidateEmails.push('adminali@gmail.com', 'adminali@gmagency.com');
     }
   }
 
