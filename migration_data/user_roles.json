@@ -1,0 +1,57 @@
+[
+  {
+    "id": "1ff2468c-2789-41f3-bfd4-ddecedf3ac10",
+    "user_id": "31226b5d-f21c-48fd-ad85-c1a884dd429e",
+    "role": "admin",
+    "email": "internal@gmagency.com",
+    "username": "owner",
+    "slot": null,
+    "display_name": "Super Admin (Owner)",
+    "created_at": "2026-09-08T01:49:29.911947+00:00",
+    "updated_at": "2026-09-08T02:07:31.410638+00:00"
+  },
+  {
+    "id": "0c416463-5cb7-4ed7-9e9b-dad37aa2da86",
+    "user_id": "2c0a8503-c66f-4263-a3a2-19f8d567f344",
+    "role": "adminshp",
+    "email": "adminera@gmagency.com",
+    "username": "adminera",
+    "slot": "adminshp1",
+    "display_name": "Admin SHP 1 (Era)",
+    "created_at": "2026-09-08T01:49:29.911947+00:00",
+    "updated_at": "2026-09-08T02:07:31.410638+00:00"
+  },
+  {
+    "id": "9b688721-e8c8-4020-aa90-f4796200e573",
+    "user_id": "62b8bcbf-425d-4d94-9cd0-6d593c5b3920",
+    "role": "adminshp",
+    "email": "admincika@gmagency.com",
+    "username": "admincika",
+    "slot": "adminshp2",
+    "display_name": "Admin SHP 2 (Cika)",
+    "created_at": "2026-09-08T01:49:29.911947+00:00",
+    "updated_at": "2026-09-08T02:07:31.410638+00:00"
+  },
+  {
+    "id": "862ef5eb-96b7-4909-9139-7226930a6811",
+    "user_id": "78b36d8a-15d9-4890-8dc9-75c3fd4a3e54",
+    "role": "adminshp",
+    "email": "adminvira@gmagency.com",
+    "username": "adminvira",
+    "slot": "adminshp3",
+    "display_name": "Admin SHP 3 (Vira)",
+    "created_at": "2026-09-08T01:49:29.911947+00:00",
+    "updated_at": "2026-09-08T02:07:31.410638+00:00"
+  },
+  {
+    "id": "db1db201-7f56-417b-9714-6de27d095d49",
+    "user_id": "58c24428-92a3-4e1e-b186-c8a324b18587",
+    "role": "adminshp",
+    "email": "adminali@gmagency.com",
+    "username": "adminali",
+    "slot": "adminshp4",
+    "display_name": "Admin SHP 4 (Ali)",
+    "created_at": "2026-09-08T01:49:29.911947+00:00",
+    "updated_at": "2026-09-08T02:07:31.410638+00:00"
+  }
+]

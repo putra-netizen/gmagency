@@ -1,48 +1,96 @@
 import { jsPDF, GState } from 'jspdf';
 import { MapsReview } from '../types';
 
+export const GM_LOGO_URL = 'https://bqzeriisoekksdkceciy.supabase.co/storage/v1/object/public/LOGO-GM/getak%20upscaled%20(1).png';
+export const GM_LOGO_FALLBACK_URL = '/logo_gm_original.png';
+
 let cachedLogoBase64: string | null = null;
 
 /**
- * Preload and convert logo URL to Base64 image data URL
+ * Preload and convert the authentic Supabase GM Agency logo to Base64 image data URL
  */
 export async function getLogoBase64(): Promise<string | null> {
   if (cachedLogoBase64) return cachedLogoBase64;
 
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = 200;
-    canvas.height = 200;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      // Circle gradient background
-      const grad = ctx.createLinearGradient(0, 0, 200, 200);
-      grad.addColorStop(0, '#2563eb');
-      grad.addColorStop(1, '#4f46e5');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(100, 100, 95, 0, Math.PI * 2);
-      ctx.fill();
+  const urlsToTry = [GM_LOGO_URL, GM_LOGO_FALLBACK_URL];
 
-      // Inner border
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 4;
-      ctx.stroke();
+  for (const url of urlsToTry) {
+    // 1. Try loading via Image element + canvas for optimal PDF sizing & cross-origin handling
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            // Scale to max 800x800 for high resolution print without excessive file bloat
+            const maxDim = 800;
+            let w = img.naturalWidth || img.width || 800;
+            let h = img.naturalHeight || img.height || 800;
+            if (w > maxDim || h > maxDim) {
+              if (w >= h) {
+                h = Math.round((h * maxDim) / w);
+                w = maxDim;
+              } else {
+                w = Math.round((w * maxDim) / h);
+                h = maxDim;
+              }
+            }
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return reject(new Error('Canvas 2D context not available'));
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/png'));
+          } catch (canvasErr) {
+            reject(canvasErr);
+          }
+        };
+        img.onerror = (err) => reject(err);
+        img.src = url;
+      });
 
-      // Text GM
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 75px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('GM', 100, 100);
-
-      cachedLogoBase64 = canvas.toDataURL('image/png');
-      return cachedLogoBase64;
+      if (base64 && base64.startsWith('data:image')) {
+        cachedLogoBase64 = base64;
+        return cachedLogoBase64;
+      }
+    } catch (imgErr) {
+      console.warn(`[PDF] Image/canvas load failed for ${url}:`, imgErr);
     }
-  } catch (err) {
-    console.warn('Canvas logo export error:', err);
+
+    // 2. Fallback to direct fetch & FileReader
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const blob = await response.blob();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === 'string') resolve(reader.result);
+            else reject(new Error('FileReader result is not a string'));
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        if (base64 && base64.startsWith('data:image')) {
+          cachedLogoBase64 = base64;
+          return cachedLogoBase64;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn(`[PDF] Direct fetch failed for ${url}:`, fetchErr);
+    }
   }
-  return null;
+
+  return cachedLogoBase64;
+}
+
+// Preload on startup in browser environment so PDF export is instant
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    getLogoBase64().catch(() => {});
+  }, 200);
 }
 
 /**
@@ -104,22 +152,22 @@ export async function generateMapsReportPDF(item: MapsReview, adminName?: string
     doc.setFillColor(37, 99, 235); // Blue 600
     doc.rect(0, 0, 210, 4, 'F');
 
-    // Header Logo (x=15, y=10, size=15x15mm)
+    // Header Logo (x=15, y=9, size=16x16mm)
     if (logoBase64) {
-      doc.addImage(logoBase64, 'PNG', 15, 10, 15, 15, undefined, 'FAST');
+      doc.addImage(logoBase64, 'PNG', 15, 9, 16, 16, undefined, 'FAST');
     }
 
-    // Header Title Next to Logo (x=33, y=17)
+    // Header Title Next to Logo (x=34, y=17)
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(20);
     doc.setTextColor(30, 58, 138); // Blue/Navy
-    doc.text("GM AGENCY", 33, 18);
+    doc.text("GM AGENCY", 34, 17.5);
 
     // Header Subtitle
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(59, 130, 246); // Blue 500
-    doc.text("LAMPIRAN BUKTI ULASAN REVIEWER REAL", 33, 23.5);
+    doc.text("LAMPIRAN BUKTI ULASAN REVIEWER REAL", 34, 23.5);
 
     // Right Header Info
     doc.setFont('helvetica', 'normal');

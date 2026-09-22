@@ -6,7 +6,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
 
-export const GM_LOGO_URL = 'https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/LOGO-GM/getak%20upscaled%20(1).png';
+export const GM_LOGO_URL = 'https://bqzeriisoekksdkceciy.supabase.co/storage/v1/object/public/LOGO-GM/getak%20upscaled%20(1).png';
+export const GM_LOGO_FALLBACK = '/logo_gm_original.png';
 
 interface GMLogoProps {
   className?: string;
@@ -64,6 +65,11 @@ export default function GMLogo({ className = '', size = 'md', showSubtitle = tru
             alt="GM Agency Logo" 
             className="w-full h-full object-cover rounded-full select-none"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              if (e.currentTarget.src !== GM_LOGO_FALLBACK) {
+                e.currentTarget.src = GM_LOGO_FALLBACK;
+              }
+            }}
           />
         </div>
       </div>

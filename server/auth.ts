@@ -8,8 +8,8 @@ import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
-const DEFAULT_SUPABASE_URL = 'https://reonysrsoaepzykwwfzw.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
+const DEFAULT_SUPABASE_URL = 'https://bqzeriisoekksdkceciy.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxemVyaWlzb2Vra3Nka2NlY2l5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwNzA0MTksImV4cCI6MjEwNTY0NjQxOX0.B697OaqSHOgp5Lrrme9HoZC2TmKLnonhVgW0uPjTWmg';
 
 function decodeBase64String(str: string): string {
   try {
@@ -40,7 +40,7 @@ function sanitizeSupabaseKey(key: string | undefined): string {
       if (!headerStr || !payloadStr) return false;
       const header = JSON.parse(headerStr);
       const payload = JSON.parse(payloadStr);
-      return Boolean(header.alg && payload.ref === 'reonysrsoaepzykwwfzw');
+      return Boolean(header.alg && (payload.role === 'anon' || payload.role === 'service_role' || payload.iss === 'supabase' || payload.ref));
     } catch {
       return false;
     }
@@ -64,7 +64,7 @@ function sanitizeSupabaseKey(key: string | undefined): string {
       const payloadStr = decodeBase64String(parts[i]);
       if (payloadStr) {
         const payload = JSON.parse(payloadStr);
-        if (payload.ref === 'reonysrsoaepzykwwfzw') {
+        if (payload.role === 'anon' || payload.role === 'service_role' || payload.iss === 'supabase' || payload.ref) {
           const candidate = `${standardHeader}.${parts[i]}.${parts[i + 1]}`;
           if (isValidJwtForNewProject(candidate)) {
             return candidate;
