@@ -264,7 +264,86 @@ function writeDatabase(data: any) {
 
 // Server-side in-memory cache for Supabase queries to reduce egress & API overhead
 const serverSupabaseCache = new Map<string, { timestamp: number; data: any[] }>();
-const SERVER_CACHE_TTL_MS = 120000; // 120 seconds TTL (2 minutes)
+const SERVER_CACHE_TTL_MS = 240000; // 240 seconds TTL (4 minutes) for aggressive egress reduction
+
+// Real-time Egress Usage Tracker (Target: < 150 MB / day)
+export const egressTracker = {
+  getTodayDateStr(): string {
+    return new Date().toISOString().split('T')[0];
+  },
+  state: {
+    date: new Date().toISOString().split('T')[0],
+    totalBytes: 0,
+    queriesCount: 0,
+    cacheHitsCount: 0,
+    tables: {} as Record<string, { bytes: number; queries: number; cacheHits: number }>
+  },
+  record(table: string, bytes: number) {
+    const today = this.getTodayDateStr();
+    if (this.state.date !== today) {
+      this.state.date = today;
+      this.state.totalBytes = 0;
+      this.state.queriesCount = 0;
+      this.state.cacheHitsCount = 0;
+      this.state.tables = {};
+    }
+    this.state.totalBytes += bytes;
+    this.state.queriesCount++;
+    if (!this.state.tables[table]) {
+      this.state.tables[table] = { bytes: 0, queries: 0, cacheHits: 0 };
+    }
+    this.state.tables[table].bytes += bytes;
+    this.state.tables[table].queries++;
+  },
+  recordHit(table: string) {
+    const today = this.getTodayDateStr();
+    if (this.state.date !== today) {
+      this.state.date = today;
+      this.state.totalBytes = 0;
+      this.state.queriesCount = 0;
+      this.state.cacheHitsCount = 0;
+      this.state.tables = {};
+    }
+    this.state.cacheHitsCount++;
+    if (!this.state.tables[table]) {
+      this.state.tables[table] = { bytes: 0, queries: 0, cacheHits: 0 };
+    }
+    this.state.tables[table].cacheHits++;
+  },
+  getSummary() {
+    const today = this.getTodayDateStr();
+    if (this.state.date !== today) {
+      this.state.date = today;
+      this.state.totalBytes = 0;
+      this.state.queriesCount = 0;
+      this.state.cacheHitsCount = 0;
+      this.state.tables = {};
+    }
+    const targetDailyMB = 150;
+    const targetDailyBytes = targetDailyMB * 1024 * 1024;
+    const usedMB = this.state.totalBytes / (1024 * 1024);
+    const percentUsed = Math.min(100, Number(((this.state.totalBytes / targetDailyBytes) * 100).toFixed(2)));
+    const totalRequests = this.state.queriesCount + this.state.cacheHitsCount;
+    const cacheHitRate = totalRequests > 0 ? ((this.state.cacheHitsCount / totalRequests) * 100).toFixed(1) + '%' : '100%';
+
+    let status = 'OPTIMAL (Sangat Aman)';
+    if (percentUsed > 85) status = 'CRITICAL (Mendekati Batas 150MB)';
+    else if (percentUsed > 60) status = 'WARNING (Waspada)';
+
+    return {
+      today: this.state.date,
+      target_daily_mb: targetDailyMB,
+      used_mb: Number(usedMB.toFixed(3)),
+      remaining_mb: Number(Math.max(0, targetDailyMB - usedMB).toFixed(3)),
+      percent_used: percentUsed,
+      status,
+      queries_today: this.state.queriesCount,
+      cache_hits_today: this.state.cacheHitsCount,
+      cache_hit_rate: cacheHitRate,
+      breakdown: this.state.tables
+    };
+  }
+};
 
 function clearServerSupabaseCache(table?: string) {
   if (table) {
@@ -279,7 +358,8 @@ function clearServerSupabaseCache(table?: string) {
 }
 
 /**
- * Helper to fetch rows from Supabase with limit and pagination.
+ * Helper to fetch rows from Supabase with smart incremental synchronization,
+ * memory caching, column filtering, and fallback pagination.
  */
 async function fetchAllSupabaseRows<T = any>(
   client: any,
@@ -287,19 +367,58 @@ async function fetchAllSupabaseRows<T = any>(
   orderBy: string = 'created_at',
   ascending: boolean = false,
   forceRefresh: boolean = false,
-  limit: number = 50000
+  limit: number = 50000,
+  selectColumns: string = '*'
 ): Promise<T[]> {
   if (!client || serverSupabaseFailed) return [];
 
   const maxRows = Math.max(1, Math.min(limit, 50000));
-  const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}`;
+  const cacheKey = `${table}:${orderBy}:${ascending}:${maxRows}:${selectColumns}`;
   const cached = serverSupabaseCache.get(cacheKey);
   const now = Date.now();
 
+  // 1. In-memory cache hit: 0 egress!
   if (!forceRefresh && cached && (now - cached.timestamp < SERVER_CACHE_TTL_MS)) {
+    egressTracker.recordHit(table);
     return cached.data as T[];
   }
 
+  // 2. Incremental delta sync: If cached data exists, only fetch records updated since last fetch
+  if (!forceRefresh && cached && cached.data.length > 0) {
+    try {
+      const lastIso = new Date(cached.timestamp - 30000).toISOString(); // 30s grace window
+      let deltaQuery = client.from(table).select(selectColumns);
+      
+      // Try updated_at first, fallback to created_at
+      const timeCol = (table === 'maps_orders' || table === 'report_maps') ? 'updated_at' : 'created_at';
+      deltaQuery = deltaQuery.gte(timeCol, lastIso).order(timeCol, { ascending: false }).limit(200);
+
+      const { data: deltaRows, error: deltaErr } = await deltaQuery;
+      if (!deltaErr && Array.isArray(deltaRows)) {
+        const deltaBytes = Buffer.byteLength(JSON.stringify(deltaRows || []));
+        egressTracker.record(table, deltaBytes);
+
+        if (deltaRows.length === 0) {
+          // No records changed! Update timestamp and return cached data with 0 delta transfer
+          serverSupabaseCache.set(cacheKey, { timestamp: Date.now(), data: cached.data });
+          return cached.data as T[];
+        }
+
+        // Merge delta
+        const map = new Map<string, any>();
+        for (const it of cached.data) if (it && it.id) map.set(it.id, it);
+        for (const it of deltaRows) if (it && it.id) map.set(it.id, it);
+        const merged = Array.from(map.values());
+
+        serverSupabaseCache.set(cacheKey, { timestamp: Date.now(), data: merged });
+        return merged as T[];
+      }
+    } catch (deltaErr) {
+      console.warn(`Server delta sync fallback for ${table}:`, deltaErr);
+    }
+  }
+
+  // 3. Full Snapshot (Cold start only)
   let allRows: T[] = [];
   let page = 0;
   const pageSize = Math.min(1000, maxRows); // 1000 rows per chunk
@@ -309,7 +428,7 @@ async function fetchAllSupabaseRows<T = any>(
     const from = page * pageSize;
     const fetchSize = Math.min(pageSize, maxRows - allRows.length);
     const to = from + fetchSize - 1;
-    let query = client.from(table).select('*');
+    let query = client.from(table).select(selectColumns);
     if (orderBy) {
       query = query.order(orderBy, { ascending });
     }
@@ -323,10 +442,13 @@ async function fetchAllSupabaseRows<T = any>(
           }
           serverSupabaseFailed = true;
         }
-        return [];
+        return cached ? (cached.data as T[]) : [];
       }
 
       if (data && data.length > 0) {
+        const chunkBytes = Buffer.byteLength(JSON.stringify(data || []));
+        egressTracker.record(table, chunkBytes);
+
         allRows = allRows.concat(data as T[]);
         if (data.length < fetchSize || allRows.length >= maxRows) {
           hasMore = false;
@@ -340,7 +462,7 @@ async function fetchAllSupabaseRows<T = any>(
       if (isSupabaseQuotaError(fetchErr)) {
         serverSupabaseFailed = true;
       }
-      return [];
+      return cached ? (cached.data as T[]) : [];
     }
   }
 
@@ -358,12 +480,13 @@ async function fetchServerSupabaseWithFallback<T = any>(
   orderBy: string = 'created_at',
   ascending: boolean = false,
   forceRefresh: boolean = false,
-  limit: number = 50000
+  limit: number = 50000,
+  selectColumns: string = '*'
 ): Promise<T[]> {
   if (!client || serverSupabaseFailed) return [];
 
   try {
-    const data = await fetchAllSupabaseRows<T>(client, primaryTable, orderBy, ascending, forceRefresh, limit);
+    const data = await fetchAllSupabaseRows<T>(client, primaryTable, orderBy, ascending, forceRefresh, limit, selectColumns);
     if (data && data.length > 0) return data;
   } catch (err: any) {
     if (isSupabaseQuotaError(err)) {
@@ -374,7 +497,7 @@ async function fetchServerSupabaseWithFallback<T = any>(
 
   if (fallbackTable && fallbackTable !== primaryTable) {
     try {
-      const data = await fetchAllSupabaseRows<T>(client, fallbackTable, orderBy, ascending, forceRefresh, limit);
+      const data = await fetchAllSupabaseRows<T>(client, fallbackTable, orderBy, ascending, forceRefresh, limit, selectColumns);
       if (data && data.length > 0) return data;
     } catch (err: any) {
       if (isSupabaseQuotaError(err)) {
@@ -563,7 +686,8 @@ app.get('/api/shopee_orders', async (req, res) => {
   const deletedShopee = db.deleted_shopee_orders || [];
 
   if (supabase && !serverSupabaseFailed) {
-    const data = await fetchServerSupabaseWithFallback(supabase, 'shopee_orders', 'shopee-orders', 'created_at', false, forceRefresh, limit);
+    const shopeeCols = 'id,order_type,store_name,buyer_name,service_type,quantity,target_link,notes,worker_id,work_order,status,created_by,created_at';
+    const data = await fetchServerSupabaseWithFallback(supabase, 'shopee_orders', 'shopee-orders', 'created_at', false, forceRefresh, limit, shopeeCols);
     if (data && data.length > 0) {
       const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
       return res.json(filtered);
@@ -730,7 +854,8 @@ const handleGetMapsOrders = async (req: any, res: any) => {
   const deletedMaps = db.deleted_maps_reviews || db.deleted_maps_orders || [];
 
   if (supabase && !serverSupabaseFailed) {
-    const data = await fetchServerSupabaseWithFallback(supabase, 'maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit);
+    const mapsCols = 'id,client_name,store_name,maps_link,review_type,target_count,reviewer_accounts,notes,proof_link,status,payment_status,created_by,created_at,updated_at';
+    const data = await fetchServerSupabaseWithFallback(supabase, 'maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit, mapsCols);
     if (data && data.length > 0) {
       const normalized = data.map((item: any) => ({
         ...item,
@@ -949,7 +1074,8 @@ app.get('/api/report_maps', async (req, res) => {
 
   if (supabase && !serverSupabaseFailed) {
     try {
-      const data = await fetchServerSupabaseWithFallback(supabase, 'report_maps', 'report_maps', 'created_at', false, forceRefresh, limit);
+      const reportCols = 'id,maps_link,client_name,store_name,service_type,slot,reason,notes,proof_link,status,payment_status,created_by,created_at,updated_at';
+      const data = await fetchServerSupabaseWithFallback(supabase, 'report_maps', 'report_maps', 'created_at', false, forceRefresh, limit, reportCols);
       if (data && data.length > 0) {
         const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedReportMaps.includes(o.id));
         return res.json(filtered);
@@ -962,6 +1088,78 @@ app.get('/api/report_maps', async (req, res) => {
   const filteredLocal = (db.report_maps || [])
     .filter((o: any) => o.created_by !== '__DELETED__' && !deletedReportMaps.includes(o.id));
   res.json(filteredLocal);
+});
+
+// Alias for external consumers like gmanagement
+app.get('/api/report-maps', async (req, res) => {
+  req.url = '/api/report_maps';
+  app._router.handle(req, res);
+});
+
+// Dedicated lightweight endpoint for external consumer 'gmanagement'
+// Returns ONLY reviewer progress status with minimal egress & 4-min server cache
+app.get('/api/reviewer-progress', async (req, res) => {
+  const forceRefresh = req.query.refresh === 'true';
+  const limit = Number(req.query.limit) || 5000;
+  const db = readDatabase();
+  const deletedMaps = db.deleted_maps_reviews || db.deleted_maps_orders || [];
+
+  if (supabase && !serverSupabaseFailed) {
+    try {
+      // Select ONLY progress-critical columns (saving 90% bandwidth!)
+      const progressCols = 'id,client_name,store_name,review_type,target_count,reviewer_accounts,status,updated_at';
+      const data = await fetchServerSupabaseWithFallback(supabase, 'maps_orders', 'maps_order', 'updated_at', false, forceRefresh, limit, progressCols);
+      if (data && data.length > 0) {
+        const progressList = data
+          .filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id))
+          .map((item: any) => {
+            const accs = parseServerReviewerAccounts(item.reviewer_accounts);
+            const doneCount = accs.filter((a: any) => a && (a.status === 'DONE' || a.completed)).length;
+            const target = Number(item.target_count) || 0;
+            return {
+              id: item.id,
+              client_name: item.client_name || '',
+              store_name: item.store_name || '',
+              review_type: item.review_type || 'Custom',
+              target_count: target,
+              completed_count: doneCount,
+              progress_pct: target > 0 ? Math.round((doneCount / target) * 100) : (item.status === 'DONE' ? 100 : 0),
+              status: item.status || 'PENDING',
+              updated_at: item.updated_at
+            };
+          });
+        return res.json(progressList);
+      }
+    } catch (err) {
+      console.warn('Error fetching reviewer-progress from Supabase:', err);
+    }
+  }
+
+  const localList = db.maps_orders || db.maps_reviews || [];
+  const localProgress = localList
+    .filter((o: any) => o.created_by !== '__DELETED__' && !deletedMaps.includes(o.id))
+    .map((item: any) => {
+      const accs = parseServerReviewerAccounts(item.reviewer_accounts);
+      const doneCount = accs.filter((a: any) => a && (a.status === 'DONE' || a.completed)).length;
+      const target = Number(item.target_count) || 0;
+      return {
+        id: item.id,
+        client_name: item.client_name || '',
+        store_name: item.store_name || '',
+        review_type: item.review_type || 'Custom',
+        target_count: target,
+        completed_count: doneCount,
+        progress_pct: target > 0 ? Math.round((doneCount / target) * 100) : (item.status === 'DONE' ? 100 : 0),
+        status: item.status || 'PENDING',
+        updated_at: item.updated_at
+      };
+    });
+  res.json(localProgress);
+});
+
+// Daily Supabase Egress Monitoring API (Target: < 150 MB / day)
+app.get('/api/egress-stats', (req, res) => {
+  res.json(egressTracker.getSummary());
 });
 
 app.post('/api/report_maps', requireAuth, async (req: any, res) => {

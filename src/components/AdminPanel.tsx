@@ -27,6 +27,7 @@ import { parseAccountsList } from '../utils/csvExport';
 import { pauseAutoSyncFor } from '../utils/autoSyncManager';
 import { sanitizeUrl } from '../utils/security';
 import { loginWithBackend, clientLogout, getAuthHeaders, saveAuthSession, setViewAsShpSlot } from '../lib/auth';
+import { EgressMonitorBadge } from './EgressMonitorBadge';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, EyeOff, Link2, Phone, Calendar, RefreshCw, 
@@ -1983,6 +1984,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                         Kinerja Operasional Dashboard
                       </h2>
                     </div>
+                    <EgressMonitorBadge />
                   </div>
                   
                   <div className={`grid gap-3 sm:gap-4 ${showWebCard ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>

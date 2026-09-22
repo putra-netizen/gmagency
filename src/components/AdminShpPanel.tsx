@@ -758,9 +758,9 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
     window.addEventListener('gm_spreadsheet_data_synced', handleSyncedEvent);
     window.addEventListener('gm_supabase_data_synced', handleSyncedEvent);
 
-    // Background polling interval every 15s for genuine real-time parity with AdminPanel
+    // Background polling interval relaxed to 120s with cache-awareness to stay well within 150MB/day quota
     const autoRefreshInterval = setInterval(() => {
-      if (!isAuthenticated) return;
+      if (!isAuthenticated || document.hidden) return;
       const now = Date.now();
       dbGetMapsReviews(50000, false).then(mapsData => {
         setMapsReviews(prev => {
@@ -797,7 +797,7 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
       dbGetReportMaps(50000, false).then(reportsData => {
         setReportMaps(reportsData);
       }).catch(console.error);
-    }, 15000);
+    }, 120000);
 
     return () => {
       clearInterval(autoRefreshInterval);

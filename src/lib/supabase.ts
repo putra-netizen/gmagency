@@ -173,7 +173,93 @@ export function dbIsSupabaseConnected(): boolean {
 
 // In-memory cache for fetchAllSupabaseRows to reduce Egress
 const supabaseQueryCache = new Map<string, { timestamp: number; data: any[] }>();
-const CACHE_TTL_MS = 120000; // 120 seconds (2 minutes) cache TTL for efficient egress management
+const CACHE_TTL_MS = 180000; // 180 seconds (3 minutes) cache TTL for efficient egress management
+
+// Client-side Egress Tracker for Vercel/Static hosting environments
+export const clientEgressTracker = {
+  getToday(): string {
+    return new Date().toISOString().split('T')[0];
+  },
+  getStored() {
+    try {
+      const raw = localStorage.getItem('gm_client_egress_tracker');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed.date === this.getToday()) return parsed;
+    } catch {}
+    return null;
+  },
+  record(table: string, bytes: number) {
+    const today = this.getToday();
+    const current = this.getStored() || {
+      date: today,
+      totalBytes: 0,
+      queriesCount: 0,
+      cacheHitsCount: 0,
+      tables: {} as Record<string, { bytes: number; queries: number; cacheHits: number }>
+    };
+    current.totalBytes += bytes;
+    current.queriesCount++;
+    if (!current.tables[table]) {
+      current.tables[table] = { bytes: 0, queries: 0, cacheHits: 0 };
+    }
+    current.tables[table].bytes += bytes;
+    current.tables[table].queries++;
+    try {
+      localStorage.setItem('gm_client_egress_tracker', JSON.stringify(current));
+    } catch {}
+  },
+  recordHit(table: string) {
+    const today = this.getToday();
+    const current = this.getStored() || {
+      date: today,
+      totalBytes: 0,
+      queriesCount: 0,
+      cacheHitsCount: 0,
+      tables: {} as Record<string, { bytes: number; queries: number; cacheHits: number }>
+    };
+    current.cacheHitsCount++;
+    if (!current.tables[table]) {
+      current.tables[table] = { bytes: 0, queries: 0, cacheHits: 0 };
+    }
+    current.tables[table].cacheHits++;
+    try {
+      localStorage.setItem('gm_client_egress_tracker', JSON.stringify(current));
+    } catch {}
+  },
+  getSummary() {
+    const current = this.getStored() || {
+      date: this.getToday(),
+      totalBytes: 0,
+      queriesCount: 0,
+      cacheHitsCount: 0,
+      tables: {}
+    };
+    const targetDailyMB = 150;
+    const targetDailyBytes = targetDailyMB * 1024 * 1024;
+    const usedMB = current.totalBytes / (1024 * 1024);
+    const percentUsed = Math.min(100, Number(((current.totalBytes / targetDailyBytes) * 100).toFixed(2)));
+    const totalRequests = current.queriesCount + current.cacheHitsCount;
+    const cacheHitRate = totalRequests > 0 ? ((current.cacheHitsCount / totalRequests) * 100).toFixed(1) + '%' : '100%';
+
+    let status = 'OPTIMAL (Sangat Aman)';
+    if (percentUsed > 85) status = 'CRITICAL (Mendekati Batas 150MB)';
+    else if (percentUsed > 60) status = 'WARNING (Waspada)';
+
+    return {
+      today: current.date,
+      target_daily_mb: targetDailyMB,
+      used_mb: Number(usedMB.toFixed(3)),
+      remaining_mb: Number(Math.max(0, targetDailyMB - usedMB).toFixed(3)),
+      percent_used: percentUsed,
+      status,
+      queries_today: current.queriesCount,
+      cache_hits_today: current.cacheHitsCount,
+      cache_hit_rate: cacheHitRate,
+      breakdown: current.tables
+    };
+  }
+};
 
 export function clearSupabaseCache(table?: string) {
   if (table) {
@@ -211,7 +297,7 @@ function mergeIncrementalRows<T extends { id?: string; created_at?: string }>(ex
 
 /**
  * Helper to fetch rows from Supabase with smart incremental synchronization,
- * memory caching, and fallback pagination.
+ * memory caching, column selection, and fallback pagination.
  */
 export async function fetchAllSupabaseRows<T = any>(
   client: any,
@@ -231,20 +317,30 @@ export async function fetchAllSupabaseRows<T = any>(
 
   // 1. If cache is still valid within CACHE_TTL_MS and no forceRefresh, return immediately with 0 egress
   if (!forceRefresh && cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+    clientEgressTracker.recordHit(table);
     return cached.data as T[];
   }
 
-  // 2. Incremental Sync Strategy: If we already have existing cached data and this is a routine refresh,
-  // query only the most recent 100 records (delta) instead of re-downloading all ~4,000 rows.
+  // 2. Smart Incremental Delta Sync: If we already have existing cached data,
+  // query only rows updated since our last sync timestamp (.gte('updated_at' / 'created_at', lastIso))
   if (!forceRefresh && cached && cached.data.length > 0) {
     try {
-      let deltaQuery = client.from(table).select(selectColumns);
+      const lastIso = new Date(cached.timestamp - 30000).toISOString(); // 30s grace window
+      const timeCol = (table === 'maps_orders' || table === 'report_maps') ? 'updated_at' : 'created_at';
+      let deltaQuery = client.from(table).select(selectColumns).gte(timeCol, lastIso);
       if (orderBy) {
-        deltaQuery = deltaQuery.order(orderBy, { ascending: false });
+        deltaQuery = deltaQuery.order(timeCol, { ascending: false });
       }
-      const { data: deltaRows, error: deltaErr } = await deltaQuery.limit(100);
+      const { data: deltaRows, error: deltaErr } = await deltaQuery.limit(200);
 
       if (!deltaErr && Array.isArray(deltaRows)) {
+        const estBytes = deltaRows.length === 0 ? 2 : JSON.stringify(deltaRows).length;
+        clientEgressTracker.record(table, estBytes);
+        if (deltaRows.length === 0) {
+          // No records changed! Update timestamp and return cached data with 0 data transfer
+          supabaseQueryCache.set(cacheKey, { timestamp: Date.now(), data: cached.data });
+          return cached.data as T[];
+        }
         const merged = mergeIncrementalRows(cached.data as any[], deltaRows as any[]);
         supabaseQueryCache.set(cacheKey, { timestamp: Date.now(), data: merged as any });
         return merged as T[];
@@ -281,6 +377,7 @@ export async function fetchAllSupabaseRows<T = any>(
     }
 
     if (data && data.length > 0) {
+      clientEgressTracker.record(table, JSON.stringify(data).length);
       allRows = allRows.concat(data as T[]);
       if (data.length < fetchSize || allRows.length >= maxRows) {
         hasMore = false;
@@ -1102,8 +1199,10 @@ export async function dbGetShopeeOrders(limit: number = 50000, forceRefresh: boo
   const deletedShopee = getClientDeletedShopeeOrders();
   let list: ShopeeOrder[] = [];
 
+  const shopeeCols = 'id,order_type,store_name,buyer_name,service_type,quantity,target_link,notes,worker_id,work_order,status,created_by,created_at';
+
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    list = await fetchSupabaseTableWithFallback<ShopeeOrder>('shopee_orders', 'shopee-orders', 'created_at', false, forceRefresh, limit);
+    list = await fetchSupabaseTableWithFallback<ShopeeOrder>('shopee_orders', 'shopee-orders', 'created_at', false, forceRefresh, limit, shopeeCols);
   }
 
   if (list.length === 0) {
@@ -1325,7 +1424,7 @@ export async function dbGetMapsReviews(limit: number = 50000, forceRefresh: bool
   let list: MapsReview[] = [];
 
   // Safe column selection for maps_orders (excluding order_kind which does not exist in maps_orders schema)
-  const safeMapsCols = 'id, store_name, client_name, review_type, target_count, maps_link, notes, proof_link, status, payment_status, created_by, created_at, reviewer_accounts';
+  const safeMapsCols = 'id, store_name, client_name, review_type, target_count, maps_link, notes, proof_link, status, payment_status, created_by, created_at, reviewer_accounts, updated_at';
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     list = await fetchSupabaseTableWithFallback<MapsReview>('maps_orders', 'maps_order', 'created_at', false, forceRefresh, limit, safeMapsCols);
