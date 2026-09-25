@@ -15,6 +15,7 @@ import {
   dbUpdateReportMap,
   dbDeleteReportMap,
   dbIsSupabaseConnected,
+  getShopeeOrderFormattedText,
   supabase
 } from '../lib/supabase';
 import { logAdminShpAction } from '../utils/adminshpLogs';
@@ -549,7 +550,16 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
         service_type: editShpServiceType,
         quantity: editShpQuantity,
         target_link: editShpTargetLink,
-        notes: editShpNotes
+        notes: editShpNotes,
+        formatted_text: getShopeeOrderFormattedText({
+          ...editingShopeeOrder,
+          store_name: editShpStoreName,
+          buyer_name: editShpBuyerName,
+          service_type: editShpServiceType,
+          quantity: editShpQuantity,
+          target_link: editShpTargetLink,
+          notes: editShpNotes
+        })
       };
       await dbUpdateShopeeOrder(editingShopeeOrder.id, updated);
       toast.success(currentLang === 'id' ? 'Pesanan Shopee berhasil diperbarui' : 'Shopee order updated successfully');
@@ -892,9 +902,14 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
     window.dispatchEvent(new Event('gm_auth_changed'));
   };
 
-  // Helper to copy text to clipboard
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
+  // Helper to copy text to clipboard safely
+  const copyToClipboard = (text: string | undefined | null, id: string) => {
+    const textToCopy = (text && typeof text === 'string' && text !== 'undefined' && text !== 'null') ? text.trim() : '';
+    if (!textToCopy) {
+      toast.error('Format teks kosong atau tidak tersedia!');
+      return;
+    }
+    navigator.clipboard.writeText(textToCopy);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -2168,6 +2183,7 @@ Format Chat : ${data.notes || '-'}`;
                       ) : (
                         paginatedShopeeOrders.map((order) => {
                           const isSosmed = order.order_type === 'REPORT_ALL_SOSMED';
+                          const formatStr = getShopeeOrderFormattedText(order);
                           return (
                             <tr key={order.id} className="hover:bg-slate-50/40 transition-colors">
                               {/* ID / Tipe */}
@@ -2245,10 +2261,10 @@ Format Chat : ${data.notes || '-'}`;
                               <td className="px-4 py-3">
                                 <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 relative group max-h-[110px] overflow-y-auto">
                                   <pre className="font-mono text-[9px] text-slate-600 leading-normal whitespace-pre-wrap select-all">
-                                    {order.formatted_text}
+                                    {formatStr}
                                   </pre>
                                   <button
-                                    onClick={() => copyToClipboard(order.formatted_text, order.id)}
+                                    onClick={() => copyToClipboard(formatStr, order.id)}
                                     className="absolute top-1.5 right-1.5 bg-white border border-slate-200 hover:border-slate-400 p-1 rounded-lg shadow-sm opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                     title="Salin Format"
                                   >
@@ -2325,7 +2341,7 @@ Format Chat : ${data.notes || '-'}`;
 
                                 <button
                                   type="button"
-                                  onClick={() => copyToClipboard(order.formatted_text, order.id)}
+                                  onClick={() => copyToClipboard(formatStr, order.id)}
                                   className={`w-full mt-1.5 px-2 py-1.5 text-[9px] font-black rounded-lg border flex items-center justify-center gap-1 transition-all cursor-pointer ${
                                     copiedId === order.id
                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'

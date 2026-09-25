@@ -13,7 +13,7 @@ import {
   dbGetShopeeOrders, dbCreateShopeeOrder, dbUpdateShopeeOrder, dbDeleteShopeeOrder,
   dbGetMapsReviews, dbCreateMapsReview, dbGetMapsReviews as dbGetMapsReviewsOriginal, dbUpdateMapsReview, dbDeleteMapsReview,
   dbGetReportMaps, dbCreateReportMap, dbUpdateReportMap, dbDeleteReportMap,
-  dbUploadProductImage
+  dbUploadProductImage, getShopeeOrderFormattedText
 } from '../lib/supabase';
 import { getAdminShpLogs, clearAdminShpLogs, AdminShpLog, logAdminShpAction } from '../utils/adminshpLogs';
 import { formatRupiah } from './ProductCard';
@@ -618,7 +618,16 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
         service_type: editShpServiceType,
         quantity: editShpQuantity,
         target_link: editShpTargetLink,
-        notes: editShpNotes
+        notes: editShpNotes,
+        formatted_text: getShopeeOrderFormattedText({
+          ...editingShopeeOrder,
+          store_name: editShpStoreName,
+          buyer_name: editShpBuyerName,
+          service_type: editShpServiceType,
+          quantity: editShpQuantity,
+          target_link: editShpTargetLink,
+          notes: editShpNotes
+        })
       };
       await dbUpdateShopeeOrder(editingShopeeOrder.id, updated);
       toast.success(currentLang === 'id' ? 'Pesanan Shopee berhasil diperbarui' : 'Shopee order updated successfully');
@@ -2940,7 +2949,9 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                           </td>
                         </tr>
                       ) : (
-                        paginatedShopeeOrders.map((order) => (
+                        paginatedShopeeOrders.map((order) => {
+                          const formatStr = getShopeeOrderFormattedText(order);
+                          return (
                           <tr key={order.id} className="hover:bg-slate-50/30 transition-colors">
                             {/* ID and Date */}
                             <td className="px-4 py-3 font-mono">
@@ -3000,7 +3011,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                               <button
                                 type="button"
                                 onClick={() => {
-                                  navigator.clipboard.writeText(order.formatted_text);
+                                  navigator.clipboard.writeText(formatStr);
                                   setCopiedShopeeId(order.id);
                                   setTimeout(() => setCopiedShopeeId(null), 2000);
                                 }}
@@ -3062,7 +3073,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    navigator.clipboard.writeText(order.formatted_text);
+                                    navigator.clipboard.writeText(formatStr);
                                     setCopiedShopeeId(order.id);
                                     setTimeout(() => setCopiedShopeeId(null), 2000);
                                   }}
@@ -3106,7 +3117,8 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                               </div>
                             </td>
                           </tr>
-                        ))
+                        );
+                      })
                       )}
                     </tbody>
                   </table>

@@ -685,16 +685,30 @@ app.get('/api/shopee_orders', async (req, res) => {
   const db = readDatabase();
   const deletedShopee = db.deleted_shopee_orders || [];
 
+  const ensureFormattedText = (o: any) => {
+    if (!o.formatted_text || o.formatted_text === 'undefined' || o.formatted_text === 'null') {
+      const isSpam = o.order_type === 'SPAM_WA';
+      o.formatted_text = isSpam
+        ? `Nama St : ${o.store_name || '-'}\nNama Cust : ${o.buyer_name || '-'}\nNomer Target :${o.target_link || '-'}\nSlot : ${o.quantity || 1}\nOrder : ${o.service_type || '-'}\nFormat Chat : ${o.notes || '-'}`
+        : `Nama St : ${o.store_name || '-'}\nNama Cust : ${o.buyer_name || '-'}\nJenis Jasa : ${o.service_type || '-'}\nSlot : ${o.quantity || 1}\nLink Target : \n${o.target_link || '-'}\n\nAlasan : ${o.notes || '-'}`;
+    }
+    return o;
+  };
+
   if (supabase && !serverSupabaseFailed) {
-    const shopeeCols = 'id,order_type,store_name,buyer_name,service_type,quantity,target_link,notes,worker_id,work_order,status,created_by,created_at';
+    const shopeeCols = 'id,order_type,store_name,buyer_name,service_type,quantity,target_link,notes,formatted_text,worker_id,work_order,status,created_by,created_at';
     const data = await fetchServerSupabaseWithFallback(supabase, 'shopee_orders', 'shopee-orders', 'created_at', false, forceRefresh, limit, shopeeCols);
     if (data && data.length > 0) {
-      const filtered = data.filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
+      const filtered = data
+        .filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id))
+        .map(ensureFormattedText);
       return res.json(filtered);
     }
   }
 
-  const filteredLocal = (db.shopee_orders || []).filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
+  const filteredLocal = (db.shopee_orders || [])
+    .filter((o: any) => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id))
+    .map(ensureFormattedText);
   res.json(filteredLocal);
 });
 

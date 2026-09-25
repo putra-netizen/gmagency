@@ -9,6 +9,9 @@ import { createClient } from '@supabase/supabase-js';
 import { Product, Order, DashboardStats, ShopeeOrder, MapsReview, ReportMap } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { getAuthHeaders, resolveActiveInputerIdentity, getSlotIndicatorName } from './auth';
+import { getShopeeOrderFormattedText } from '../utils/formatHelpers';
+
+export { getShopeeOrderFormattedText };
 
 export function isDummyOrder(o: any): boolean {
   if (!o) return true;
@@ -1199,7 +1202,7 @@ export async function dbGetShopeeOrders(limit: number = 50000, forceRefresh: boo
   const deletedShopee = getClientDeletedShopeeOrders();
   let list: ShopeeOrder[] = [];
 
-  const shopeeCols = 'id,order_type,store_name,buyer_name,service_type,quantity,target_link,notes,worker_id,work_order,status,created_by,created_at';
+  const shopeeCols = 'id,order_type,store_name,buyer_name,service_type,quantity,target_link,notes,formatted_text,worker_id,work_order,status,created_by,created_at';
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
     list = await fetchSupabaseTableWithFallback<ShopeeOrder>('shopee_orders', 'shopee-orders', 'created_at', false, forceRefresh, limit, shopeeCols);
@@ -1215,7 +1218,11 @@ export async function dbGetShopeeOrders(limit: number = 50000, forceRefresh: boo
   }
 
   const filtered = list.filter(o => o.created_by !== '__DELETED__' && !deletedShopee.includes(o.id));
-  const deserialized = filtered.map(deserializeStatusAndNotes);
+  const deserialized = filtered.map(o => {
+    const withStatusNotes = deserializeStatusAndNotes(o);
+    withStatusNotes.formatted_text = getShopeeOrderFormattedText(withStatusNotes);
+    return withStatusNotes;
+  });
   try {
     localStorage.setItem('gmsolution_local_shopee_orders', JSON.stringify(deserialized));
   } catch {}
@@ -1254,6 +1261,7 @@ export async function dbCreateShopeeOrder(orderData: Partial<ShopeeOrder>): Prom
     status: orderData.status || 'PENDING',
     created_by: creator
   };
+  completeOrder.formatted_text = getShopeeOrderFormattedText(completeOrder);
 
   const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(completeOrder.notes, completeOrder.status);
   const dbOrder = {
@@ -1324,6 +1332,10 @@ export async function dbUpdateShopeeOrder(id: string, orderData: Partial<ShopeeO
     const { status: dbStatus, notes: dbNotes } = serializeStatusAndNotes(notesToUse, statusToUse);
     finalData.status = dbStatus;
     finalData.notes = dbNotes;
+  }
+  if (!finalData.formatted_text && currentItem) {
+    const merged = { ...currentItem, ...finalData };
+    finalData.formatted_text = getShopeeOrderFormattedText(merged);
   }
 
   if (isSupabaseConfigured && supabase && !supabaseFailed) {
