@@ -75,6 +75,7 @@ import {
   parseAccountsList
 } from '../utils/csvExport';
 import { sanitizeUrl } from '../utils/security';
+import { CsvImportModal } from './CsvImportModal';
 
 interface AdminShpPanelProps {
   currentLang: 'id' | 'en';
@@ -410,6 +411,7 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
   const [shopeeTypeFilter, setShopeeTypeFilter] = useState<'all' | 'report' | 'spam_wa'>('all');
   const [timeFilterShopee, setTimeFilterShopee] = useState<TimeFilterConfig>({ mode: 'all' });
   const [pageShopee, setPageShopee] = useState(1);
+  const [isCsvImportModalOpen, setIsCsvImportModalOpen] = useState(false);
 
   // States for REVIEW MAPS tab ('maps')
   const [searchMaps, setSearchMaps] = useState('');
@@ -2077,7 +2079,16 @@ Format Chat : ${data.notes || '-'}`;
                     </h3>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                    <button
+                      type="button"
+                      onClick={() => setIsCsvImportModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold shadow-sm shadow-orange-500/20 transition-all cursor-pointer"
+                      title="Import data CSV ke database"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>Import CSV</span>
+                    </button>
+                    <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
                       {filteredShopeeOrders.length} / {shopeeOrders.length} Pesanan
                     </span>
                   </div>
@@ -3856,6 +3867,16 @@ Format Chat : ${data.notes || '-'}`;
           </div>
         </div>
       )}
+
+      {/* CSV Import Modal */}
+      <CsvImportModal
+        isOpen={isCsvImportModalOpen}
+        onClose={() => setIsCsvImportModalOpen(false)}
+        onSuccess={() => {
+          loadData(true, true);
+        }}
+        existingOrders={shopeeOrders}
+      />
     </div>
   );
 }
