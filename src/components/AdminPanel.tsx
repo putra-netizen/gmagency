@@ -27,6 +27,7 @@ import { parseAccountsList } from '../utils/csvExport';
 import { pauseAutoSyncFor } from '../utils/autoSyncManager';
 import { sanitizeUrl } from '../utils/security';
 import { loginWithBackend, clientLogout, getAuthHeaders, saveAuthSession, setViewAsShpSlot } from '../lib/auth';
+import { GM_LOGO_DATA_URI, GM_LOGO_LOCAL_512 } from '../utils/gmLogoAsset';
 import { 
   TrendingUp, ShoppingBag, DollarSign, Clock, CheckCircle2, 
   Plus, Edit, Trash2, Eye, EyeOff, Link2, Phone, Calendar, RefreshCw, 
@@ -1625,15 +1626,27 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
     return (
       <div className="min-h-[82vh] flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8 bg-slate-50/70" id="admin-login-wrapper">
         <div className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-white p-7 sm:p-9 shadow-xl shadow-slate-200/50 space-y-6">
-          {/* Header section inspired by Image 2 (Light, custom wording) */}
-          <div className="flex items-start gap-3.5 border-b border-slate-100 pb-5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 border border-blue-200/80 text-blue-600 shadow-xs">
-              <ShieldCheck className="h-6 w-6 stroke-[2.2]" />
+          {/* Header section with authentic GM Agency Logo */}
+          <div className="flex items-center gap-3.5 border-b border-slate-100 pb-5">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden p-1">
+              <img
+                src={GM_LOGO_DATA_URI}
+                alt="GM Agency Logo"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  if (e.currentTarget.src !== GM_LOGO_LOCAL_512) {
+                    e.currentTarget.src = GM_LOGO_LOCAL_512;
+                  }
+                }}
+              />
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-950 uppercase tracking-tight font-sans">
                 {currentLang === 'id' ? 'Portal Masuk Admin' : 'Admin Login Portal'}
               </h2>
+              <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider mt-0.5">
+                GM AGENCY • GETAK MUMBUL
+              </p>
             </div>
           </div>
 
@@ -4258,8 +4271,17 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center pt-2">
                     <div className="space-y-4">
-                      <div className="relative h-20 w-20 rounded-2xl overflow-hidden bg-gradient-to-tr from-blue-600 to-indigo-700 shadow-lg shadow-blue-500/20 flex items-center justify-center">
-                        <span className="font-black text-white text-2xl tracking-tighter">GM</span>
+                      <div className="relative h-20 w-20 rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-lg shadow-blue-500/10 flex items-center justify-center p-1.5">
+                        <img
+                          src={GM_LOGO_DATA_URI}
+                          alt="GM Agency Logo"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            if (e.currentTarget.src !== GM_LOGO_LOCAL_512) {
+                              e.currentTarget.src = GM_LOGO_LOCAL_512;
+                            }
+                          }}
+                        />
                       </div>
 
                       <div className="space-y-2">

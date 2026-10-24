@@ -1,16 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#0f172a" />
+    <meta name="description" content="Website modern jasa layanan reputasi digital & engagement organik GM Agency dengan fitur pemesanan, invoice QRIS, dan admin dashboard." />
+    <meta property="og:title" content="GM AGENCY" />
+    <meta property="og:description" content="Website modern jasa layanan reputasi digital & engagement organik GM Agency dengan fitur pemesanan, invoice QRIS, dan admin dashboard." />
+    <meta property="og:image" content="/pwa-512x512.png?v=5" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="https://bqzeriisoekksdkceciy.supabase.co/storage/v1/object/public/LOGO-GM/getak%20upscaled%20(1).png" />
-    <link rel="icon" type="image/png" href="https://bqzeriisoekksdkceciy.supabase.co/storage/v1/object/public/LOGO-GM/getak%20upscaled%20(1).png" />
-    <title>GmAgency</title>
+    <meta name="apple-mobile-web-app-title" content="GM AGENCY" />
+    <link rel="manifest" href="/manifest.json?v=5" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=5" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png?v=5" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png?v=5" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=5" />
+    <link rel="shortcut icon" href="/favicon.ico?v=5" />
+    <title>GM AGENCY</title>
     <script>
       // Auto-recover from stale Service Worker or cached assets chunk load error
       window.addEventListener('error', function (e) {
@@ -36,7 +44,7 @@
 
       if ('serviceWorker' in navigator && window.self === window.top) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('/sw.js?v=5')
             .then((reg) => {
               reg.update().catch(() => {});
             })
@@ -50,4 +58,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

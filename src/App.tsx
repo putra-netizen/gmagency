@@ -20,6 +20,7 @@ import { initGlobalAutoSync } from './utils/autoSyncManager';
 import { getAuthUser, resolveUserRole, getViewAsShpSlot, setViewAsShpSlot } from './lib/auth';
 import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GM_LOGO_DATA_URI, GM_LOGO_LOCAL_512 } from './utils/gmLogoAsset';
 
 export default function App() {
   // Global States
@@ -462,8 +463,17 @@ export default function App() {
               {/* About brand column (5 columns) */}
               <div className="md:col-span-5 space-y-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="relative h-10 w-10 shrink-0 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-700 shadow-md flex items-center justify-center overflow-hidden">
-                    <span className="font-black text-white text-sm tracking-tighter">GM</span>
+                  <div className="relative h-10 w-10 shrink-0 rounded-full bg-white border border-slate-200 dark:border-slate-700 shadow-md flex items-center justify-center overflow-hidden p-0.5">
+                    <img
+                      src={GM_LOGO_DATA_URI}
+                      alt="GM Agency Logo"
+                      className="w-full h-full object-contain rounded-full"
+                      onError={(e) => {
+                        if (e.currentTarget.src !== GM_LOGO_LOCAL_512) {
+                          e.currentTarget.src = GM_LOGO_LOCAL_512;
+                        }
+                      }}
+                    />
                   </div>
                   <span className={`text-lg font-black tracking-widest ${
                     theme === 'dark' ? 'text-white' : 'text-slate-900'
@@ -626,8 +636,17 @@ export default function App() {
           >
             <div className="flex items-start gap-4">
               {/* Enlarged Favicon Logo */}
-              <div className="relative h-14 w-14 rounded-2xl overflow-hidden bg-gradient-to-tr from-blue-600 to-indigo-700 shadow-md shadow-blue-500/20 shrink-0 flex items-center justify-center">
-                <span className="font-black text-white text-xl tracking-tighter">GM</span>
+              <div className="relative h-14 w-14 rounded-2xl overflow-hidden bg-white border border-slate-700 shadow-md shadow-blue-500/20 shrink-0 flex items-center justify-center p-1">
+                <img
+                  src={GM_LOGO_DATA_URI}
+                  alt="GM Agency Logo"
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    if (e.currentTarget.src !== GM_LOGO_LOCAL_512) {
+                      e.currentTarget.src = GM_LOGO_LOCAL_512;
+                    }
+                  }}
+                />
               </div>
 
               {/* Message Details */}

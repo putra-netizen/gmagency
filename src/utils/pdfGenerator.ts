@@ -1,18 +1,19 @@
 import { jsPDF, GState } from 'jspdf';
 import { MapsReview } from '../types';
+import { GM_LOGO_DATA_URI, GM_LOGO_ORIGINAL, GM_LOGO_SUPABASE } from './gmLogoAsset';
 
-export const GM_LOGO_URL = 'https://bqzeriisoekksdkceciy.supabase.co/storage/v1/object/public/LOGO-GM/getak%20upscaled%20(1).png';
-export const GM_LOGO_FALLBACK_URL = '/logo_gm_original.png';
+export const GM_LOGO_URL = GM_LOGO_ORIGINAL;
+export const GM_LOGO_FALLBACK_URL = GM_LOGO_DATA_URI;
 
-let cachedLogoBase64: string | null = null;
+let cachedLogoBase64: string | null = GM_LOGO_DATA_URI;
 
 /**
- * Preload and convert the authentic Supabase GM Agency logo to Base64 image data URL
+ * Preload and convert the authentic GM Agency logo to Base64 image data URL
  */
 export async function getLogoBase64(): Promise<string | null> {
   if (cachedLogoBase64) return cachedLogoBase64;
 
-  const urlsToTry = [GM_LOGO_URL, GM_LOGO_FALLBACK_URL];
+  const urlsToTry = [GM_LOGO_ORIGINAL, GM_LOGO_DATA_URI, GM_LOGO_SUPABASE];
 
   for (const url of urlsToTry) {
     // 1. Try loading via Image element + canvas for optimal PDF sizing & cross-origin handling

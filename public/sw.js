@@ -1,5 +1,5 @@
 // Service Worker for GM AGENCY
-const CACHE_NAME = 'gm-agency-v3';
+const CACHE_NAME = 'gm-agency-v5';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

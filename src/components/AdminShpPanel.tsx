@@ -23,6 +23,7 @@ import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { ShopeeOrder, MapsReview, ReportMap } from '../types';
 import { loginWithBackend, clientLogout, getAuthUser, getSlotIndicatorName, resolveActiveInputerIdentity, getViewAsShpSlot, setViewAsShpSlot } from '../lib/auth';
+import { GM_LOGO_DATA_URI, GM_LOGO_LOCAL_512 } from '../utils/gmLogoAsset';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
 import { ModernFilterSelect } from './ModernFilterSelect';
 import { 
@@ -1448,10 +1449,19 @@ Format Chat : ${data.notes || '-'}`;
           transition={{ duration: 0.25 }}
           className="w-full max-w-md rounded-3xl border border-slate-200/90 bg-white p-7 sm:p-9 shadow-xl shadow-slate-200/50 space-y-6"
         >
-          {/* Header section inspired by Image 2 (Light, custom wording) */}
-          <div className="flex items-start gap-3.5 border-b border-slate-100 pb-5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 border border-amber-200/80 text-amber-600 shadow-xs">
-              <ShieldCheck className="h-6 w-6 stroke-[2.2]" />
+          {/* Header section with authentic GM Agency Logo */}
+          <div className="flex items-center gap-3.5 border-b border-slate-100 pb-5">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden p-1">
+              <img
+                src={GM_LOGO_DATA_URI}
+                alt="GM Agency Logo"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  if (e.currentTarget.src !== GM_LOGO_LOCAL_512) {
+                    e.currentTarget.src = GM_LOGO_LOCAL_512;
+                  }
+                }}
+              />
             </div>
             <div>
               <h2 className="text-xl font-black text-slate-950 uppercase tracking-tight font-sans">
@@ -3346,18 +3356,27 @@ Format Chat : ${data.notes || '-'}`;
             <div id="screenshot-content" className="p-8 bg-white flex-grow overflow-y-auto space-y-6">
               {/* Branding / Title */}
               <div className="flex justify-between items-start border-b border-slate-100 pb-5">
-                <div>
-                  <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase bg-blue-50 px-2.5 py-1 rounded-md">
-                    GM AGENCY - STATUS LAPORAN
-                  </span>
-                  <h2 className="text-xl font-black text-slate-900 mt-2 font-sans">
-                    {screenshotModalItem.review_type === 'REVIEW_APPS' 
-                      ? 'Review Apps Reviewer List' 
-                      : screenshotModalItem.review_type === 'TRIPAD' 
-                      ? 'Tripadvisor Reviewer List' 
-                      : 'Google Maps Reviewer List'
-                    }
-                  </h2>
+                <div className="flex items-center gap-3.5">
+                  <div className="h-12 w-12 rounded-xl bg-white border border-slate-200 shadow-xs overflow-hidden p-1 shrink-0 flex items-center justify-center">
+                    <img
+                      src={GM_LOGO_DATA_URI}
+                      alt="GM Agency Logo"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase bg-blue-50 px-2.5 py-1 rounded-md">
+                      GM AGENCY - STATUS LAPORAN
+                    </span>
+                    <h2 className="text-xl font-black text-slate-900 mt-2 font-sans">
+                      {screenshotModalItem.review_type === 'REVIEW_APPS' 
+                        ? 'Review Apps Reviewer List' 
+                        : screenshotModalItem.review_type === 'TRIPAD' 
+                        ? 'Tripadvisor Reviewer List' 
+                        : 'Google Maps Reviewer List'
+                      }
+                    </h2>
+                  </div>
                 </div>
                 <div className="text-right col-span-1 shrink-0">
                   <span className="text-xs font-bold text-slate-400 block">Tanggal Laporan</span>

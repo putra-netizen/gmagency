@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getAuthUser, clientLogout, AuthUser } from '../lib/auth';
+import { GM_LOGO_DATA_URI, GM_LOGO_LOCAL_512 } from '../utils/gmLogoAsset';
 import { toast } from '../utils/toast';
 
 interface WorkerPanelProps {
@@ -204,8 +205,17 @@ export const WorkerPanel: React.FC<WorkerPanelProps> = ({
         {/* Header bar */}
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-3xl bg-white p-6 shadow-sm border border-slate-200/80">
           <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-indigo-200">
-              <Briefcase className="h-6 w-6" />
+            <div className="h-12 w-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center shadow-sm overflow-hidden p-1 shrink-0">
+              <img
+                src={GM_LOGO_DATA_URI}
+                alt="GM Agency Logo"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  if (e.currentTarget.src !== GM_LOGO_LOCAL_512) {
+                    e.currentTarget.src = GM_LOGO_LOCAL_512;
+                  }
+                }}
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">

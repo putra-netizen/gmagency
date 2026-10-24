@@ -153,9 +153,12 @@ export default function Navbar({
               )}
             </button>
 
-            <span className="text-xs sm:text-sm font-black tracking-wider font-sans uppercase text-slate-800 dark:text-slate-100">
-              ADMIN WORKING SPACE
-            </span>
+            <div className="flex items-center gap-2">
+              <GMLogo size="xs" showSubtitle={false} hideText={true} />
+              <span className="text-xs sm:text-sm font-black tracking-wider font-sans uppercase text-slate-800 dark:text-slate-100">
+                ADMIN WORKING SPACE
+              </span>
+            </div>
 
             {/* Premium Hamburger Menu Dropdown Popover */}
             {isAdminMenuOpen && (
