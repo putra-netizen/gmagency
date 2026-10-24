@@ -1498,12 +1498,20 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
 
     setIsSavingProduct(true);
     try {
-      let imageUrl = prodImage || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80';
+      const targetProductId = editingProduct?.id || (
+        prodName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 32) + '-' + Date.now().toString().slice(-4)
+      );
 
-      // 1. Upload photo if selected
+      let imageUrl = prodImage || 'https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/katalog-image/products/gmaps-review/cover.png';
+
+      // 1. Upload photo if selected (stored in katalog-image/products/<targetProductId>/...)
       if (selectedImageFile) {
         try {
-          imageUrl = await dbUploadProductImage(selectedImageFile);
+          imageUrl = await dbUploadProductImage(selectedImageFile, targetProductId, prodName);
         } catch (uploadErr) {
           console.error('Image upload failed:', uploadErr);
           toast.error(currentLang === 'id' 
@@ -1527,6 +1535,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
       }
 
       const payload: Partial<Product> = {
+        id: targetProductId,
         name: prodName,
         name_en: finalNameEn,
         description: prodDesc,
@@ -1539,10 +1548,10 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
 
       if (editingProduct) {
         await dbUpdateProduct(editingProduct.id, payload);
-        toast.success(currentLang === 'id' ? 'Katalog berhasil diperbarui!' : 'Catalog updated successfully!');
+        toast.success(currentLang === 'id' ? 'Katalog berhasil diperbarui & tersimpan di Supabase!' : 'Catalog updated & saved to Supabase!');
       } else {
         await dbCreateProduct(payload);
-        toast.success(currentLang === 'id' ? 'Katalog baru berhasil ditambahkan!' : 'New catalog added successfully!');
+        toast.success(currentLang === 'id' ? 'Katalog baru berhasil ditambahkan ke Supabase!' : 'New catalog added to Supabase!');
       }
 
       setIsProductModalOpen(false);

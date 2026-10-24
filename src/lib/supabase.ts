@@ -57,7 +57,7 @@ export function sanitizeSupabaseUrl(url: string | undefined): string {
 }
 
 export function sanitizeSupabaseKey(key: string | undefined): string {
-  const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
+  const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxemVyaWlzb2Vra3Nka2NlY2l5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwNzA0MTksImV4cCI6MjEwNTY0NjQxOX0.B697OaqSHOgp5Lrrme9HoZC2TmKLnonhVgW0uPjTWmg';
   if (!key || typeof key !== 'string') return DEFAULT_SUPABASE_ANON_KEY;
   const trimmed = key.trim();
 
@@ -133,6 +133,20 @@ export const supabase: any = isSupabaseConfigured ? createClient(supabaseUrl, su
     detectSessionInUrl: true,
   }
 }) : null;
+
+// Dedicated Supabase Client for Catalog Products & Product Image Storage (reonysrsoaepzykwwfzw)
+export const CATALOG_SUPABASE_URL = import.meta.env.VITE_CATALOG_SUPABASE_URL || 'https://reonysrsoaepzykwwfzw.supabase.co';
+export const CATALOG_SUPABASE_ANON_KEY = import.meta.env.VITE_CATALOG_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
+export const CATALOG_BUCKET_NAME = 'katalog-image';
+export const CATALOG_MANIFEST_FILE = 'catalog-products.json';
+
+export const catalogSupabase: any = createClient(CATALOG_SUPABASE_URL, CATALOG_SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  }
+});
 
 // Debug log for runtime inspection (safe, only ref and key prefix/suffix are logged)
 try {
@@ -625,22 +639,43 @@ function compressAndResizeImage(file: File, maxWidth = 480, maxHeight = 360, qua
   });
 }
 
-// Self-healing function to prune/clean up any massive legacy base64 images from localStorage to free up quota
+// Self-healing function to prune/clean up any massive legacy base64 images or dummy Unsplash URLs from localStorage
 function sanitizeLocalProductsList(list: Product[]): Product[] {
   let changed = false;
+  const initialMap = new Map<string, Product>(INITIAL_PRODUCTS.map(p => [p.id, p]));
+
   const sanitized = list.map(product => {
-    // If a product's image_url is a giant data URL longer than 100,000 characters, we replace it with a beautiful fallback Unsplash image
-    if (product.image_url && product.image_url.startsWith('data:') && product.image_url.length > 100000) {
+    const initialProd = initialMap.get(product.id);
+    const isDummyUnsplash = Boolean(product.image_url && product.image_url.includes('images.unsplash.com'));
+    const isGiantBase64 = Boolean(product.image_url && product.image_url.startsWith('data:') && product.image_url.length > 100000);
+
+    if ((isDummyUnsplash || isGiantBase64 || !product.image_url) && initialProd) {
       changed = true;
-      console.log(`Pruning giant base64 image from product ${product.id} (${product.image_url.length} chars)`);
       return {
         ...product,
-        image_url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80'
+        image_url: initialProd.image_url,
+        target_type: product.target_type || initialProd.target_type || 'link'
+      };
+    }
+    if (isGiantBase64) {
+      changed = true;
+      return {
+        ...product,
+        image_url: INITIAL_PRODUCTS[0].image_url
       };
     }
     return product;
   });
-  
+
+  // Ensure wa-buzzer is present if migrating from legacy 8-product list
+  if (!sanitized.some(p => p.id === 'wa-buzzer')) {
+    const waBuzzer = initialMap.get('wa-buzzer');
+    if (waBuzzer) {
+      sanitized.push(waBuzzer);
+      changed = true;
+    }
+  }
+
   if (changed) {
     try {
       localStorage.setItem('gmsolution_local_products', JSON.stringify(sanitized));
@@ -920,29 +955,105 @@ async function fetchSupabaseTableWithFallback<T = any>(
   return [];
 }
 
-// 1. PRODUCTS (Managed locally via Express API and LocalStorage)
+// Helper to read/write catalog products manifest in Supabase Storage (katalog-image/catalog-products.json)
+async function fetchCatalogProductsFromSupabase(): Promise<Product[] | null> {
+  if (!catalogSupabase) return null;
+
+  // 1. Try public.products table first if created in Supabase
+  try {
+    const { data, error } = await catalogSupabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return sanitizeLocalProductsList(data as Product[]);
+    }
+  } catch {}
+
+  // 2. Read catalog-products.json from bucket 'katalog-image' on reonysrsoaepzykwwfzw
+  try {
+    const { data: pubData } = catalogSupabase.storage
+      .from(CATALOG_BUCKET_NAME)
+      .getPublicUrl(CATALOG_MANIFEST_FILE);
+    if (pubData?.publicUrl) {
+      const res = await fetch(`${pubData.publicUrl}?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const parsed = await res.json();
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return sanitizeLocalProductsList(parsed as Product[]);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch catalog-products.json from Supabase Storage:', err);
+  }
+
+  return null;
+}
+
+async function syncCatalogProductsToSupabase(products: Product[]): Promise<void> {
+  if (!catalogSupabase || !Array.isArray(products)) return;
+
+  // 1. Upload/upsert catalog-products.json in bucket 'katalog-image'
+  try {
+    const blob = new Blob([JSON.stringify(products, null, 2)], { type: 'application/json' });
+    await catalogSupabase.storage
+      .from(CATALOG_BUCKET_NAME)
+      .upload(CATALOG_MANIFEST_FILE, blob, {
+        contentType: 'application/json',
+        cacheControl: '0',
+        upsert: true
+      });
+  } catch (err) {
+    console.warn('Failed to sync catalog-products.json to Supabase Storage:', err);
+  }
+
+  // 2. Also attempt upsert to public.products table if it exists
+  try {
+    await catalogSupabase.from('products').upsert(products, { onConflict: 'id' });
+  } catch {}
+}
+
+// 1. PRODUCTS (Synced with Supabase Storage 'katalog-image' on reonysrsoaepzykwwfzw + Express API + LocalStorage)
 export async function dbGetProducts(limit: number = 500, _forceRefresh: boolean = false): Promise<Product[]> {
-  return safeFetch<Product[]>(
+  // 1. Try cloud catalog on reonysrsoaepzykwwfzw first
+  const cloudProducts = await fetchCatalogProductsFromSupabase();
+  if (cloudProducts && cloudProducts.length > 0) {
+    try {
+      localStorage.setItem('gmsolution_local_products', JSON.stringify(cloudProducts));
+    } catch {}
+    return cloudProducts.slice(0, limit);
+  }
+
+  // 2. Fallback to Express API / LocalStorage
+  const localOrApi = await safeFetch<Product[]>(
     `/api/products?limit=${limit}`,
     undefined,
     'gmsolution_local_products',
     () => INITIAL_PRODUCTS
   );
+  return sanitizeLocalProductsList(localOrApi);
 }
 
 export async function dbCreateProduct(product: Partial<Product>): Promise<Product> {
+  const slugId = product.id || (product.name
+    ? product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) + '-' + Date.now().toString().slice(-4)
+    : 'prod-' + Date.now().toString().slice(-6));
+
   const newProduct: Product = {
-    id: product.id || 'prod-' + Date.now().toString().slice(-6),
+    id: slugId,
     name: product.name || '',
     name_en: product.name_en || '',
     description: product.description || '',
     description_en: product.description_en || '',
     price: Number(product.price) || 0,
-    image_url: product.image_url || '',
-    whatsapp_number: product.whatsapp_number || '',
+    image_url: product.image_url || INITIAL_PRODUCTS[0].image_url,
+    whatsapp_number: product.whatsapp_number || '+6285921095666',
     target_type: product.target_type || 'link',
     created_at: product.created_at || new Date().toISOString()
   };
+
+  let savedProduct = newProduct;
 
   try {
     const response = await fetch('/api/products', {
@@ -954,19 +1065,22 @@ export async function dbCreateProduct(product: Partial<Product>): Promise<Produc
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        updateLocalStorageProduct(data);
-        return data as Product;
+        savedProduct = data as Product;
       }
     }
   } catch (err) {
-    console.warn('Failed to save product to local API, saving to LocalStorage only:', err);
+    console.warn('Failed to save product to local API, saving to Supabase & LocalStorage:', err);
   }
 
-  updateLocalStorageProduct(newProduct);
-  return newProduct;
+  updateLocalStorageProduct(savedProduct);
+  const currentList = getLocalProducts();
+  await syncCatalogProductsToSupabase(currentList);
+  return savedProduct;
 }
 
 export async function dbUpdateProduct(id: string, product: Partial<Product>): Promise<Product> {
+  let updatedProduct: Product | null = null;
+
   try {
     const response = await fetch(`/api/products/${id}`, {
       method: 'PUT',
@@ -977,61 +1091,60 @@ export async function dbUpdateProduct(id: string, product: Partial<Product>): Pr
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        updateLocalStorageProduct(data);
-        return data as Product;
+        updatedProduct = data as Product;
+        updateLocalStorageProduct(updatedProduct);
       }
     }
   } catch (err) {
-    console.warn('Failed to update product via API, falling back to LocalStorage:', err);
+    console.warn('Failed to update product via API, falling back to Supabase & LocalStorage:', err);
   }
 
   const list = getLocalProducts();
   const index = list.findIndex(p => p.id === id);
   if (index !== -1) {
-    const updated = {
+    const merged = {
       ...list[index],
+      ...(updatedProduct || {}),
       ...product,
       price: product.price !== undefined ? Number(product.price) : list[index].price
     } as Product;
-    list[index] = updated;
+    list[index] = merged;
     try {
       localStorage.setItem('gmsolution_local_products', JSON.stringify(list));
     } catch (e) {
       console.warn('Failed to save updated products list to localStorage:', e);
-      try {
-        const sanitized = sanitizeLocalProductsList(list);
-        localStorage.setItem('gmsolution_local_products', JSON.stringify(sanitized));
-      } catch (retryErr) {
-        console.error('Failed to save even after sanitizing:', retryErr);
-        throw new Error('Storage is completely full. Please try clearing browser cache.');
-      }
     }
-    return updated;
+    await syncCatalogProductsToSupabase(list);
+    return merged;
   }
-  throw new Error('Product not found in local storage fallback');
+
+  if (updatedProduct) {
+    const currentList = getLocalProducts();
+    await syncCatalogProductsToSupabase(currentList);
+    return updatedProduct;
+  }
+
+  throw new Error('Product not found');
 }
 
 export async function dbDeleteProduct(id: string): Promise<boolean> {
   try {
-    const response = await fetch(`/api/products/${id}`, {
+    await fetch(`/api/products/${id}`, {
       method: 'DELETE',
       headers: { ...getAuthHeaders() },
     });
-    if (response.ok) {
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const result = await response.json();
-        if (result.success) {
-          deleteLocalStorageProduct(id);
-          return true;
-        }
-      }
-    }
   } catch (err) {
-    console.warn('Failed to delete product via API, falling back to LocalStorage:', err);
+    console.warn('Failed to delete product via API, deleting from Supabase & LocalStorage:', err);
   }
 
   deleteLocalStorageProduct(id);
+  const updatedList = getLocalProducts();
+  await syncCatalogProductsToSupabase(updatedList);
+  try {
+    if (catalogSupabase) {
+      await catalogSupabase.from('products').delete().eq('id', id);
+    }
+  } catch {}
   return true;
 }
 
@@ -2012,63 +2125,74 @@ export async function dbDeleteReportMap(id: string): Promise<boolean> {
   return true;
 }
 
-// 6. STORAGE UPLOAD FOR PRODUCT IMAGES
-export async function dbUploadProductImage(file: File): Promise<string> {
-  if (isSupabaseConfigured && supabase && !supabaseFailed) {
-    const fileExt = file.name.split('.').pop() || 'png';
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-    
-    // We try multiple case-sensitivity permutations of bucket name and folder path to guarantee it saves to the correct bucket & folder structure
-    const permutations = [
-      // 1. Bucket: 'katalog-image', Path at root (this is the most likely actual bucket setup)
-      { bucket: 'katalog-image', path: fileName },
-      // 2. Bucket: 'katalog-image', Path: products/fileName
-      { bucket: 'katalog-image', path: `products/${fileName}` },
-      // 3. Bucket: 'files', Path: buckets/katalog-image/fileName (User's literal path)
-      { bucket: 'files', path: `buckets/katalog-image/${fileName}` },
-      { bucket: 'files', path: `Buckets/katalog-image/${fileName}` },
-      // 4. Bucket: 'buckets', Path: katalog-image/fileName
-      { bucket: 'buckets', path: `katalog-image/${fileName}` },
-      { bucket: 'Buckets', path: `katalog-image/${fileName}` },
-      // 5. Bucket: 'files', Path: katalog-image/fileName
-      { bucket: 'files', path: `katalog-image/${fileName}` }
-    ];
+// 6. STORAGE UPLOAD FOR PRODUCT IMAGES (Connected to reonysrsoaepzykwwfzw bucket 'katalog-image' per product folder)
+export async function dbUploadProductImage(file: File, productId?: string, productName?: string): Promise<string> {
+  const rawExt = (file.name.split('.').pop() || 'jpeg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const fileExt = rawExt || 'jpeg';
+  const rawSlug = (productId || productName || 'general')
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'general';
 
-    let lastError: any = null;
+  const timestamp = Date.now();
+  const versionedPath = `products/${rawSlug}/${timestamp}.${fileExt}`;
+  const coverPath = `products/${rawSlug}/cover.${fileExt}`;
 
-    for (const perm of permutations) {
-      try {
-        const { data, error } = await supabase.storage
-          .from(perm.bucket)
-          .upload(perm.path, file, {
+  // 1. Primary upload to dedicated Catalog Supabase (reonysrsoaepzykwwfzw -> bucket 'katalog-image')
+  if (catalogSupabase) {
+    try {
+      const { data, error } = await catalogSupabase.storage
+        .from(CATALOG_BUCKET_NAME)
+        .upload(versionedPath, file, {
+          cacheControl: '3600',
+          contentType: file.type || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+          upsert: true
+        });
+
+      if (!error && data) {
+        // Also keep products/<productId>/cover.<ext> updated in parallel for clean per-product reference
+        catalogSupabase.storage
+          .from(CATALOG_BUCKET_NAME)
+          .upload(coverPath, file, {
             cacheControl: '3600',
-            upsert: false
-          });
+            contentType: file.type || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+            upsert: true
+          })
+          .catch(() => {});
 
-        if (!error && data) {
-          const { data: { publicUrl } } = supabase.storage
-            .from(perm.bucket)
-            .getPublicUrl(perm.path);
-          return publicUrl;
-        } else if (error) {
-          lastError = error;
-          console.warn(`Failed upload permutation bucket:${perm.bucket} path:${perm.path}:`, error);
-        }
-      } catch (err) {
-        lastError = err;
-        console.warn(`Exception in upload permutation bucket:${perm.bucket} path:${perm.path}:`, err);
-      }
-    }
+        const { data: { publicUrl } } = catalogSupabase.storage
+          .from(CATALOG_BUCKET_NAME)
+          .getPublicUrl(versionedPath);
 
-    if (lastError) {
-      console.warn('Supabase storage upload failed or quota reached, falling back to local compressed image:', lastError);
-      if (isSupabaseQuotaError(lastError)) {
-        supabaseFailed = true;
+        return publicUrl;
+      } else if (error) {
+        console.warn(`Upload to catalogSupabase (${CATALOG_BUCKET_NAME}/${versionedPath}) failed:`, error);
       }
+    } catch (err) {
+      console.warn('Exception uploading to catalogSupabase:', err);
     }
   }
 
-  // Fallback for local database mode: convert to compressed base64 Data URL to fit LocalStorage limits
+  // 2. Secondary fallback to main supabase client if configured
+  if (isSupabaseConfigured && supabase && !supabaseFailed) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(CATALOG_BUCKET_NAME)
+        .upload(versionedPath, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+      if (!error && data) {
+        const { data: { publicUrl } } = supabase.storage
+          .from(CATALOG_BUCKET_NAME)
+          .getPublicUrl(versionedPath);
+        return publicUrl;
+      }
+    } catch {}
+  }
+
+  // 3. Fallback for offline/local mode: convert to compressed base64 Data URL
   try {
     return await compressAndResizeImage(file);
   } catch (err) {

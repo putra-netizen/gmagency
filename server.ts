@@ -509,21 +509,69 @@ async function fetchServerSupabaseWithFallback<T = any>(
   return [];
 }
 
-// 1. PRODUCTS API (Managed locally via db.json)
+// 1. PRODUCTS API (Synced with Catalog Supabase reonysrsoaepzykwwfzw bucket 'katalog-image' + local db.json)
+const CATALOG_SUPABASE_URL = process.env.VITE_CATALOG_SUPABASE_URL || 'https://reonysrsoaepzykwwfzw.supabase.co';
+const CATALOG_SUPABASE_ANON_KEY = process.env.VITE_CATALOG_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlb255c3Jzb2FlcHp5a3d3Znp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzMyODIsImV4cCI6MjA5Nzk0OTI4Mn0.QABSWa2rmMrfLAgM88H2ELC4qZIEd33x76cZF8MgBVM';
+const CATALOG_BUCKET_NAME = 'katalog-image';
+const CATALOG_MANIFEST_FILE = 'catalog-products.json';
+
+const serverCatalogSupabase = createClient(CATALOG_SUPABASE_URL, CATALOG_SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+});
+
+async function syncServerProductsToCatalogSupabase(products: Product[]) {
+  try {
+    await serverCatalogSupabase.storage
+      .from(CATALOG_BUCKET_NAME)
+      .upload(CATALOG_MANIFEST_FILE, Buffer.from(JSON.stringify(products, null, 2)), {
+        contentType: 'application/json',
+        cacheControl: '0',
+        upsert: true
+      });
+  } catch (err) {
+    console.warn('Server failed to sync catalog-products.json to Supabase Storage:', err);
+  }
+  try {
+    await serverCatalogSupabase.from('products').upsert(products, { onConflict: 'id' });
+  } catch {}
+}
+
 app.get('/api/products', async (req, res) => {
+  try {
+    const { data: pubData } = serverCatalogSupabase.storage
+      .from(CATALOG_BUCKET_NAME)
+      .getPublicUrl(CATALOG_MANIFEST_FILE);
+    if (pubData?.publicUrl) {
+      const resp = await fetch(`${pubData.publicUrl}?t=${Date.now()}`);
+      if (resp.ok) {
+        const cloudProducts = await resp.json();
+        if (Array.isArray(cloudProducts) && cloudProducts.length > 0) {
+          const db = readDatabase();
+          db.products = cloudProducts;
+          writeDatabase(db);
+          return res.json(cloudProducts);
+        }
+      }
+    }
+  } catch {}
+
   const db = readDatabase();
   res.json(db.products || INITIAL_PRODUCTS);
 });
 
 app.post('/api/products', requireAuth, async (req, res) => {
+  const slugId = req.body.id || (req.body.name
+    ? String(req.body.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) + '-' + Date.now().toString().slice(-4)
+    : 'prod-' + Date.now());
+
   const newProduct: Product = {
-    id: 'prod-' + Date.now(),
+    id: slugId,
     name: req.body.name || 'Produk Baru',
     name_en: req.body.name_en || 'New Product',
     description: req.body.description || '',
     description_en: req.body.description_en || '',
     price: Number(req.body.price) || 0,
-    image_url: req.body.image_url || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80',
+    image_url: req.body.image_url || INITIAL_PRODUCTS[0].image_url,
     whatsapp_number: req.body.whatsapp_number || '+6285921095666',
     target_type: req.body.target_type || 'link',
     created_at: new Date().toISOString()
@@ -531,14 +579,21 @@ app.post('/api/products', requireAuth, async (req, res) => {
 
   const db = readDatabase();
   if (!db.products) db.products = [];
-  db.products.push(newProduct);
+  const existingIdx = db.products.findIndex((p: Product) => p.id === newProduct.id);
+  if (existingIdx !== -1) {
+    db.products[existingIdx] = newProduct;
+  } else {
+    db.products.push(newProduct);
+  }
   writeDatabase(db);
+  await syncServerProductsToCatalogSupabase(db.products);
   res.status(201).json(newProduct);
 });
 
 app.put('/api/products/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
   const db = readDatabase();
+  if (!db.products) db.products = [...INITIAL_PRODUCTS];
   const index = db.products.findIndex((p: Product) => p.id === id);
 
   if (index !== -1) {
@@ -554,6 +609,7 @@ app.put('/api/products/:id', requireAuth, async (req, res) => {
       target_type: req.body.target_type !== undefined ? req.body.target_type : db.products[index].target_type
     };
     writeDatabase(db);
+    await syncServerProductsToCatalogSupabase(db.products);
     res.json(db.products[index]);
   } else {
     res.status(404).json({ error: 'Product not found' });
@@ -568,6 +624,7 @@ app.delete('/api/products/:id', requireAuth, async (req, res) => {
 
   if (db.products.length < initialLength) {
     writeDatabase(db);
+    await syncServerProductsToCatalogSupabase(db.products);
     res.json({ success: true, message: 'Product deleted' });
   } else {
     res.status(404).json({ error: 'Product not found' });
