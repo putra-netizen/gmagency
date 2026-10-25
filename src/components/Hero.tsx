@@ -3,16 +3,89 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { TRANSLATIONS } from '../lib/translations';
-import { Language } from '../types';
-import { ArrowRight, CheckCircle2, Star, TrendingUp, Sparkles } from 'lucide-react';
+import { Language, HeroStatsConfig } from '../types';
+import { dbGetHeroStats, getLocalHeroStats } from '../lib/supabase';
+import { ArrowRight, CheckCircle2, Star, TrendingUp, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface HeroProps {
   currentLang: Language;
   onExploreClick: () => void;
   theme?: 'light' | 'dark';
+}
+
+/**
+ * Parses a formatted stat string like "250K+", "2500+", "99.8%" into numeric & affix parts
+ * and animates smoothly from 0 to target number when enabled.
+ */
+function AnimatedStatNumber({
+  value,
+  animate = true,
+  replayTrigger = 0,
+  className = ''
+}: {
+  value: string;
+  animate?: boolean;
+  replayTrigger?: number;
+  className?: string;
+}) {
+  const [displayStr, setDisplayStr] = useState(value);
+
+  useEffect(() => {
+    const raw = String(value || '').trim();
+    if (!animate) {
+      setDisplayStr(raw);
+      return;
+    }
+
+    const match = raw.match(/^([^0-9]*)([0-9]+(?:[.,][0-9]+)?)(.*)$/);
+    if (!match) {
+      setDisplayStr(raw);
+      return;
+    }
+
+    const prefix = match[1] || '';
+    const numPart = match[2].replace(',', '.');
+    const suffix = match[3] || '';
+    const targetNum = parseFloat(numPart);
+
+    if (isNaN(targetNum) || targetNum <= 0) {
+      setDisplayStr(raw);
+      return;
+    }
+
+    const hasDecimal = numPart.includes('.');
+    const decimalPlaces = hasDecimal ? (numPart.split('.')[1]?.length || 1) : 0;
+    const duration = 1350;
+    let startTime: number | null = null;
+    let rafId: number;
+
+    const step = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const currentVal = targetNum * eased;
+
+      if (progress < 1) {
+        const formatted = hasDecimal
+          ? currentVal.toFixed(decimalPlaces)
+          : Math.floor(currentVal).toString();
+        setDisplayStr(`${prefix}${formatted}${suffix}`);
+        rafId = requestAnimationFrame(step);
+      } else {
+        setDisplayStr(raw);
+      }
+    };
+
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [value, animate, replayTrigger]);
+
+  return <span className={className}>{displayStr}</span>;
 }
 
 // 5 Slides based on the products sent by the user
@@ -111,10 +184,38 @@ const SLIDES = [
 
 export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: HeroProps) {
   const t = TRANSLATIONS[currentLang];
-  const [activeSlide, setActiveSlide] = React.useState(0);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [heroStats, setHeroStats] = useState<HeroStatsConfig>(() => getLocalHeroStats());
+  const [replayCount, setReplayCount] = useState(0);
+
+  // Sync CMS Hero Stats from Supabase / API and listen for live updates from Admin Panel
+  useEffect(() => {
+    let mounted = true;
+    dbGetHeroStats()
+      .then((data) => {
+        if (mounted && data) setHeroStats(data);
+      })
+      .catch(() => {});
+
+    const handleStatsUpdated = (e: Event) => {
+      const customEvt = e as CustomEvent<HeroStatsConfig>;
+      if (customEvt.detail) {
+        setHeroStats(customEvt.detail);
+        setReplayCount((c) => c + 1);
+      } else {
+        setHeroStats(getLocalHeroStats());
+      }
+    };
+
+    window.addEventListener('gm-hero-stats-updated', handleStatsUpdated);
+    return () => {
+      mounted = false;
+      window.removeEventListener('gm-hero-stats-updated', handleStatsUpdated);
+    };
+  }, []);
 
   // Auto rotate slides every 5 seconds
-  React.useEffect(() => {
+  useEffect(() => {
     const timer = setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % SLIDES.length);
     }, 5000);
@@ -157,34 +258,163 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
                 : 'We empower thousands of businesses and brands to protect and optimize their local SEO and social media presence through manual campaign networks.'}
             </p>
 
-            {/* LIVE PERMANENT METRICS INSTRUCTION (250K+ Delivery & 2500+ Customers) */}
-            <div className={`mt-8 grid grid-cols-2 gap-4 w-full max-w-md border rounded-2xl p-4 shadow-md transition-colors ${
-              isDark 
-                ? 'bg-slate-850/90 border-slate-800' 
-                : 'bg-white border-slate-200'
-            }`}>
-              <div className={`flex flex-col border-r pr-2 ${isDark ? 'border-slate-800' : 'border-slate-100'}`}>
-                <div className="flex items-center gap-1.5">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                  </span>
-                  <span className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Total Delivery</span>
-                </div>
-                <div className="text-3xl sm:text-4xl font-extrabold text-emerald-500 font-display tracking-tight mt-1.5">250K+</div>
-                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Delivery Completed</span>
-              </div>
+            {/* INTERACTIVE CMS-DRIVEN DELIVERY & CUSTOMERS COUNTER — CLEAN ARCHITECTURAL TYPOGRAPHY */}
+            <div
+              className={`mt-9 w-full max-w-xl pt-6 border-t ${
+                isDark ? 'border-slate-800/80' : 'border-slate-200/90'
+              }`}
+              id="hero-interactive-stats"
+            >
+              <div
+                className={`grid grid-cols-2 divide-x ${
+                  isDark ? 'divide-slate-800/80' : 'divide-slate-200/90'
+                }`}
+              >
+                {/* Metric 1: Total Delivery */}
+                <motion.div
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => setReplayCount((c) => c + 1)}
+                  className="group pr-6 sm:pr-10 cursor-pointer select-none"
+                  id="hero-stat-delivery"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`text-[10px] sm:text-[11px] uppercase tracking-[0.18em] font-extrabold transition-colors ${
+                        isDark
+                          ? 'text-slate-400 group-hover:text-emerald-400'
+                          : 'text-slate-500 group-hover:text-emerald-600'
+                      }`}
+                    >
+                      {heroStats.deliveryLabel || 'TOTAL DELIVERY'}
+                    </span>
+                    <TrendingUp
+                      className={`h-3.5 w-3.5 transition-all duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 ${
+                        isDark
+                          ? 'text-slate-600 group-hover:text-emerald-400'
+                          : 'text-slate-400 group-hover:text-emerald-600'
+                      }`}
+                    />
+                  </div>
 
-              <div className="flex flex-col pl-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
-                  </span>
-                  <span className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Customers</span>
-                </div>
-                <div className="text-3xl sm:text-4xl font-extrabold text-blue-600 font-display tracking-tight mt-1.5">2500+</div>
-                <span className={`text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Active Customers</span>
+                  <div className="mt-2 flex items-baseline">
+                    <AnimatedStatNumber
+                      value={heroStats.deliveryValue || '250K+'}
+                      animate={heroStats.enableCountUpAnimation !== false}
+                      replayTrigger={replayCount}
+                      className={`text-4xl sm:text-5xl font-black font-sans tracking-tight tabular-nums leading-none transition-colors ${
+                        isDark ? 'text-emerald-400' : 'text-emerald-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="mt-2.5 flex items-center justify-between gap-2">
+                    <span
+                      className={`text-xs sm:text-sm font-semibold ${
+                        isDark ? 'text-slate-200' : 'text-slate-700'
+                      }`}
+                    >
+                      {heroStats.deliverySublabel || 'Delivery Completed'}
+                    </span>
+                    {heroStats.deliveryTrendText && (
+                      <span
+                        className={`hidden sm:inline-block text-[11px] font-bold tracking-tight ${
+                          isDark ? 'text-emerald-400/80' : 'text-emerald-600'
+                        }`}
+                      >
+                        {heroStats.deliveryTrendText}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Sleek architectural interactive underline bar */}
+                  <div
+                    className={`mt-3 h-[2px] w-full overflow-hidden ${
+                      isDark ? 'bg-slate-800/90' : 'bg-slate-200'
+                    }`}
+                  >
+                    <motion.div
+                      key={`bar-del-${replayCount}`}
+                      initial={{ width: '0%' }}
+                      animate={{ width: '100%' }}
+                      transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 origin-left"
+                    />
+                  </div>
+                </motion.div>
+
+                {/* Metric 2: Customers */}
+                <motion.div
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => setReplayCount((c) => c + 1)}
+                  className="group pl-6 sm:pl-10 cursor-pointer select-none"
+                  id="hero-stat-customers"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`text-[10px] sm:text-[11px] uppercase tracking-[0.18em] font-extrabold transition-colors ${
+                        isDark
+                          ? 'text-slate-400 group-hover:text-blue-400'
+                          : 'text-slate-500 group-hover:text-blue-600'
+                      }`}
+                    >
+                      {heroStats.customersLabel || 'CUSTOMERS'}
+                    </span>
+                    <Users
+                      className={`h-3.5 w-3.5 transition-all duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 ${
+                        isDark
+                          ? 'text-slate-600 group-hover:text-blue-400'
+                          : 'text-slate-400 group-hover:text-blue-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="mt-2 flex items-baseline">
+                    <AnimatedStatNumber
+                      value={heroStats.customersValue || '2500+'}
+                      animate={heroStats.enableCountUpAnimation !== false}
+                      replayTrigger={replayCount}
+                      className={`text-4xl sm:text-5xl font-black font-sans tracking-tight tabular-nums leading-none transition-colors ${
+                        isDark ? 'text-blue-400' : 'text-blue-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="mt-2.5 flex items-center justify-between gap-2">
+                    <span
+                      className={`text-xs sm:text-sm font-semibold ${
+                        isDark ? 'text-slate-200' : 'text-slate-700'
+                      }`}
+                    >
+                      {heroStats.customersSublabel || 'Active Customers'}
+                    </span>
+                    {heroStats.customersTrendText && (
+                      <span
+                        className={`hidden sm:inline-block text-[11px] font-bold tracking-tight ${
+                          isDark ? 'text-blue-400/80' : 'text-blue-600'
+                        }`}
+                      >
+                        {heroStats.customersTrendText}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Sleek architectural interactive underline bar */}
+                  <div
+                    className={`mt-3 h-[2px] w-full overflow-hidden ${
+                      isDark ? 'bg-slate-800/90' : 'bg-slate-200'
+                    }`}
+                  >
+                    <motion.div
+                      key={`bar-cust-${replayCount}`}
+                      initial={{ width: '0%' }}
+                      animate={{ width: '100%' }}
+                      transition={{ duration: 1.2, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                      className="h-full bg-gradient-to-r from-blue-500 to-sky-400 origin-left"
+                    />
+                  </div>
+                </motion.div>
               </div>
             </div>
 

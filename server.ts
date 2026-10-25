@@ -631,6 +631,70 @@ app.delete('/api/products/:id', requireAuth, async (req, res) => {
   }
 });
 
+// 1.5 HERO STATS CMS API (Synced with Catalog Supabase reonysrsoaepzykwwfzw bucket 'katalog-image/hero-stats.json' + local db.json)
+const HERO_STATS_MANIFEST_FILE = 'hero-stats.json';
+const DEFAULT_SERVER_HERO_STATS = {
+  deliveryLabel: 'TOTAL DELIVERY',
+  deliveryValue: '250K+',
+  deliverySublabel: 'Delivery Completed',
+  deliveryTrendText: '99.8% Success Rate',
+  customersLabel: 'CUSTOMERS',
+  customersValue: '2500+',
+  customersSublabel: 'Active Customers',
+  customersTrendText: '4.9/5 Client Rating',
+  enableCountUpAnimation: true,
+  enableLivePulse: true,
+};
+
+app.get('/api/hero-stats', async (req, res) => {
+  try {
+    const { data: pubData } = serverCatalogSupabase.storage
+      .from(CATALOG_BUCKET_NAME)
+      .getPublicUrl(HERO_STATS_MANIFEST_FILE);
+    if (pubData?.publicUrl) {
+      const resp = await fetch(`${pubData.publicUrl}?t=${Date.now()}`);
+      if (resp.ok) {
+        const cloudStats = await resp.json();
+        if (cloudStats && typeof cloudStats === 'object' && cloudStats.deliveryValue) {
+          const db = readDatabase();
+          db.hero_stats = { ...DEFAULT_SERVER_HERO_STATS, ...cloudStats };
+          writeDatabase(db);
+          return res.json(db.hero_stats);
+        }
+      }
+    }
+  } catch {}
+
+  const db = readDatabase();
+  res.json(db.hero_stats || DEFAULT_SERVER_HERO_STATS);
+});
+
+app.put('/api/hero-stats', requireAuth, async (req, res) => {
+  const db = readDatabase();
+  const updated = {
+    ...DEFAULT_SERVER_HERO_STATS,
+    ...(db.hero_stats || {}),
+    ...(req.body || {}),
+    updated_at: new Date().toISOString()
+  };
+  db.hero_stats = updated;
+  writeDatabase(db);
+
+  try {
+    await serverCatalogSupabase.storage
+      .from(CATALOG_BUCKET_NAME)
+      .upload(HERO_STATS_MANIFEST_FILE, Buffer.from(JSON.stringify(updated, null, 2)), {
+        contentType: 'application/json',
+        cacheControl: '0',
+        upsert: true
+      });
+  } catch (err) {
+    console.warn('Server failed to sync hero-stats.json to Supabase Storage:', err);
+  }
+
+  res.json(updated);
+});
+
 // 2. ORDERS API (Managed locally via db.json)
 app.get('/api/orders', requireAuth, async (req, res) => {
   const db = readDatabase();

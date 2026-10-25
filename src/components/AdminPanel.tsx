@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
-import { Product, Order, Language, PaymentStatus, DashboardStats, ShopeeOrder, MapsReview, ReportMap } from '../types';
+import { Product, Order, Language, PaymentStatus, DashboardStats, ShopeeOrder, MapsReview, ReportMap, HeroStatsConfig } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
 import { 
   dbGetProducts, dbCreateProduct, dbUpdateProduct, dbDeleteProduct,
@@ -13,7 +13,8 @@ import {
   dbGetShopeeOrders, dbCreateShopeeOrder, dbUpdateShopeeOrder, dbDeleteShopeeOrder,
   dbGetMapsReviews, dbCreateMapsReview, dbGetMapsReviews as dbGetMapsReviewsOriginal, dbUpdateMapsReview, dbDeleteMapsReview,
   dbGetReportMaps, dbCreateReportMap, dbUpdateReportMap, dbDeleteReportMap,
-  dbUploadProductImage, getShopeeOrderFormattedText
+  dbUploadProductImage, getShopeeOrderFormattedText,
+  dbGetHeroStats, dbSaveHeroStats, DEFAULT_HERO_STATS, getLocalHeroStats
 } from '../lib/supabase';
 import { getAdminShpLogs, clearAdminShpLogs, AdminShpLog, logAdminShpAction } from '../utils/adminshpLogs';
 import { formatRupiah } from './ProductCard';
@@ -290,7 +291,11 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
 
   // Settings view nested tab states
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'qris_config' | 'app_install'>('products');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'products' | 'hero_stats' | 'qris_config' | 'app_install'>('products');
+
+  // CMS Hero Stats state (Count Delivery & Customers)
+  const [heroStatsForm, setHeroStatsForm] = useState<HeroStatsConfig>(() => getLocalHeroStats());
+  const [isSavingHeroStats, setIsSavingHeroStats] = useState(false);
 
   // Custom credentials state for adminshp1..4
   const [adminshpCreds, setAdminshpCreds] = useState<Record<string, { username: string; password: string }>>(() => {
@@ -480,17 +485,25 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
       window.history.pushState(null, '', '/admin/settings');
       window.dispatchEvent(new PopStateEvent('popstate'));
     };
+    const onNavigateHeroStats = () => {
+      setActiveTab('settings');
+      setActiveSettingsTab('hero_stats');
+      window.history.pushState(null, '', '/admin/settings');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    };
 
     window.addEventListener('admin-logout', onNavbarLogout);
     window.addEventListener('admin-refresh', onNavbarRefresh);
     window.addEventListener('admin-navigate-keuangan', onNavigateKeuangan);
     window.addEventListener('admin-navigate-katalog', onNavigateKatalog);
+    window.addEventListener('admin-navigate-hero-stats', onNavigateHeroStats);
 
     return () => {
       window.removeEventListener('admin-logout', onNavbarLogout);
       window.removeEventListener('admin-refresh', onNavbarRefresh);
       window.removeEventListener('admin-navigate-keuangan', onNavigateKeuangan);
       window.removeEventListener('admin-navigate-katalog', onNavigateKatalog);
+      window.removeEventListener('admin-navigate-hero-stats', onNavigateHeroStats);
     };
   }, []);
 
@@ -1008,13 +1021,14 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
     setIsLoading(true);
     setErrorMsg('');
     try {
-      const [prodsData, ordsData, shopeeData, mapsData, statsData, reportMapsData] = await Promise.all([
+      const [prodsData, ordsData, shopeeData, mapsData, statsData, reportMapsData, heroStatsData] = await Promise.all([
         dbGetProducts(500, forceRefresh),
         dbGetOrders(10000, forceRefresh),
         dbGetShopeeOrders(50000, forceRefresh),
         dbGetMapsReviews(50000, forceRefresh),
         dbGetDashboardStats(),
-        dbGetReportMaps(50000, forceRefresh)
+        dbGetReportMaps(50000, forceRefresh),
+        dbGetHeroStats()
       ]);
 
       setProducts(prodsData);
@@ -1023,6 +1037,9 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
       setMapsReviews(mapsData);
       setStats(statsData);
       setReportMaps(reportMapsData);
+      if (heroStatsData) {
+        setHeroStatsForm(heroStatsData);
+      }
     } catch (err: any) {
       console.error(err);
       setErrorMsg(currentLang === 'id' ? 'Gagal memuat data dashboard.' : 'Failed to load dashboard data.');
@@ -4073,6 +4090,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                     <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Pengaturan</span>
                     <span className="text-xs font-bold text-blue-600 mt-0.5">
                       {activeSettingsTab === 'products' ? 'Layanan & Produk'
+                        : activeSettingsTab === 'hero_stats' ? 'CMS Count Delivery'
                         : activeSettingsTab === 'qris_config' ? 'Konfigurasi QRIS'
                         : 'Pasang Aplikasi'}
                     </span>
@@ -4100,6 +4118,20 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                   >
                     <Briefcase className="h-4 w-4 shrink-0" />
                     <span>Layanan & Produk</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSettingsTab('hero_stats')}
+                    className={`px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer lg:w-full text-left ${
+                      activeSettingsTab === 'hero_stats'
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/10'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                    id="sidebar-btn-cms-hero-stats"
+                  >
+                    <TrendingUp className="h-4 w-4 shrink-0" />
+                    <span>CMS Count Delivery</span>
                   </button>
 
                   <button
@@ -4157,6 +4189,22 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                       >
                         <Briefcase className="h-4 w-4 shrink-0" />
                         <span>Layanan & Produk</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSettingsTab('hero_stats');
+                          setIsSettingsMenuOpen(false);
+                        }}
+                        className={`w-full px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-left ${
+                          activeSettingsTab === 'hero_stats'
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <TrendingUp className="h-4 w-4 shrink-0" />
+                        <span>CMS Count Delivery</span>
                       </button>
 
                       <button
@@ -4263,6 +4311,298 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                       ))
                     )}
                   </div>
+                </div>
+              )}
+
+              {activeSettingsTab === 'hero_stats' && (
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6" id="cms-hero-stats-panel">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                    <div className="space-y-1">
+                      <h3 className="text-base font-black text-slate-900 font-sans uppercase tracking-tight flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-blue-600" />
+                        CMS Count Delivery & Statistik Hero
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium font-sans">
+                        Kelola angka, judul, dan efek interaktif pada metrik <strong>Total Delivery</strong> & <strong>Customers</strong> di halaman utama secara real-time.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHeroStatsForm({ ...DEFAULT_HERO_STATS });
+                        toast.info('Form dikembalikan ke nilai default. Klik Simpan untuk menerapkan.');
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold transition-all cursor-pointer shrink-0"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Reset Default</span>
+                    </button>
+                  </div>
+
+                  {/* LIVE PREVIEW (CLEAN ARCHITECTURAL TYPOGRAPHY) */}
+                  <div className="rounded-2xl bg-slate-900 p-5 sm:p-6 border border-slate-800 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Live Preview (Tampilan di Beranda)
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                        Real-Time Sync
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 divide-x divide-slate-800 max-w-xl pt-1">
+                      {/* Preview Metric 1 */}
+                      <div className="pr-5 sm:pr-8">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.18em] font-extrabold text-slate-400">
+                            {heroStatsForm.deliveryLabel || 'TOTAL DELIVERY'}
+                          </span>
+                          <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+                        </div>
+                        <div className="text-3xl sm:text-4xl font-black text-emerald-400 font-sans tracking-tight mt-2 leading-none tabular-nums">
+                          {heroStatsForm.deliveryValue || '250K+'}
+                        </div>
+                        <div className="mt-2.5 flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-200">
+                            {heroStatsForm.deliverySublabel || 'Delivery Completed'}
+                          </span>
+                          {heroStatsForm.deliveryTrendText && (
+                            <span className="hidden sm:inline-block text-[11px] font-bold text-emerald-400/80">
+                              {heroStatsForm.deliveryTrendText}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-3 h-[2px] w-full bg-gradient-to-r from-emerald-500 to-teal-400" />
+                      </div>
+
+                      {/* Preview Metric 2 */}
+                      <div className="pl-5 sm:pl-8">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.18em] font-extrabold text-slate-400">
+                            {heroStatsForm.customersLabel || 'CUSTOMERS'}
+                          </span>
+                          <Users className="h-3.5 w-3.5 text-blue-400" />
+                        </div>
+                        <div className="text-3xl sm:text-4xl font-black text-blue-400 font-sans tracking-tight mt-2 leading-none tabular-nums">
+                          {heroStatsForm.customersValue || '2500+'}
+                        </div>
+                        <div className="mt-2.5 flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-200">
+                            {heroStatsForm.customersSublabel || 'Active Customers'}
+                          </span>
+                          {heroStatsForm.customersTrendText && (
+                            <span className="hidden sm:inline-block text-[11px] font-bold text-blue-400/80">
+                              {heroStatsForm.customersTrendText}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-3 h-[2px] w-full bg-gradient-to-r from-blue-500 to-sky-400" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CMS FORM INPUTS */}
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setIsSavingHeroStats(true);
+                      try {
+                        const saved = await dbSaveHeroStats(heroStatsForm);
+                        setHeroStatsForm(saved);
+                        toast.success('Statistik Count Delivery berhasil disimpan & diperbarui di Landing Page!');
+                      } catch (err) {
+                        console.error(err);
+                        toast.error('Gagal menyimpan konfigurasi statistik.');
+                      } finally {
+                        setIsSavingHeroStats(false);
+                      }
+                    }}
+                    className="space-y-6"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Column 1: Total Delivery Settings */}
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/30 p-5 space-y-4">
+                        <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                            Metrik 1: Total Delivery (Hijau)
+                          </h4>
+                          <TrendingUp className="h-4 w-4 text-emerald-600" />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Label Atas (Header)
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={heroStatsForm.deliveryLabel}
+                            onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, deliveryLabel: e.target.value }))}
+                            placeholder="TOTAL DELIVERY"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Angka Utama (Count Value)
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={heroStatsForm.deliveryValue}
+                            onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, deliveryValue: e.target.value }))}
+                            placeholder="250K+"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm sm:text-base font-black text-emerald-600 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
+                          />
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {['250K+', '300K+', '500K+', '1M+'].map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setHeroStatsForm((prev) => ({ ...prev, deliveryValue: preset }))}
+                                className="px-2 py-0.5 rounded-md bg-white border border-emerald-200 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Sub-Label Bawah
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={heroStatsForm.deliverySublabel}
+                            onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, deliverySublabel: e.target.value }))}
+                            placeholder="Delivery Completed"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Teks Info Tambahan (Opsional)
+                          </label>
+                          <input
+                            type="text"
+                            value={heroStatsForm.deliveryTrendText || ''}
+                            onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, deliveryTrendText: e.target.value }))}
+                            placeholder="99.8% Success Rate"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-800 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Column 2: Customers Settings */}
+                      <div className="rounded-2xl border border-blue-100 bg-blue-50/30 p-5 space-y-4">
+                        <div className="flex items-center justify-between border-b border-blue-100 pb-3">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                            Metrik 2: Customers (Biru)
+                          </h4>
+                          <Users className="h-4 w-4 text-blue-600" />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Label Atas (Header)
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={heroStatsForm.customersLabel}
+                            onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, customersLabel: e.target.value }))}
+                            placeholder="CUSTOMERS"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Angka Utama (Count Value)
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={heroStatsForm.customersValue}
+                            onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, customersValue: e.target.value }))}
+                            placeholder="2500+"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm sm:text-base font-black text-blue-600 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10"
+                          />
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {['2500+', '3500+', '5000+', '10K+'].map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setHeroStatsForm((prev) => ({ ...prev, customersValue: preset }))}
+                                className="px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[10px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Sub-Label Bawah
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={heroStatsForm.customersSublabel}
+                            onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, customersSublabel: e.target.value }))}
+                            placeholder="Active Customers"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                            Teks Info Tambahan (Opsional)
+                          </label>
+                          <input
+                            type="text"
+                            value={heroStatsForm.customersTrendText || ''}
+                            onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, customersTrendText: e.target.value }))}
+                            placeholder="4.9/5 Client Rating"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs sm:text-sm font-medium text-slate-800 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Interactive Behavior Toggles */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={heroStatsForm.enableCountUpAnimation !== false}
+                          onChange={(e) => setHeroStatsForm((prev) => ({ ...prev, enableCountUpAnimation: e.target.checked }))}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <div>
+                          <div className="text-xs font-extrabold text-slate-800">Animasi Count-Up Angka Interaktif</div>
+                          <div className="text-[11px] text-slate-500">Angka menghitung naik otomatis saat halaman dimuat atau diklik</div>
+                        </div>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+                      <button
+                        type="submit"
+                        disabled={isSavingHeroStats}
+                        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-600/20 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                        id="btn-save-cms-hero-stats"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>{isSavingHeroStats ? 'Menyimpan...' : 'Simpan Perubahan CMS'}</span>
+                      </button>
+                    </div>
+                  </form>
                 </div>
               )}
 

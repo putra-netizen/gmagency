@@ -100,3 +100,18 @@ export interface ReportMap {
   updated_at?: string;
 }
 
+export interface HeroStatsConfig {
+  deliveryLabel: string;
+  deliveryValue: string;
+  deliverySublabel: string;
+  deliveryTrendText?: string;
+  customersLabel: string;
+  customersValue: string;
+  customersSublabel: string;
+  customersTrendText?: string;
+  enableCountUpAnimation?: boolean;
+  enableLivePulse?: boolean;
+  updated_at?: string;
+}
+
+

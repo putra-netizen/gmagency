@@ -8,7 +8,7 @@ import { motion } from 'motion/react';
 import GMLogo from './GMLogo';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
-import { Globe, ShieldAlert, Home, Grid, Settings, RefreshCw, LogOut, Sun, Moon, Menu, X, Wallet, Package, FileSpreadsheet, User, ShieldCheck, Database } from 'lucide-react';
+import { Globe, ShieldAlert, Home, Grid, Settings, RefreshCw, LogOut, Sun, Moon, Menu, X, Wallet, Package, FileSpreadsheet, User, ShieldCheck, Database, TrendingUp } from 'lucide-react';
 
 import { loginWithBackend, clientLogout, getAuthUser, getViewAsShpSlot, setViewAsShpSlot, AuthUser } from '../lib/auth';
 
@@ -234,38 +234,47 @@ export default function Navbar({
                         </div>
                       </div>
                     </button>
+
+                    {/* 3. CMS COUNT DELIVERY & STATISTIK */}
+                    <button
+                      onClick={() => {
+                        setIsAdminMenuOpen(false);
+                        window.dispatchEvent(new CustomEvent('admin-navigate-hero-stats'));
+                      }}
+                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-indigo-50/80 dark:hover:bg-indigo-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-900/60 bg-slate-50/50 dark:bg-slate-800/30"
+                      id="menu-item-cms-hero-stats"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform shadow-xs">
+                        <TrendingUp className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-1.5">
+                          <span>CMS COUNT DELIVERY</span>
+                          <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded font-bold">CMS</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                          Edit angka Total Delivery & Customers
+                        </div>
+                      </div>
+                    </button>
                   </div>
                 </motion.div>
               </>
             )}
           </div>
         ) : (
-          /* Normal Logo brand encapsulated in white capsule wrapper */
+          /* Clean Logo & Brand Lockup without white capsule, adapting to Light/Dark Mode */
           <div 
             onClick={() => onViewChange('home')} 
-            className="flex cursor-pointer transition-all duration-200 active:scale-95 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-full py-1 px-3 sm:py-1.5 sm:px-3.5 items-center justify-center shadow-xs hover:shadow-sm hover:bg-slate-50 dark:hover:bg-slate-900"
+            className="flex cursor-pointer transition-all duration-200 active:scale-95 py-1 items-center justify-center"
             id="brand-logo-container"
           >
-            <GMLogo size="sm" showSubtitle={true} />
+            <GMLogo size="sm" showSubtitle={true} theme={theme} />
           </div>
         )}
 
         {/* Action controls */}
         <div className="flex items-center gap-1.5 sm:gap-3" id="nav-actions">
-          {/* Supabase status pill -> Layanan 24 Jam */}
-          {currentView === 'home' && (
-            <div 
-              className={`hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold md:flex ${
-                theme === 'dark'
-                  ? 'bg-emerald-950/20 text-emerald-400 border border-emerald-900/20'
-                  : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-              }`}
-              title="Layanan 24 Jam"
-            >
-              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Layanan 24 Jam</span>
-            </div>
-          )}
 
           {/* Admin panel actions for GM Owner / Super Admin */}
           {currentView === 'admin' && isAdminAuth && (

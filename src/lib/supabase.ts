@@ -6,7 +6,7 @@
 /// <reference types="vite/client" />
 
 import { createClient } from '@supabase/supabase-js';
-import { Product, Order, DashboardStats, ShopeeOrder, MapsReview, ReportMap } from '../types';
+import { Product, Order, DashboardStats, ShopeeOrder, MapsReview, ReportMap, HeroStatsConfig } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { getAuthHeaders, resolveActiveInputerIdentity, getSlotIndicatorName } from './auth';
 import { getShopeeOrderFormattedText } from '../utils/formatHelpers';
@@ -1147,6 +1147,127 @@ export async function dbDeleteProduct(id: string): Promise<boolean> {
   } catch {}
   return true;
 }
+
+export const HERO_STATS_MANIFEST_FILE = 'hero-stats.json';
+export const HERO_STATS_STORAGE_KEY = 'gm_hero_stats_cms';
+
+export const DEFAULT_HERO_STATS: HeroStatsConfig = {
+  deliveryLabel: 'TOTAL DELIVERY',
+  deliveryValue: '250K+',
+  deliverySublabel: 'Delivery Completed',
+  deliveryTrendText: '99.8% Success Rate',
+  customersLabel: 'CUSTOMERS',
+  customersValue: '2500+',
+  customersSublabel: 'Active Customers',
+  customersTrendText: '4.9/5 Client Rating',
+  enableCountUpAnimation: true,
+  enableLivePulse: true,
+};
+
+export function getLocalHeroStats(): HeroStatsConfig {
+  try {
+    const raw = localStorage.getItem(HERO_STATS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return { ...DEFAULT_HERO_STATS, ...parsed };
+      }
+    }
+  } catch {}
+  return { ...DEFAULT_HERO_STATS };
+}
+
+export async function dbGetHeroStats(): Promise<HeroStatsConfig> {
+  // 1. Try cloud manifest in katalog-image/hero-stats.json on reonysrsoaepzykwwfzw
+  if (catalogSupabase) {
+    try {
+      const { data: pubData } = catalogSupabase.storage
+        .from(CATALOG_BUCKET_NAME)
+        .getPublicUrl(HERO_STATS_MANIFEST_FILE);
+      if (pubData?.publicUrl) {
+        const res = await fetch(`${pubData.publicUrl}?t=${Date.now()}`, { cache: 'no-store' });
+        if (res.ok) {
+          const parsed = await res.json();
+          if (parsed && typeof parsed === 'object' && parsed.deliveryValue) {
+            const merged = { ...DEFAULT_HERO_STATS, ...parsed };
+            try {
+              localStorage.setItem(HERO_STATS_STORAGE_KEY, JSON.stringify(merged));
+            } catch {}
+            return merged;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Fallback to Express API / LocalStorage
+  try {
+    const res = await fetch(`/api/hero-stats?_t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const parsed = await res.json();
+        if (parsed && typeof parsed === 'object' && parsed.deliveryValue) {
+          const merged = { ...DEFAULT_HERO_STATS, ...parsed };
+          try {
+            localStorage.setItem(HERO_STATS_STORAGE_KEY, JSON.stringify(merged));
+          } catch {}
+          return merged;
+        }
+      }
+    }
+  } catch {}
+
+  return getLocalHeroStats();
+}
+
+export async function dbSaveHeroStats(config: Partial<HeroStatsConfig>): Promise<HeroStatsConfig> {
+  const current = getLocalHeroStats();
+  const updated: HeroStatsConfig = {
+    ...DEFAULT_HERO_STATS,
+    ...current,
+    ...config,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    localStorage.setItem(HERO_STATS_STORAGE_KEY, JSON.stringify(updated));
+  } catch {}
+
+  // 1. Save to Express API
+  try {
+    await fetch('/api/hero-stats', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(updated)
+    });
+  } catch (err) {
+    console.warn('Failed to save hero-stats via API:', err);
+  }
+
+  // 2. Sync to Supabase Storage bucket 'katalog-image/hero-stats.json'
+  if (catalogSupabase) {
+    try {
+      const blob = new Blob([JSON.stringify(updated, null, 2)], { type: 'application/json' });
+      await catalogSupabase.storage
+        .from(CATALOG_BUCKET_NAME)
+        .upload(HERO_STATS_MANIFEST_FILE, blob, {
+          contentType: 'application/json',
+          cacheControl: '0',
+          upsert: true
+        });
+    } catch (err) {
+      console.warn('Failed to sync hero-stats.json to Supabase Storage:', err);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('gm-hero-stats-updated', { detail: updated }));
+  }
+
+  return updated;
+}
+
 
 
 // 2. ORDERS (Managed locally via Express API and LocalStorage)

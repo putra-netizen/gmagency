@@ -179,16 +179,6 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
           referrerPolicy="no-referrer"
           loading="lazy"
         />
-
-        {/* Hover overlay sheen/consultation badge */}
-        <div className={`absolute inset-0 bg-gradient-to-t from-slate-950/60 to-transparent transition-opacity duration-300 flex items-end p-3 z-10 pointer-events-none ${
-          isMobileFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-        }`}>
-          <span className="text-[10px] text-white font-medium flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live Delivery Active
-          </span>
-        </div>
       </div>
 
       {/* Product Content / Information */}
