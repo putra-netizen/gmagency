@@ -75,22 +75,36 @@ export default function Navbar({
     }
   });
 
+  const isSuperAdminOnly = Boolean(isAdminAuth && !isShpAuth && !viewAsSlot);
+
+  useEffect(() => {
+    if (!isSuperAdminOnly && isAdminMenuOpen) {
+      setIsAdminMenuOpen(false);
+    }
+  }, [isSuperAdminOnly, isAdminMenuOpen]);
+
   const getShpDisplayName = (): string => {
     try {
       const user = getAuthUser();
-      if (user?.role === 'adminshp' && user?.name) return user.name.toUpperCase();
-      if (user?.role === 'adminshp' && user?.username) return user.username.toUpperCase();
-      const slot = sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || 'adminshp1';
-      const saved = localStorage.getItem('gm_adminshp_creds');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed?.[slot]?.username) return parsed[slot].username.toUpperCase();
+      let raw = '';
+      if (user?.role === 'adminshp' && user?.name) raw = user.name.toUpperCase();
+      else if (user?.role === 'adminshp' && user?.username) raw = user.username.toUpperCase();
+      else {
+        const slot = sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || 'adminshp1';
+        const saved = localStorage.getItem('gm_adminshp_creds');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.[slot]?.username) raw = parsed[slot].username.toUpperCase();
+        }
+        if (!raw) {
+          if (slot === 'adminshp1') raw = 'ADMINERA';
+          else if (slot === 'adminshp2') raw = 'ADMINCIKA';
+          else if (slot === 'adminshp3') raw = 'ADMINVIRA';
+          else if (slot === 'adminshp4') raw = 'ADMINAROK';
+          else raw = slot.toUpperCase();
+        }
       }
-      if (slot === 'adminshp1') return 'ADMINERA';
-      if (slot === 'adminshp2') return 'ADMINCIKA';
-      if (slot === 'adminshp3') return 'ADMINVIRA';
-      if (slot === 'adminshp4') return 'ADMINALI';
-      return slot.toUpperCase();
+      return raw.replace(/\bALI\b/g, 'AROK').replace(/\bFADHLUALI\b/g, 'AROK');
     } catch (e) {
       return 'ADMIN';
     }
@@ -139,128 +153,140 @@ export default function Navbar({
         {/* Logo brand or Admin Title */}
         {currentView === 'admin' ? (
           <div className="relative flex items-center gap-2 sm:gap-3" id="admin-logo-status-container">
-            {/* Hamburger Menu Button (Replaces "AD" logo) */}
-            <button
-              onClick={() => setIsAdminMenuOpen(prev => !prev)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all cursor-pointer shadow-md active:scale-95 border border-slate-700/50"
-              title="Menu Admin"
-              id="admin-hamburger-btn"
-            >
-              {isAdminMenuOpen ? (
-                <X className="h-5 w-5 text-amber-400 transition-transform duration-200" />
-              ) : (
-                <Menu className="h-5 w-5 text-white transition-transform duration-200" />
-              )}
-            </button>
+            {/* Hamburger Menu Button - EKSKLUSIF hanya untuk Super Admin (TIDAK PERNAH muncul di Portal Login atau Admin SHP) */}
+            {isSuperAdminOnly && (
+              <>
+                <button
+                  onClick={() => setIsAdminMenuOpen(prev => !prev)}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all cursor-pointer shadow-md active:scale-95 border border-slate-700/50"
+                  title="Menu Admin"
+                  id="admin-hamburger-btn"
+                >
+                  {isAdminMenuOpen ? (
+                    <X className="h-5 w-5 text-amber-400 transition-transform duration-200" />
+                  ) : (
+                    <Menu className="h-5 w-5 text-white transition-transform duration-200" />
+                  )}
+                </button>
 
-            <div className="flex items-center gap-2">
+                {/* Premium Hamburger Menu Dropdown Popover */}
+                {isAdminMenuOpen && (
+                  <>
+                    {/* Backdrop overlay */}
+                    <div 
+                      className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[2px]" 
+                      onClick={() => setIsAdminMenuOpen(false)} 
+                    />
+
+                    {/* Dropdown Card */}
+                    <motion.div
+                      initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute left-0 top-full mt-2.5 z-50 w-72 sm:w-80 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-2.5 shadow-2xl ring-1 ring-black/5"
+                      id="admin-hamburger-dropdown"
+                    >
+                      <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-1 flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                          Menu Utama Admin
+                        </span>
+                        <span className="bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-blue-100 dark:border-blue-900">
+                          PREMIUM NAV
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {/* 1. KEUANGAN */}
+                        <button
+                          onClick={() => {
+                            setIsAdminMenuOpen(false);
+                            window.history.pushState(null, '', '/admin/devpayroll');
+                            window.dispatchEvent(new PopStateEvent('popstate'));
+                            window.dispatchEvent(new CustomEvent('admin-navigate-keuangan'));
+                          }}
+                          className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-emerald-50/80 dark:hover:bg-emerald-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-emerald-200 dark:hover:border-emerald-900/60 bg-slate-50/50 dark:bg-slate-800/30"
+                          id="menu-item-keuangan"
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform shadow-xs">
+                            <Wallet className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
+                              <span>KEUANGAN</span>
+                              <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-bold">NAVBAR</span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                              Ikhtisar omset & total pendapatan
+                            </div>
+                          </div>
+                        </button>
+
+                        {/* 2. EDIT KATALOG */}
+                        <button
+                          onClick={() => {
+                            setIsAdminMenuOpen(false);
+                            window.dispatchEvent(new CustomEvent('admin-navigate-katalog'));
+                          }}
+                          className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50/80 dark:hover:bg-blue-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-blue-200 dark:hover:border-blue-900/60 bg-slate-50/50 dark:bg-slate-800/30"
+                          id="menu-item-edit-katalog"
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-transform shadow-xs">
+                            <Package className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                              EDIT KATALOG
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                              CRUD kelola produk & layanan
+                            </div>
+                          </div>
+                        </button>
+
+                        {/* 3. CMS COUNT DELIVERY & STATISTIK */}
+                        <button
+                          onClick={() => {
+                            setIsAdminMenuOpen(false);
+                            window.dispatchEvent(new CustomEvent('admin-navigate-hero-stats'));
+                          }}
+                          className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-indigo-50/80 dark:hover:bg-indigo-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-900/60 bg-slate-50/50 dark:bg-slate-800/30"
+                          id="menu-item-cms-hero-stats"
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform shadow-xs">
+                            <TrendingUp className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-1.5">
+                              <span>CMS COUNT DELIVERY</span>
+                              <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded font-bold">CMS</span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                              Edit angka Total Delivery & Customers
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </>
+            )}
+
+            <div 
+              onClick={() => {
+                if (!isAdminAuth && !isShpAuth) {
+                  onViewChange('home');
+                }
+              }}
+              className={`flex items-center gap-2 ${!isAdminAuth && !isShpAuth ? 'cursor-pointer hover:opacity-85 transition-opacity' : ''}`}
+              title={!isAdminAuth && !isShpAuth ? "Kembali ke Beranda" : undefined}
+            >
               <GMLogo size="xs" showSubtitle={false} hideText={true} />
               <span className="text-xs sm:text-sm font-black tracking-wider font-sans uppercase text-slate-800 dark:text-slate-100">
                 ADMIN WORKING SPACE
               </span>
             </div>
-
-            {/* Premium Hamburger Menu Dropdown Popover */}
-            {isAdminMenuOpen && (
-              <>
-                {/* Backdrop overlay */}
-                <div 
-                  className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[2px]" 
-                  onClick={() => setIsAdminMenuOpen(false)} 
-                />
-
-                {/* Dropdown Card */}
-                <motion.div
-                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute left-0 top-full mt-2.5 z-50 w-72 sm:w-80 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-2.5 shadow-2xl ring-1 ring-black/5"
-                  id="admin-hamburger-dropdown"
-                >
-                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-1 flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                      Menu Utama Admin
-                    </span>
-                    <span className="bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-blue-100 dark:border-blue-900">
-                      PREMIUM NAV
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {/* 1. KEUANGAN */}
-                    <button
-                      onClick={() => {
-                        setIsAdminMenuOpen(false);
-                        window.history.pushState(null, '', '/admin/devpayroll');
-                        window.dispatchEvent(new PopStateEvent('popstate'));
-                        window.dispatchEvent(new CustomEvent('admin-navigate-keuangan'));
-                      }}
-                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-emerald-50/80 dark:hover:bg-emerald-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-emerald-200 dark:hover:border-emerald-900/60 bg-slate-50/50 dark:bg-slate-800/30"
-                      id="menu-item-keuangan"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform shadow-xs">
-                        <Wallet className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
-                          <span>KEUANGAN</span>
-                          <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-bold">NAVBAR</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                          Ikhtisar omset & total pendapatan
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* 2. EDIT KATALOG */}
-                    <button
-                      onClick={() => {
-                        setIsAdminMenuOpen(false);
-                        window.dispatchEvent(new CustomEvent('admin-navigate-katalog'));
-                      }}
-                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50/80 dark:hover:bg-blue-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-blue-200 dark:hover:border-blue-900/60 bg-slate-50/50 dark:bg-slate-800/30"
-                      id="menu-item-edit-katalog"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-transform shadow-xs">
-                        <Package className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                          EDIT KATALOG
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                          CRUD kelola produk & layanan
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* 3. CMS COUNT DELIVERY & STATISTIK */}
-                    <button
-                      onClick={() => {
-                        setIsAdminMenuOpen(false);
-                        window.dispatchEvent(new CustomEvent('admin-navigate-hero-stats'));
-                      }}
-                      className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-indigo-50/80 dark:hover:bg-indigo-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-900/60 bg-slate-50/50 dark:bg-slate-800/30"
-                      id="menu-item-cms-hero-stats"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform shadow-xs">
-                        <TrendingUp className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-1.5">
-                          <span>CMS COUNT DELIVERY</span>
-                          <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded font-bold">CMS</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                          Edit angka Total Delivery & Customers
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                </motion.div>
-              </>
-            )}
           </div>
         ) : (
           /* Clean Logo & Brand Lockup without white capsule, adapting to Light/Dark Mode */
