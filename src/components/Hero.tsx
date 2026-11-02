@@ -245,21 +245,35 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
           
           {/* Main content column */}
           <div className="flex flex-col items-start lg:col-span-6 z-10">
-            {/* Static primary title + description with dynamic highlights */}
-            <h1 className={`mt-6 text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-5xl leading-[1.1] font-sans ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            {/* Primary title with reveal motion */}
+            <motion.h1 
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+              className={`mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-5xl leading-[1.1] font-sans ${isDark ? 'text-white' : 'text-slate-900'}`}
+            >
               {currentLang === 'id' 
                 ? 'Kuasai Reputasi Bisnis & Sosmed Secara Real-Time' 
                 : 'Command Your Business & Social Reputation in Real-Time'}
-            </h1>
+            </motion.h1>
 
-            <p className={`mt-4 text-sm sm:text-base max-w-xl font-sans font-normal leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            {/* Subtitle description with reveal motion */}
+            <motion.p 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className={`mt-4 text-sm sm:text-base max-w-xl font-sans font-normal leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-600'}`}
+            >
               {currentLang === 'id'
                 ? 'Kami membantu ribuan bisnis, instansi, dan UMKM mempertahankan reputasi positif melalui interaksi organik dari jaringan pengguna asli.'
                 : 'We empower thousands of businesses and brands to protect and optimize their local SEO and social media presence through manual campaign networks.'}
-            </p>
+            </motion.p>
 
-            {/* INTERACTIVE CMS-DRIVEN DELIVERY & CUSTOMERS COUNTER — CLEAN ARCHITECTURAL TYPOGRAPHY */}
-            <div
+            {/* INTERACTIVE CMS-DRIVEN DELIVERY & CUSTOMERS COUNTER — CLEAN ARCHITECTURAL TYPOGRAPHY WITH REVEAL MOTION */}
+            <motion.div
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
               className={`mt-9 w-full max-w-xl pt-6 border-t ${
                 isDark ? 'border-slate-800/80' : 'border-slate-200/90'
               }`}
@@ -416,10 +430,15 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
                   </div>
                 </motion.div>
               </div>
-            </div>
+            </motion.div>
 
-            {/* Actions */}
-            <div className="mt-8 flex flex-wrap gap-4 w-full sm:w-auto">
+            {/* Actions with reveal motion */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-8 flex flex-wrap gap-4 w-full sm:w-auto"
+            >
               <button
                 onClick={onExploreClick}
                 className="group flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all duration-200 hover:bg-blue-700 active:scale-95 sm:w-auto cursor-pointer"
@@ -428,11 +447,16 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
                 {t.heroBtn}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </button>
-            </div>
+            </motion.div>
           </div>
 
-          {/* Interactive Dynamic Slideshow Graphic Column */}
-          <div className="relative flex flex-col justify-center lg:col-span-6 w-full lg:pl-4">
+          {/* Interactive Dynamic Slideshow Graphic Column with Reveal Motion */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.94, y: 30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.75, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            className="relative flex flex-col justify-center lg:col-span-6 w-full lg:pl-4"
+          >
             
             {/* Carousel Active Content Slide with elegant animation */}
             <div 
@@ -661,7 +685,7 @@ export default function Hero({ currentLang, onExploreClick, theme = 'dark' }: He
               ))}
             </div>
 
-          </div>
+          </motion.div>
 
         </div>
       </div>

@@ -99,7 +99,7 @@ const getSlotRouteName = (slot: string): string => {
   if (slot === 'adminshp1') return 'adminera';
   if (slot === 'adminshp2') return 'admincika';
   if (slot === 'adminshp3') return 'adminvira';
-  if (slot === 'adminshp4') return 'adminali';
+  if (slot === 'adminshp4') return 'adminarok';
   return slot;
 };
 
@@ -123,7 +123,7 @@ const getSlotFromRouteName = (routeName: string): string | null => {
   if (clean === 'adminera' || clean === 'adminshp1') return 'adminshp1';
   if (clean === 'admincika' || clean === 'adminshp2') return 'adminshp2';
   if (clean === 'adminvira' || clean === 'adminshp3') return 'adminshp3';
-  if (clean === 'adminali' || clean === 'adminshp4') return 'adminshp4';
+  if (clean === 'adminarok' || clean === 'arok' || clean === 'adminali' || clean === 'ali' || clean === 'adminshp4') return 'adminshp4';
   return null;
 };
 

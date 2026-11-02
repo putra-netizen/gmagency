@@ -15,6 +15,7 @@ interface ProductCardProps {
   currentLang: Language;
   onCheckoutClick: (product: Product) => void;
   theme?: 'light' | 'dark';
+  index?: number;
 }
 
 export function formatRupiah(amount: number): string {
@@ -39,7 +40,7 @@ export function WhatsAppLogo({ className = "h-4 w-4" }: { className?: string }) 
   );
 }
 
-export default function ProductCard({ product, currentLang, onCheckoutClick, theme = 'dark' }: ProductCardProps) {
+export default function ProductCard({ product, currentLang, onCheckoutClick, theme = 'dark', index = 0 }: ProductCardProps) {
   const t = TRANSLATIONS[currentLang];
   const name = currentLang === 'id' ? product.name : product.name_en;
   const description = currentLang === 'id' ? product.description : product.description_en;
@@ -129,8 +130,8 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
   return (
     <motion.div 
       ref={cardRef}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ 
+      initial={{ opacity: 0, y: 32 }}
+      whileInView={{ 
         opacity: 1, 
         y: isMobileFocused ? -10 : 0,
         scale: isMobileFocused ? 1.03 : 1,
@@ -140,13 +141,18 @@ export default function ProductCard({ product, currentLang, onCheckoutClick, the
               : "0 20px 25px -5px rgba(59, 130, 246, 0.15), 0 10px 10px -5px rgba(59, 130, 246, 0.08)")
           : "0 0px 0px rgba(0, 0, 0, 0)"
       }}
+      viewport={{ once: true, margin: "-40px" }}
       whileHover={!isMobileFocused ? { 
         y: -8, 
         boxShadow: isDark 
           ? "0 20px 25px -5px rgba(59, 130, 246, 0.2), 0 10px 10px -5px rgba(59, 130, 246, 0.1)"
           : "0 20px 25px -5px rgba(59, 130, 246, 0.1), 0 10px 10px -5px rgba(59, 130, 246, 0.05)"
       } : undefined}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      transition={{ 
+        duration: 0.55, 
+        delay: (index % 4) * 0.08, 
+        ease: [0.22, 1, 0.36, 1] 
+      }}
       className={`group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-300 h-full ${
         isDark 
           ? `border-slate-800/80 bg-slate-900/40 backdrop-blur-md ${isMobileFocused ? 'border-blue-500/80 shadow-[0_0_20px_rgba(59,130,246,0.25)]' : 'hover:border-blue-500/50'}` 

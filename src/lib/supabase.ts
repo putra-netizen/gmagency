@@ -125,9 +125,104 @@ const checkValidUrl = (url: string | undefined): boolean => {
   }
 };
 
+const memoryStorage = new Map<string, string>();
+
+export function pruneLocalStorageCache() {
+  if (typeof window === 'undefined') return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      const isCritical = (
+        k.startsWith('sb-') ||
+        k.includes('auth') ||
+        k.includes('token') ||
+        k.includes('USER') ||
+        k.includes('user') ||
+        k.includes('finance') ||
+        k === 'gm_lang' ||
+        k.startsWith('gm_admin')
+      );
+      if (!isCritical) {
+        keysToRemove.push(k);
+      }
+    }
+    for (const key of keysToRemove) {
+      try {
+        localStorage.removeItem(key);
+      } catch {}
+    }
+  } catch (e) {
+    console.warn('[Storage] Pruning error:', e);
+  }
+}
+
+// Auto prune on module initialization
+try {
+  pruneLocalStorageCache();
+} catch {}
+
+export function safeLocalStorageSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    pruneLocalStorageCache();
+    try {
+      localStorage.setItem(key, value);
+    } catch {
+      try {
+        sessionStorage.setItem(key, value);
+      } catch {
+        memoryStorage.set(key, value);
+      }
+    }
+  }
+}
+
+export const safeAuthStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      const val = localStorage.getItem(key);
+      if (val !== null) return val;
+    } catch {}
+    try {
+      const val = sessionStorage.getItem(key);
+      if (val !== null) return val;
+    } catch {}
+    return memoryStorage.get(key) ?? null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      localStorage.setItem(key, value);
+      return;
+    } catch (e) {
+      console.warn('[SafeStorage] localStorage.setItem exceeded quota, auto-pruning cache...', e);
+      pruneLocalStorageCache();
+      try {
+        localStorage.setItem(key, value);
+        return;
+      } catch (retryErr) {
+        console.warn('[SafeStorage] localStorage still full after prune. Storing in sessionStorage/memory.', retryErr);
+        try {
+          sessionStorage.setItem(key, value);
+        } catch {
+          memoryStorage.set(key, value);
+        }
+      }
+    }
+  },
+  removeItem: (key: string): void => {
+    try { localStorage.removeItem(key); } catch {}
+    try { sessionStorage.removeItem(key); } catch {}
+    memoryStorage.delete(key);
+  }
+};
+
 export const isSupabaseConfigured = checkValidUrl(supabaseUrl) && Boolean(supabaseAnonKey);
 export const supabase: any = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
+    storage: safeAuthStorage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,

@@ -9,7 +9,7 @@ import { TRANSLATIONS } from '../lib/translations';
 import { dbCreateOrder } from '../lib/supabase';
 import { formatRupiah } from './ProductCard';
 import { X, Check, HelpCircle, Phone, Link2, FileText, ShoppingBag, ArrowRight, MessageSquare, AlertCircle } from 'lucide-react';
-import { getQrisConfig } from '../utils/qrisHelper';
+import { getQrisConfig, DEFAULT_QRIS_IMAGE, PUBLIC_QRIS_IMAGE, SUPABASE_QRIS_IMAGE } from '../utils/qrisHelper';
 
 interface CheckoutModalProps {
   product: Product;
@@ -21,6 +21,15 @@ interface CheckoutModalProps {
 export default function CheckoutModal({ product, currentLang, onClose, onSuccess }: CheckoutModalProps) {
   const t = TRANSLATIONS[currentLang];
   const qrisConfig = getQrisConfig();
+  const [qrisImgSrc, setQrisImgSrc] = useState<string>(qrisConfig.imageUrl || DEFAULT_QRIS_IMAGE);
+
+  const handleQrisImageError = () => {
+    if (qrisImgSrc !== PUBLIC_QRIS_IMAGE) {
+      setQrisImgSrc(PUBLIC_QRIS_IMAGE);
+    } else if (qrisImgSrc !== SUPABASE_QRIS_IMAGE) {
+      setQrisImgSrc(SUPABASE_QRIS_IMAGE);
+    }
+  };
 
   // Form states
   const [buyerName, setBuyerName] = useState('');
@@ -329,10 +338,11 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
                 {/* Professional QRIS Vector Generator Box */}
                 <div className="mx-auto max-w-[240px] rounded-2xl border border-slate-200 bg-white p-3 shadow-md flex flex-col items-center">
                   <img
-                    src={qrisConfig.imageUrl}
+                    src={qrisImgSrc}
                     alt="QRIS Pembayaran GMSOLUTION"
                     className="w-full h-auto rounded-lg object-contain"
                     referrerPolicy="no-referrer"
+                    onError={handleQrisImageError}
                   />
                   <div className="mt-2 flex items-center justify-center gap-1 border-t border-slate-100 pt-2 w-full">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
@@ -453,10 +463,11 @@ export default function CheckoutModal({ product, currentLang, onClose, onSuccess
 
                 <div className="bg-white rounded-xl p-2 border border-slate-100 max-w-[200px]">
                   <img
-                    src={qrisConfig.imageUrl}
+                    src={qrisImgSrc}
                     alt="QRIS Pembayaran GMSOLUTION"
                     className="w-full h-auto rounded-lg object-contain"
                     referrerPolicy="no-referrer"
+                    onError={handleQrisImageError}
                   />
                 </div>
 

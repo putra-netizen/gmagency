@@ -37,15 +37,17 @@ CREATE POLICY "GM_Storage_Public_Insert" ON storage.objects
   FOR INSERT TO anon, authenticated, public
   WITH CHECK (bucket_id IN ('LOGO-GM', 'katalog-image', 'files'));
 
--- C. UPDATE ACCESS (Mengizinkan update/timpa file jika diperlukan)
+-- C. UPDATE ACCESS (Hanya pengguna login/authenticated yang dapat menimpa file)
 DROP POLICY IF EXISTS "GM_Storage_Public_Update" ON storage.objects;
-CREATE POLICY "GM_Storage_Public_Update" ON storage.objects
-  FOR UPDATE TO anon, authenticated, public
+DROP POLICY IF EXISTS "GM_Storage_Auth_Update" ON storage.objects;
+CREATE POLICY "GM_Storage_Auth_Update" ON storage.objects
+  FOR UPDATE TO authenticated
   USING (bucket_id IN ('LOGO-GM', 'katalog-image', 'files'))
   WITH CHECK (bucket_id IN ('LOGO-GM', 'katalog-image', 'files'));
 
--- D. DELETE ACCESS (Mengizinkan hapus file dari bucket)
+-- D. DELETE ACCESS (Hanya pengguna login/authenticated yang dapat menghapus file)
 DROP POLICY IF EXISTS "GM_Storage_Public_Delete" ON storage.objects;
-CREATE POLICY "GM_Storage_Public_Delete" ON storage.objects
-  FOR DELETE TO anon, authenticated, public
+DROP POLICY IF EXISTS "GM_Storage_Auth_Delete" ON storage.objects;
+CREATE POLICY "GM_Storage_Auth_Delete" ON storage.objects
+  FOR DELETE TO authenticated
   USING (bucket_id IN ('LOGO-GM', 'katalog-image', 'files'));

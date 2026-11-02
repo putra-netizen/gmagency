@@ -51,7 +51,7 @@ const getSlotIndicatorName = (slot: string): string => {
   if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com') return 'era';
   if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com') return 'cika';
   if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com') return 'vira';
-  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com') return 'ali';
+  if (clean === 'adminshp4' || clean === 'adminarok' || clean === 'arok' || clean === 'adminali' || clean === 'ali' || clean === 'fadhluali' || clean === 'adminarok@gmail.com' || clean === 'adminali@gmail.com') return 'arok';
   if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com') return 'owner';
   return slot;
 };
@@ -303,7 +303,7 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
       adminshp1: { username: 'adminera', password: '' },
       adminshp2: { username: 'admincika', password: '' },
       adminshp3: { username: 'adminvira', password: '' },
-      adminshp4: { username: 'adminali', password: '' }
+      adminshp4: { username: 'adminarok', password: '' }
     };
     try {
       const saved = localStorage.getItem('gm_adminshp_creds');
@@ -446,7 +446,12 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
         setAuthError(res.error || (currentLang === 'id' ? 'Email/username atau kata sandi tidak sesuai!' : 'Invalid email/username or password!'));
       }
     } catch (err: any) {
-      setAuthError(err.message || 'Gagal terhubung ke server autentikasi');
+      const msg = err?.message || '';
+      if (msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('setitem')) {
+        setAuthError('Penyimpanan lokal browser sempat penuh. Cache telah otomatis dibersihkan, silakan klik tombol Masuk kembali.');
+      } else {
+        setAuthError(msg || 'Gagal terhubung ke server autentikasi');
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -1971,9 +1976,9 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
 
               <div className="flex flex-wrap items-center gap-2">
                 {['adminshp1', 'adminshp2', 'adminshp3', 'adminshp4'].map((slot) => {
-                  const name = slot === 'adminshp1' ? 'Era' : slot === 'adminshp2' ? 'Cika' : slot === 'adminshp3' ? 'Vira' : 'Ali';
+                  const name = slot === 'adminshp1' ? 'Era' : slot === 'adminshp2' ? 'Cika' : slot === 'adminshp3' ? 'Vira' : 'Arok';
                   const customUsername = adminshpCreds[slot]?.username;
-                  const routeName = customUsername?.trim() || (slot === 'adminshp1' ? 'adminera' : slot === 'adminshp2' ? 'admincika' : slot === 'adminshp3' ? 'adminvira' : 'adminali');
+                  const routeName = customUsername?.trim() || (slot === 'adminshp1' ? 'adminera' : slot === 'adminshp2' ? 'admincika' : slot === 'adminshp3' ? 'adminvira' : 'adminarok');
                   return (
                     <button
                       key={slot}

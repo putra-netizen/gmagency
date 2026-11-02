@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { supabase } from './supabase';
+import { supabase, pruneLocalStorageCache, safeLocalStorageSetItem } from './supabase';
 
 export interface AuthUser {
   id?: string;
@@ -75,7 +75,7 @@ export function getSlotIndicatorName(slot?: string): string {
   if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com' || clean === 'adminera@gmagency.internal') return 'era';
   if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com' || clean === 'admincika@gmagency.internal') return 'cika';
   if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com' || clean === 'adminvira@gmagency.internal') return 'vira';
-  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com' || clean === 'adminali@gmagency.internal') return 'ali';
+  if (clean === 'adminshp4' || clean === 'adminarok' || clean === 'arok' || clean === 'adminali' || clean === 'ali' || clean === 'fadhluali' || clean === 'adminarok@gmail.com' || clean === 'adminali@gmail.com' || clean === 'adminarok@gmagency.internal' || clean === 'adminali@gmagency.internal') return 'arok';
   if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com' || clean === 'admin@gmagency.internal' || clean === 'superadmin') return 'owner';
   if (clean === 'finance' || clean === 'gmfinance' || clean === 'finance@gmagency.internal') return 'finance';
   return clean;
@@ -148,8 +148,8 @@ export async function resolveEmailFromUsername(input: string): Promise<string> {
   if (lower === 'adminshp3' || lower === 'adminvira' || lower === 'vira') {
     return 'adminvira@gmagency.internal';
   }
-  if (lower === 'adminshp4' || lower === 'adminali' || lower === 'ali') {
-    return 'adminali@gmagency.internal';
+  if (lower === 'adminshp4' || lower === 'adminarok' || lower === 'arok' || lower === 'adminali' || lower === 'ali' || lower === 'fadhluali') {
+    return 'adminarok@gmagency.internal';
   }
   if (lower === 'finance') {
     return 'finance@gmagency.internal';
@@ -201,7 +201,7 @@ export async function resolveUserRole(user: any): Promise<AuthUser> {
     } else if (searchStr.includes('adminshp3') || searchStr.includes('adminvira') || searchStr.includes('vira')) {
       slot = 'adminshp3';
       role = 'adminshp';
-    } else if (searchStr.includes('adminshp4') || searchStr.includes('adminali') || searchStr.includes('ali')) {
+    } else if (searchStr.includes('adminshp4') || searchStr.includes('adminarok') || searchStr.includes('arok') || searchStr.includes('adminali') || searchStr.includes('ali') || searchStr.includes('fadhluali')) {
       slot = 'adminshp4';
       role = 'adminshp';
     }
@@ -219,7 +219,7 @@ export async function resolveUserRole(user: any): Promise<AuthUser> {
     if (slot === 'adminshp1' || searchStr.includes('era')) inputer = 'era';
     else if (slot === 'adminshp2' || searchStr.includes('cika')) inputer = 'cika';
     else if (slot === 'adminshp3' || searchStr.includes('vira')) inputer = 'vira';
-    else if (slot === 'adminshp4' || searchStr.includes('ali')) inputer = 'ali';
+    else if (slot === 'adminshp4' || searchStr.includes('arok') || searchStr.includes('ali') || searchStr.includes('fadhluali')) inputer = 'arok';
     else inputer = 'adminshp';
   } else if (role === 'finance') {
     inputer = 'finance';
@@ -247,107 +247,60 @@ export async function resolveUserRole(user: any): Promise<AuthUser> {
  * 3. Kalau TIDAK sedang View As (login normal biasa oleh Admin SHP itu sendiri atau Super Admin sendiri), tetap gunakan logic session Supabase Auth asli.
  */
 export async function resolveActiveInputerIdentity(): Promise<string> {
-  console.group('🔍 [DEBUG resolveActiveInputerIdentity] Resolving Active Creator Identity');
-  
-  // 1. CEK DULU APAKAH SEDANG DALAM MODE "VIEW AS"
+  // 1. Cek mode "View As"
   const rawViewAs = getViewAsShpSlot();
-  console.log('[DEBUG 1] Active VIEW_AS_SHP_KEY (viewAsShp):', rawViewAs);
-
   if (rawViewAs && typeof rawViewAs === 'string' && rawViewAs.trim()) {
     const targetIdentity = getSlotIndicatorName(rawViewAs.trim());
     if (targetIdentity) {
-      console.log('🎯 [DEBUG resolveActiveInputerIdentity] VIEW AS MODE ACTIVE -> returning target identity:', `"${targetIdentity}"`);
-      console.log('🎯 [DEBUG resolveActiveInputerIdentity FINAL RETURN]:', `"${targetIdentity}"`);
-      console.groupEnd();
       return targetIdentity;
     }
   }
 
-  // 2. JIKA TIDAK SEDANG VIEW AS (LOGIN NORMAL BIASA OLEH ADMIN SHP ATAU SUPER ADMIN SENDIRI)
-  // Tetap gunakan logic yang sudah ada (identitas dari session Supabase Auth asli)
+  // 2. Query session user dari Supabase Auth
   let sessionUser: any = null;
   let liveUser: any = null;
 
-  // Step A: Query Supabase Auth Session
   try {
-    const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+    const { data: sessionData } = await supabase.auth.getSession();
     sessionUser = sessionData?.session?.user || null;
-    console.log('[DEBUG 2] supabase.auth.getSession() result:', {
-      hasSession: !!sessionData?.session,
-      user_id: sessionUser?.id,
-      email: sessionUser?.email,
-      user_metadata: sessionUser?.user_metadata,
-      error: sessionErr?.message || null
-    });
-  } catch (err) {
-    console.warn('[DEBUG 2] Exception in getSession():', err);
-  }
+  } catch {}
 
-  // Step B: Query Supabase Auth live User
   try {
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
+    const { data: userData } = await supabase.auth.getUser();
     liveUser = userData?.user || null;
-    console.log('[DEBUG 3] supabase.auth.getUser() result:', {
-      hasUser: !!liveUser,
-      user_id: liveUser?.id,
-      email: liveUser?.email,
-      user_metadata: liveUser?.user_metadata,
-      error: userErr?.message || null
-    });
-  } catch (err) {
-    console.warn('[DEBUG 3] Exception in getUser():', err);
-  }
+  } catch {}
 
-  // Active Supabase Auth user (liveUser preferred, fallback sessionUser)
   const currentSupabaseUser = liveUser || sessionUser;
-
-  // Step C: Resolve user role & slot from Supabase User if available
   let resolvedFromSupabase: AuthUser | null = null;
   if (currentSupabaseUser) {
     try {
       resolvedFromSupabase = await resolveUserRole(currentSupabaseUser);
-      console.log('[DEBUG 4] resolveUserRole(currentSupabaseUser):', resolvedFromSupabase);
-    } catch (err) {
-      console.warn('[DEBUG 4] Exception in resolveUserRole():', err);
-    }
+    } catch {}
   }
 
-  // Step D: Stored / In-memory user
   const storedUser = getAuthUser();
-  console.log('[DEBUG 5] getAuthUser() from storage/memory:', storedUser);
-
   let finalIdentity = '';
 
-  // Decision Logic for Normal (Non-View As) Mode:
-  // Primary authority: Supabase authenticated session
   if (resolvedFromSupabase) {
     if (resolvedFromSupabase.role === 'admin') {
       finalIdentity = 'owner';
-      console.log('[DEBUG 6] Matched authenticated Supabase Super Admin session ->', finalIdentity);
     } else if (resolvedFromSupabase.role === 'adminshp') {
       finalIdentity = resolvedFromSupabase.inputer || (resolvedFromSupabase.slot ? getSlotIndicatorName(resolvedFromSupabase.slot) : getSlotIndicatorName(resolvedFromSupabase.username));
-      console.log('[DEBUG 6] Matched authenticated Supabase adminshp session ->', finalIdentity);
     } else if (resolvedFromSupabase.role === 'finance') {
       finalIdentity = 'finance';
-      console.log('[DEBUG 6] Matched authenticated Supabase finance session ->', finalIdentity);
     }
   }
 
-  // Secondary fallback: stored user in memory / local state
   if (!finalIdentity && storedUser) {
     if (storedUser.role === 'admin') {
       finalIdentity = 'owner';
-      console.log('[DEBUG 6] Fallback to stored Super Admin user ->', finalIdentity);
     } else if (storedUser.role === 'adminshp') {
       finalIdentity = storedUser.inputer || (storedUser.slot ? getSlotIndicatorName(storedUser.slot) : getSlotIndicatorName(storedUser.username));
-      console.log('[DEBUG 6] Fallback to stored adminshp user ->', finalIdentity);
     } else if (storedUser.role === 'finance') {
       finalIdentity = 'finance';
-      console.log('[DEBUG 6] Fallback to stored finance user ->', finalIdentity);
     }
   }
 
-  // Tertiary fallback: localStorage flags
   if (!finalIdentity) {
     const hasAdminAuth = typeof window !== 'undefined' && (sessionStorage.getItem('gm_admin_auth') === 'true' || localStorage.getItem('gm_admin_auth') === 'true');
     if (hasAdminAuth) {
@@ -360,14 +313,7 @@ export async function resolveActiveInputerIdentity(): Promise<string> {
     }
   }
 
-  if (!finalIdentity) {
-    finalIdentity = 'owner';
-  }
-
-  console.log('🎯 [DEBUG resolveActiveInputerIdentity FINAL RETURN]:', `"${finalIdentity}"`);
-  console.groupEnd();
-
-  return finalIdentity;
+  return finalIdentity || 'owner';
 }
 
 export function getAuthToken(): string | null {
@@ -401,8 +347,8 @@ export function saveAuthSession(token: string, user: AuthUser, rememberMe: boole
   cachedAuthUser = user;
   try {
     if (rememberMe) {
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      safeLocalStorageSetItem(TOKEN_KEY, token);
+      safeLocalStorageSetItem(USER_KEY, JSON.stringify(user));
     } else {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
@@ -413,26 +359,26 @@ export function saveAuthSession(token: string, user: AuthUser, rememberMe: boole
     // Compatibility sync for legacy event listeners
     if (user.role === 'admin') {
       sessionStorage.setItem('gm_admin_auth', 'true');
-      if (rememberMe) localStorage.setItem('gm_admin_auth', 'true');
+      if (rememberMe) safeLocalStorageSetItem('gm_admin_auth', 'true');
       localStorage.removeItem('gm_adminshp_user');
       sessionStorage.removeItem('gm_adminshp_user');
     } else if (user.role === 'adminshp') {
       sessionStorage.setItem('gm_adminshp_auth', 'true');
-      if (rememberMe) localStorage.setItem('gm_adminshp_auth', 'true');
-      const targetSlot = user.slot || (user.inputer === 'vira' ? 'adminshp3' : user.inputer === 'cika' ? 'adminshp2' : user.inputer === 'ali' ? 'adminshp4' : user.inputer === 'era' ? 'adminshp1' : undefined);
+      if (rememberMe) safeLocalStorageSetItem('gm_adminshp_auth', 'true');
+      const targetSlot = user.slot || (user.inputer === 'vira' ? 'adminshp3' : user.inputer === 'cika' ? 'adminshp2' : (user.inputer === 'arok' || user.inputer === 'ali') ? 'adminshp4' : user.inputer === 'era' ? 'adminshp1' : undefined);
       if (targetSlot) {
         sessionStorage.setItem('gm_adminshp_user', targetSlot);
         sessionStorage.setItem(VIEW_AS_SHP_KEY, targetSlot);
         if (rememberMe) {
-          localStorage.setItem('gm_adminshp_user', targetSlot);
-          localStorage.setItem(`gm_adminshp_auth_${targetSlot}`, 'true');
+          safeLocalStorageSetItem('gm_adminshp_user', targetSlot);
+          safeLocalStorageSetItem(`gm_adminshp_auth_${targetSlot}`, 'true');
         }
       } else {
         sessionStorage.removeItem(VIEW_AS_SHP_KEY);
       }
     } else if (user.role === 'finance') {
       sessionStorage.setItem('gm_finance_device_auth', 'true');
-      if (rememberMe) localStorage.setItem('gm_finance_device_auth', 'true');
+      if (rememberMe) safeLocalStorageSetItem('gm_finance_device_auth', 'true');
     }
 
     window.dispatchEvent(new Event('gm_auth_changed'));
@@ -537,16 +483,21 @@ export async function loginWithBackend(
       candidateEmails.push('admincika@gmail.com', 'admincika@gmagency.com');
     } else if (lower === 'adminshp3' || lower === 'vira') {
       candidateEmails.push('adminvira@gmail.com', 'adminvira@gmagency.com');
-    } else if (lower === 'adminshp4' || lower === 'ali') {
-      candidateEmails.push('adminali@gmail.com', 'adminali@gmagency.com');
+    } else if (lower === 'adminshp4' || lower === 'adminarok' || lower === 'arok' || lower === 'adminali' || lower === 'ali' || lower === 'fadhluali') {
+      candidateEmails.push('adminarok@gmail.com', 'adminarok@gmagency.com', 'adminali@gmail.com', 'adminali@gmagency.com');
     }
   }
 
   let lastErrorMsg = 'Username atau password salah!';
 
+  // Proactively prune any bloated local cache so storage is never full
+  try {
+    pruneLocalStorageCache();
+  } catch {}
+
   for (const emailToTry of candidateEmails) {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      let { data, error } = await supabase.auth.signInWithPassword({
         email: emailToTry,
         password: rawPassword,
       });
@@ -572,6 +523,27 @@ export async function loginWithBackend(
         }
       }
     } catch (err: any) {
+      const isQuotaError = String(err?.message || '').toLowerCase().includes('quota') || 
+                           err?.name === 'QuotaExceededError' ||
+                           String(err || '').toLowerCase().includes('quota');
+      if (isQuotaError) {
+        try {
+          pruneLocalStorageCache();
+          const retry = await supabase.auth.signInWithPassword({
+            email: emailToTry,
+            password: rawPassword,
+          });
+          if (!retry.error && retry.data?.user && retry.data?.session) {
+            const authUser = await resolveUserRole(retry.data.user);
+            saveAuthSession(retry.data.session.access_token, authUser, rememberMe);
+            return {
+              success: true,
+              token: retry.data.session.access_token,
+              user: authUser,
+            };
+          }
+        } catch {}
+      }
       lastErrorMsg = err?.message || 'Gagal terhubung ke layanan autentikasi Supabase.';
     }
   }

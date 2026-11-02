@@ -18,8 +18,9 @@ import { dbGetProducts, isSupabaseConfigured, dbIsSupabaseConnected, supabase } 
 import { TRANSLATIONS } from './lib/translations';
 import { initGlobalAutoSync } from './utils/autoSyncManager';
 import { getAuthUser, resolveUserRole, getViewAsShpSlot, setViewAsShpSlot } from './lib/auth';
-import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart, AlertCircle } from 'lucide-react';
+import { MessageSquare, Phone, MapPin, Mail, Clock, ShieldCheck, Heart, AlertCircle, Shield, Award, Sparkles, CheckCircle2, UserCheck, ArrowRight, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { RevealFadeUp, RevealScale, RevealStaggerContainer, RevealStaggerItem } from './components/RevealMotion';
 import { GM_LOGO_DATA_URI, GM_LOGO_LOCAL_512 } from './utils/gmLogoAsset';
 
 export default function App() {
@@ -339,15 +340,134 @@ export default function App() {
               theme={theme}
             />
 
-            {/* Services Catalogue Section Grid */}
+            {/* TRUST & ADVANTAGES SECTION — 4 PILLARS WITH REVEAL MOTION */}
+            <section className={`border-b transition-colors duration-300 py-14 sm:py-16 ${
+              theme === 'dark' ? 'bg-[#090e24] border-slate-800/80' : 'bg-slate-100/70 border-slate-200'
+            }`} id="landing-trust-pillars">
+              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                {/* Section Header with Reveal */}
+                <RevealFadeUp className="text-center max-w-2xl mx-auto mb-10 space-y-2">
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-widest border ${
+                    theme === 'dark' 
+                      ? 'bg-blue-950/40 text-blue-400 border-blue-900/40' 
+                      : 'bg-blue-50 text-blue-700 border-blue-200'
+                  }`}>
+                    <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                    <span>{currentLang === 'id' ? 'KEUNGGULAN UTAMA GM' : 'CORE GM ADVANTAGES'}</span>
+                  </span>
+                  <h3 className={`text-2xl sm:text-3xl font-black font-sans tracking-tight ${
+                    theme === 'dark' ? 'text-white' : 'text-slate-900'
+                  }`}>
+                    {currentLang === 'id' 
+                      ? 'Kenapa Ribuan Brand Memilih GM Agency?' 
+                      : 'Why Thousands of Brands Trust GM Agency?'}
+                  </h3>
+                  <p className={`text-xs sm:text-sm font-sans leading-relaxed ${
+                    theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                  }`}>
+                    {currentLang === 'id'
+                      ? 'Layanan reputasi digital dengan standar manual ketat, kepatuhan platform 100%, dan garansi perlindungan penuh.'
+                      : 'Enterprise-grade reputation services built on strict manual protocols, 100% compliance, and full retention warranties.'}
+                  </p>
+                </RevealFadeUp>
+
+                {/* 4 Pillars Grid with Staggered Scroll Reveal */}
+                <RevealStaggerContainer className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                  {/* Pillar 1 */}
+                  <RevealStaggerItem className={`p-6 rounded-2xl border transition-all duration-300 group ${
+                    theme === 'dark'
+                      ? 'bg-slate-900/60 border-slate-800/90 hover:border-emerald-500/50 hover:bg-slate-900'
+                      : 'bg-white border-slate-200 hover:border-emerald-500/50 hover:shadow-lg'
+                  }`}>
+                    <div className="h-11 w-11 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <UserCheck className="h-5 w-5" />
+                    </div>
+                    <h4 className={`text-sm font-black mb-1.5 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {currentLang === 'id' ? '100% Real Human / Manual' : '100% Real Human / Manual'}
+                    </h4>
+                    <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {currentLang === 'id'
+                        ? 'Dikerjakan akun aktif nyata tanpa bot atau skrip berbahaya demi keamanan profil bisnis Anda.'
+                        : 'Executed by real human accounts with zero bot automation to protect your business standing.'}
+                    </p>
+                  </RevealStaggerItem>
+
+                  {/* Pillar 2 */}
+                  <RevealStaggerItem className={`p-6 rounded-2xl border transition-all duration-300 group ${
+                    theme === 'dark'
+                      ? 'bg-slate-900/60 border-slate-800/90 hover:border-amber-500/50 hover:bg-slate-900'
+                      : 'bg-white border-slate-200 hover:border-amber-500/50 hover:shadow-lg'
+                  }`}>
+                    <div className="h-11 w-11 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Award className="h-5 w-5" />
+                    </div>
+                    <h4 className={`text-sm font-black mb-1.5 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {currentLang === 'id' ? 'Garansi Retensi Penuh' : 'Full Retention Guarantee'}
+                    </h4>
+                    <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {currentLang === 'id'
+                        ? 'Jaminan ulasan tetap bertahan & perlindungan kualitas layanan profesional tanpa cemas turun.'
+                        : 'Assured review stability and dedicated retention protection for your peace of mind.'}
+                    </p>
+                  </RevealStaggerItem>
+
+                  {/* Pillar 3 */}
+                  <RevealStaggerItem className={`p-6 rounded-2xl border transition-all duration-300 group ${
+                    theme === 'dark'
+                      ? 'bg-slate-900/60 border-slate-800/90 hover:border-blue-500/50 hover:bg-slate-900'
+                      : 'bg-white border-slate-200 hover:border-blue-500/50 hover:shadow-lg'
+                  }`}>
+                    <div className="h-11 w-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Shield className="h-5 w-5" />
+                    </div>
+                    <h4 className={`text-sm font-black mb-1.5 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {currentLang === 'id' ? 'Privasi 100% Terjaga' : '100% Private & Confidential'}
+                    </h4>
+                    <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {currentLang === 'id'
+                        ? 'Tanpa akses sandi akun target. Seluruh data identitas pemesan dirahasiakan ketat.'
+                        : 'Zero password required. Target URLs and customer credentials remain strictly confidential.'}
+                    </p>
+                  </RevealStaggerItem>
+
+                  {/* Pillar 4 */}
+                  <RevealStaggerItem className={`p-6 rounded-2xl border transition-all duration-300 group ${
+                    theme === 'dark'
+                      ? 'bg-slate-900/60 border-slate-800/90 hover:border-purple-500/50 hover:bg-slate-900'
+                      : 'bg-white border-slate-200 hover:border-purple-500/50 hover:shadow-lg'
+                  }`}>
+                    <div className="h-11 w-11 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Zap className="h-5 w-5" />
+                    </div>
+                    <h4 className={`text-sm font-black mb-1.5 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {currentLang === 'id' ? 'Monitoring & Transparan' : 'Live Monitoring & Reports'}
+                    </h4>
+                    <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {currentLang === 'id'
+                        ? 'Proses terjadwal secara bertahap natural dengan rekap link target live setelah tuntas.'
+                        : 'Executed at natural intervals with complete verification links provided upon delivery.'}
+                    </p>
+                  </RevealStaggerItem>
+                </RevealStaggerContainer>
+              </div>
+            </section>
+
+            {/* Services Catalogue Section Grid with Scroll Reveal */}
             <div 
               ref={servicesSectionRef} 
               className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 scroll-mt-12"
               id="services-catalogue"
             >
-              {/* Grid Header */}
-              <div className="text-center max-w-3xl mx-auto mb-10 space-y-2">
-                <h2 className={`text-2xl font-black font-sans tracking-tight uppercase ${
+              {/* Grid Header with Reveal Motion */}
+              <RevealFadeUp className="text-center max-w-3xl mx-auto mb-10 space-y-2">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-widest border ${
+                  theme === 'dark' 
+                    ? 'bg-blue-950/40 text-blue-400 border-blue-900/40' 
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}>
+                  {currentLang === 'id' ? 'KATALOG DIGITAL RESMI' : 'OFFICIAL DIGITAL CATALOGUE'}
+                </span>
+                <h2 className={`text-2xl sm:text-3xl font-black font-sans tracking-tight uppercase ${
                   theme === 'dark' ? 'text-white' : 'text-slate-900'
                 }`}>
                   {t.productsTitle}
@@ -357,7 +477,7 @@ export default function App() {
                 }`}>
                   {t.productsSub}
                 </p>
-              </div>
+              </RevealFadeUp>
 
               {/* Grid Content Loader */}
               {isLoading ? (
@@ -371,18 +491,150 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-                  {products.map((product) => (
+                  {products.map((product, idx) => (
                     <ProductCard
                       key={product.id}
                       product={product}
                       currentLang={currentLang}
                       onCheckoutClick={(prod) => setSelectedProduct(prod)}
                       theme={theme}
+                      index={idx}
                     />
                   ))}
                 </div>
               )}
             </div>
+
+            {/* HOW IT WORKS / 3-STEP ORDERING WORKFLOW SECTION WITH REVEAL MOTION */}
+            <section className={`border-t transition-colors duration-300 py-16 sm:py-20 ${
+              theme === 'dark' ? 'bg-[#050814] border-slate-900' : 'bg-slate-100/60 border-slate-200'
+            }`} id="landing-workflow">
+              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                {/* Workflow Header with Reveal */}
+                <RevealFadeUp className="text-center max-w-2xl mx-auto mb-12 space-y-2">
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-widest border ${
+                    theme === 'dark' 
+                      ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/40' 
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>{currentLang === 'id' ? 'CARA KERJA CEPAT' : 'SIMPLE WORKFLOW'}</span>
+                  </span>
+                  <h3 className={`text-2xl sm:text-3xl font-black font-sans tracking-tight ${
+                    theme === 'dark' ? 'text-white' : 'text-slate-900'
+                  }`}>
+                    {currentLang === 'id' 
+                      ? '3 Langkah Mudah Memulai Kampanye' 
+                      : '3 Simple Steps to Start Your Campaign'}
+                  </h3>
+                  <p className={`text-xs sm:text-sm font-sans leading-relaxed ${
+                    theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
+                  }`}>
+                    {currentLang === 'id'
+                      ? 'Tanpa proses rumit. Mulai dalam hitungan menit dan pantau hasil pesanan Anda secara nyata.'
+                      : 'No hassle. Get started in minutes and track verifiable campaign outcomes.'}
+                  </p>
+                </RevealFadeUp>
+
+                {/* 3 Step Cards with Staggered Scroll Reveal */}
+                <RevealStaggerContainer className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+                  {/* Step 1 */}
+                  <RevealStaggerItem className={`relative p-6 sm:p-7 rounded-2xl border transition-all duration-300 ${
+                    theme === 'dark' ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+                  }`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-2xl font-black text-blue-500 font-mono">01</span>
+                      <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full ${
+                        theme === 'dark' ? 'bg-blue-950/60 text-blue-400' : 'bg-blue-50 text-blue-600'
+                      }`}>
+                        {currentLang === 'id' ? 'PILIH' : 'SELECT'}
+                      </span>
+                    </div>
+                    <h4 className={`text-base font-black mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {currentLang === 'id' ? 'Pilih Layanan & Target' : 'Select Service & Target'}
+                    </h4>
+                    <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {currentLang === 'id'
+                        ? 'Pilih layanan yang Anda perlukan di katalog, tentukan jumlah pcs, dan masukkan link target atau nomor kontak.'
+                        : 'Browse our catalogue, specify quantity in pcs, and provide your target URL or contact details.'}
+                    </p>
+                  </RevealStaggerItem>
+
+                  {/* Step 2 */}
+                  <RevealStaggerItem className={`relative p-6 sm:p-7 rounded-2xl border transition-all duration-300 ${
+                    theme === 'dark' ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+                  }`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-2xl font-black text-emerald-500 font-mono">02</span>
+                      <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full ${
+                        theme === 'dark' ? 'bg-emerald-950/60 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+                      }`}>
+                        {currentLang === 'id' ? 'BAYAR QRIS' : 'PAY QRIS'}
+                      </span>
+                    </div>
+                    <h4 className={`text-base font-black mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {currentLang === 'id' ? 'Bayar Otomatis QRIS' : 'Automated QRIS Checkout'}
+                    </h4>
+                    <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {currentLang === 'id'
+                        ? 'Pindai barcode QRIS otomatis dengan aplikasi pembayaran atau m-banking Anda, lalu konfirmasi instan via WhatsApp.'
+                        : 'Scan the dynamic QRIS code with any mobile banking or e-wallet, then confirm directly via official WhatsApp.'}
+                    </p>
+                  </RevealStaggerItem>
+
+                  {/* Step 3 */}
+                  <RevealStaggerItem className={`relative p-6 sm:p-7 rounded-2xl border transition-all duration-300 ${
+                    theme === 'dark' ? 'bg-slate-900/70 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+                  }`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-2xl font-black text-purple-500 font-mono">03</span>
+                      <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full ${
+                        theme === 'dark' ? 'bg-purple-950/60 text-purple-400' : 'bg-purple-50 text-purple-600'
+                      }`}>
+                        {currentLang === 'id' ? 'SELESAI' : 'COMPLETE'}
+                      </span>
+                    </div>
+                    <h4 className={`text-base font-black mb-2 ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {currentLang === 'id' ? 'Eksekusi Manual & Selesai' : 'Manual Delivery & Proof'}
+                    </h4>
+                    <p className={`text-xs leading-relaxed ${theme === 'dark' ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {currentLang === 'id'
+                        ? 'Tim jaringan GM Agency langsung menjalankan tugas manual secara natural dan mengirimkan tautan rekap pengerjaan.'
+                        : 'Our manual network executes the campaign naturally and delivers complete report links upon completion.'}
+                    </p>
+                  </RevealStaggerItem>
+                </RevealStaggerContainer>
+
+                {/* Bottom CTA Banner with Reveal */}
+                <RevealFadeUp delay={0.2} className={`mt-12 p-6 sm:p-8 rounded-3xl border flex flex-col sm:flex-row items-center justify-between gap-6 ${
+                  theme === 'dark' 
+                    ? 'bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-purple-950/40 border-blue-900/40' 
+                    : 'bg-gradient-to-r from-blue-50 via-indigo-50/50 to-purple-50 border-blue-200'
+                }`}>
+                  <div className="space-y-1 text-center sm:text-left">
+                    <h4 className={`text-lg font-black ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>
+                      {currentLang === 'id' 
+                        ? 'Siap Meningkatkan Reputasi Bisnis Anda Hari Ini?' 
+                        : 'Ready to Elevate Your Business Reputation Today?'}
+                    </h4>
+                    <p className={`text-xs sm:text-sm ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
+                      {currentLang === 'id'
+                        ? 'Konsultasi gratis bersama tim spesialis reputasi GM Agency melalui WhatsApp resmi.'
+                        : 'Free consultation with GM Agency reputation specialists on official WhatsApp.'}
+                    </p>
+                  </div>
+                  <a
+                    href="https://wa.me/6285921095666?text=Halo%20GM%20Agency%2C%20saya%20ingin%20konsultasi%20layanan%20reputasi%20digital."
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    <span>{currentLang === 'id' ? 'Konsultasi Sekarang' : 'Consult Now'}</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </a>
+                </RevealFadeUp>
+              </div>
+            </section>
           </div>
         ) : currentView === 'not-found' ? (
           /* 404 - HALAMAN TIDAK DITEMUKAN SCREEN */
@@ -437,7 +689,7 @@ export default function App() {
                 onInstallApp={handleInstallApp}
                 onSwitchToAdminShp={() => {
                   const user = getAuthUser();
-                  const slot = user?.slot || (user?.inputer && user.inputer !== 'adminshp' ? (user.inputer === 'vira' ? 'adminshp3' : user.inputer === 'cika' ? 'adminshp2' : user.inputer === 'ali' ? 'adminshp4' : user.inputer === 'era' ? 'adminshp1' : null) : null) || getViewAsShpSlot();
+                  const slot = user?.slot || (user?.inputer && user.inputer !== 'adminshp' ? (user.inputer === 'vira' ? 'adminshp3' : user.inputer === 'cika' ? 'adminshp2' : (user.inputer === 'arok' || user.inputer === 'ali') ? 'adminshp4' : user.inputer === 'era' ? 'adminshp1' : null) : null) || getViewAsShpSlot();
                   if (slot) {
                     setViewAsShpSlot(slot);
                     setViewAsShpSlotState(slot);
@@ -457,7 +709,7 @@ export default function App() {
             : 'bg-slate-100 text-slate-600 border-t border-slate-200'
         }`}>
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-            <div className={`grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b ${
+            <RevealFadeUp className={`grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b ${
               theme === 'dark' ? 'border-slate-900' : 'border-slate-200'
             }`}>
               {/* About brand column (5 columns) */}
@@ -534,10 +786,10 @@ export default function App() {
                   </li>
                 </ul>
               </div>
-            </div>
+            </RevealFadeUp>
 
             {/* Copyright signature */}
-            <div className={`pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-light ${
+            <RevealFadeUp delay={0.15} className={`pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-light ${
               theme === 'dark' ? 'text-slate-500' : 'text-slate-650'
             }`}>
               <p>
@@ -548,7 +800,7 @@ export default function App() {
                 <Heart className="h-3 w-3 text-red-500 fill-red-500" />
                 for business reputational organic growth.
               </p>
-            </div>
+            </RevealFadeUp>
           </div>
         </footer>
       )}

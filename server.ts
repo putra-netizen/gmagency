@@ -134,25 +134,90 @@ if (supabase) {
 }
 
 const app = express();
-const PORT = 3000;
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Parse CLI arguments (--port 3000, --host 0.0.0.0) and environment variables
+const cliArgs = process.argv.slice(2);
+let argPort: number | undefined;
+let argHost: string | undefined;
+for (let i = 0; i < cliArgs.length; i++) {
+  if ((cliArgs[i] === '--port' || cliArgs[i] === '-p') && cliArgs[i + 1]) {
+    argPort = parseInt(cliArgs[i + 1], 10);
+  }
+  if ((cliArgs[i] === '--host' || cliArgs[i] === '-h') && cliArgs[i + 1]) {
+    argHost = cliArgs[i + 1];
+  }
+}
+
+const PORT = Number(process.env.PORT) || argPort || 3000;
+const HOST = process.env.HOST || argHost || '0.0.0.0';
+
+// Gracefully ignore WebSocket HMR port errors
+process.on('uncaughtException', (err: any) => {
+  if (err?.message && (err.message.includes('24678') || err.message.includes('WebSocket server error'))) {
+    console.warn('Ignored transient WebSocket HMR port error:', err.message);
+    return;
+  }
+  console.error('Uncaught Exception:', err);
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-// Enable CORS and disable caching on all API routes to ensure cross-origin real-time sync with G Management
+// Security headers & safe CORS middleware
 app.use('/api', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+
+  // Hardened Security Headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
   next();
 });
+
+// Input Sanitization Helper against Stored XSS
+function sanitizeText(val: any, maxLen = 3000): string {
+  if (val === undefined || val === null) return '';
+  return String(val)
+    .slice(0, maxLen)
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .trim();
+}
+
+// Whitelist validator for external Webhooks to prevent SSRF (Server-Side Request Forgery)
+function isSafeGoogleScriptWebhookUrl(urlStr: string): boolean {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+  try {
+    const parsed = new URL(urlStr.trim());
+    if (parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host === 'script.google.com' ||
+      host === 'script.googleusercontent.com' ||
+      host.endsWith('.google.com')
+    );
+  } catch {
+    return false;
+  }
+}
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -727,16 +792,16 @@ app.post('/api/orders', async (req, res) => {
 
   const newOrder: Order = {
     id: orderId,
-    product_id: product_id || '',
-    product_name: productName,
-    buyer_name: buyer_name || '',
-    phone_number: phone_number || '',
-    notes: notes || '',
-    target_link: target_link || '',
-    target_spam_phone: target_spam_phone || '',
-    quantity: qty,
-    total_price: totalPrice,
-    payment_status: req.body.payment_status || 'PENDING',
+    product_id: sanitizeText(product_id || '', 100),
+    product_name: sanitizeText(productName, 150),
+    buyer_name: sanitizeText(buyer_name || '', 150),
+    phone_number: sanitizeText(phone_number || '', 50),
+    notes: sanitizeText(notes || '', 1000),
+    target_link: sanitizeText(target_link || '', 1000),
+    target_spam_phone: sanitizeText(target_spam_phone || '', 50),
+    quantity: Math.max(1, Math.min(qty, 100000)),
+    total_price: Math.max(0, totalPrice),
+    payment_status: req.body.payment_status === 'PAID' ? 'PAID' : 'PENDING',
     created_at: req.body.created_at || new Date().toISOString()
   };
 
@@ -2086,8 +2151,8 @@ app.post('/api/sheets/push-single', requireAuth, async (req, res) => {
   try {
     const { webhookUrl, type, action, payload, no_order, status, statusBaru, sheet_name } = req.body;
     const url = (webhookUrl || '').trim();
-    if (!url || !url.startsWith('http')) {
-      return res.status(400).json({ error: 'URL Webhook Google Apps Script tidak valid.' });
+    if (!url || !isSafeGoogleScriptWebhookUrl(url)) {
+      return res.status(400).json({ error: 'URL Webhook Google Apps Script tidak valid atau tidak diizinkan. Hanya https://script.google.com/macros/s/... yang diperbolehkan.' });
     }
 
     const item = payload || req.body;
@@ -2106,11 +2171,11 @@ app.post('/api/sheets/push-single', requireAuth, async (req, res) => {
       sheet: effectiveSheet,
       type: type || 'maps_orders',
       action: action || 'update',
-      notes: item.notes || (item.payload && item.payload.notes) || '',
+      notes: sanitizeText(item.notes || (item.payload && item.payload.notes) || ''),
       reviewer_accounts: item.reviewer_accounts || (item.payload && item.payload.reviewer_accounts) || '',
-      proof_link: item.proof_link || (item.payload && item.payload.proof_link) || '',
-      worker_id: item.worker_id || (item.payload && item.payload.worker_id) || '',
-      work_order: item.work_order || (item.payload && item.payload.work_order) || '',
+      proof_link: sanitizeText(item.proof_link || (item.payload && item.payload.proof_link) || '', 1000),
+      worker_id: sanitizeText(item.worker_id || (item.payload && item.payload.worker_id) || '', 100),
+      work_order: sanitizeText(item.work_order || (item.payload && item.payload.work_order) || '', 100),
       target_count: item.target_count || (item.payload && item.payload.target_count),
       payload: item
     };
@@ -2132,7 +2197,7 @@ app.post('/api/sheets/push-single', requireAuth, async (req, res) => {
     });
   } catch (err: any) {
     console.error('Push single error:', err);
-    return res.status(500).json({ error: 'Gagal mengirim update ke Google Spreadsheet: ' + err.message });
+    return res.status(500).json({ error: 'Gagal mengirim update ke Google Spreadsheet.' });
   }
 });
 
@@ -2142,8 +2207,8 @@ app.post('/api/sheets/push-batch', requireAuth, async (req, res) => {
     const { webhookUrl, reviews } = req.body;
     const url = (webhookUrl || '').trim() || 'https://script.google.com/macros/s/AKfycbzeu460eHLYqtLmJnBo9-eFGzqxV8zWK1AOuubiFHy0HNoJZ-t5J0q3CQkkY-IurTiahA/exec';
     
-    if (!url.startsWith('http')) {
-      return res.status(400).json({ error: 'URL Webhook Google Apps Script tidak valid.' });
+    if (!isSafeGoogleScriptWebhookUrl(url)) {
+      return res.status(400).json({ error: 'URL Webhook Google Apps Script tidak valid. Hanya domain resmi script.google.com yang diizinkan.' });
     }
 
     let itemsToSend = reviews;
@@ -2196,7 +2261,7 @@ app.post('/api/sheets/push-batch', requireAuth, async (req, res) => {
     });
   } catch (err: any) {
     console.error('Push batch error:', err);
-    return res.status(500).json({ error: 'Gagal mengirim data ke Apps Script: ' + err.message });
+    return res.status(500).json({ error: 'Gagal mengirim data ke Apps Script.' });
   }
 });
 
@@ -2205,8 +2270,8 @@ app.post('/api/sheets/test-webhook', requireAuth, async (req, res) => {
   try {
     const { webhookUrl } = req.body;
     const url = (webhookUrl || '').trim();
-    if (!url || !url.startsWith('http')) {
-      return res.status(400).json({ error: 'Mohon masukkan URL Webhook Google Apps Script yang valid.' });
+    if (!url || !isSafeGoogleScriptWebhookUrl(url)) {
+      return res.status(400).json({ error: 'Mohon masukkan URL Webhook Google Apps Script yang valid (https://script.google.com/macros/s/...).' });
     }
 
     const testPayload = {
@@ -2294,7 +2359,11 @@ app.post('/api/sheets/webhook', async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        watch: null,
+      },
       appType: 'spa'
     });
     app.use(vite.middlewares);
@@ -2321,8 +2390,16 @@ async function startServer() {
     console.log('Serving production static build from /dist');
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`GM AGENCY Server listening on http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`GM AGENCY Server listening on http://${HOST}:${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[Server] Port ${PORT} already in use. Awaiting process reuse...`);
+    } else {
+      console.error('[Server] Fatal server error:', err);
+    }
   });
 }
 

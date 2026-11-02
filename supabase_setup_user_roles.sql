@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- GM AGENCY: MIGRATION SETUP UNTUK USER ROLES DARI SUPABASE AUTH (auth.users)
--- Hanya 2 Role: Super Admin (Owner) dan Admin SHP (Era, Cika, Vira, Ali)
+-- Hanya 2 Role: Super Admin (Owner) dan Admin SHP (Era, Cika, Vira, Arok)
 -- ==============================================================================
 
 -- 1. Buat tabel public.user_roles jika belum ada
@@ -40,7 +40,7 @@ INSERT INTO public.user_roles (user_id, role, email, username, slot, display_nam
 SELECT 
   u.id as user_id,
   CASE 
-    WHEN u.email ILIKE '%era%' OR u.email ILIKE '%cika%' OR u.email ILIKE '%vira%' OR u.email ILIKE '%ali%' OR u.email ILIKE '%adminshp%' THEN 'adminshp'
+    WHEN u.email ILIKE '%era%' OR u.email ILIKE '%cika%' OR u.email ILIKE '%vira%' OR u.email ILIKE '%arok%' OR u.email ILIKE '%ali%' OR u.email ILIKE '%adminshp%' THEN 'adminshp'
     ELSE 'admin'
   END as role,
   u.email as email,
@@ -49,14 +49,14 @@ SELECT
     WHEN u.email ILIKE '%era%' OR u.email ILIKE '%adminshp1%' THEN 'adminshp1'
     WHEN u.email ILIKE '%cika%' OR u.email ILIKE '%adminshp2%' THEN 'adminshp2'
     WHEN u.email ILIKE '%vira%' OR u.email ILIKE '%adminshp3%' THEN 'adminshp3'
-    WHEN u.email ILIKE '%ali%' OR u.email ILIKE '%adminshp4%' THEN 'adminshp4'
+    WHEN u.email ILIKE '%arok%' OR u.email ILIKE '%ali%' OR u.email ILIKE '%adminshp4%' THEN 'adminshp4'
     ELSE NULL
   END as slot,
   CASE
     WHEN u.email ILIKE '%era%' OR u.email ILIKE '%adminshp1%' THEN 'Admin SHP 1 (Era)'
     WHEN u.email ILIKE '%cika%' OR u.email ILIKE '%adminshp2%' THEN 'Admin SHP 2 (Cika)'
     WHEN u.email ILIKE '%vira%' OR u.email ILIKE '%adminshp3%' THEN 'Admin SHP 3 (Vira)'
-    WHEN u.email ILIKE '%ali%' OR u.email ILIKE '%adminshp4%' THEN 'Admin SHP 4 (Ali)'
+    WHEN u.email ILIKE '%arok%' OR u.email ILIKE '%ali%' OR u.email ILIKE '%adminshp4%' THEN 'Admin SHP 4 (Arok)'
     ELSE 'Super Admin (Owner)'
   END as display_name
 FROM auth.users u

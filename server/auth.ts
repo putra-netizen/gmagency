@@ -104,7 +104,7 @@ export const getSlotIndicatorName = (slot?: string): string => {
   if (clean === 'adminshp1' || clean === 'adminera' || clean === 'era' || clean === 'adminera@gmail.com') return 'era';
   if (clean === 'adminshp2' || clean === 'admincika' || clean === 'cika' || clean === 'admincika@gmail.com') return 'cika';
   if (clean === 'adminshp3' || clean === 'adminvira' || clean === 'vira' || clean === 'adminvira@gmail.com') return 'vira';
-  if (clean === 'adminshp4' || clean === 'adminali' || clean === 'ali' || clean === 'adminali@gmail.com') return 'ali';
+  if (clean === 'adminshp4' || clean === 'adminarok' || clean === 'arok' || clean === 'adminali' || clean === 'ali' || clean === 'fadhluali' || clean === 'adminarok@gmail.com' || clean === 'adminali@gmail.com') return 'arok';
   if (clean === 'admin' || clean === 'gmowner' || clean === 'owner' || clean === 'gmowner@gmail.com') return 'owner';
   return clean;
 };
@@ -204,13 +204,13 @@ const USER_ACCOUNTS: UserAccountDef[] = [
     defaultHashKey: 'adminvira',
   },
   {
-    username: 'adminali',
-    aliases: ['adminshp4', 'adminali@gmail.com', 'adminshp4@gmail.com', 'ali'],
+    username: 'adminarok',
+    aliases: ['adminshp4', 'adminarok@gmail.com', 'adminshp4@gmail.com', 'arok', 'adminali', 'ali', 'adminali@gmail.com', 'fadhluali'],
     role: 'adminshp',
-    name: 'Admin Ali (SHP 4)',
+    name: 'Admin Arok (SHP 4)',
     slot: 'adminshp4',
     envVar: 'ADMINSHP4_PASSWORD_HASH',
-    defaultHashKey: 'adminali',
+    defaultHashKey: 'adminarok',
   },
   {
     username: 'finance',
@@ -370,8 +370,8 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
           candidateEmails.push('admincika@gmail.com', 'adminshp2@gmail.com');
         } else if (normUser === 'adminvira' || normUser === 'adminshp3' || normUser === 'vira') {
           candidateEmails.push('adminvira@gmail.com', 'adminshp3@gmail.com');
-        } else if (normUser === 'adminali' || normUser === 'adminshp4' || normUser === 'ali') {
-          candidateEmails.push('adminali@gmail.com', 'adminshp4@gmail.com');
+        } else if (normUser === 'adminarok' || normUser === 'arok' || normUser === 'adminshp4' || normUser === 'adminali' || normUser === 'ali' || normUser === 'fadhluali') {
+          candidateEmails.push('adminarok@gmail.com', 'adminshp4@gmail.com', 'adminali@gmail.com');
         } else if (normUser === 'admin' || normUser === 'superadmin' || normUser === 'gmadmin' || normUser === 'gmowner' || normUser === 'owner') {
           candidateEmails.push('gmowner@gmail.com', 'admin@gmail.com', 'gmadmin@gmail.com', 'admin@gmagency.com');
         }
@@ -409,11 +409,11 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
               matchedSlot = 'adminshp3';
               matchedName = 'Admin Vira';
               matchedUsername = 'adminvira';
-            } else if (email.includes('adminali') || email.includes('ali') || meta.slot === 'adminshp4') {
+            } else if (email.includes('adminarok') || email.includes('arok') || email.includes('adminali') || email.includes('ali') || email.includes('fadhluali') || meta.slot === 'adminshp4') {
               matchedRole = 'adminshp';
               matchedSlot = 'adminshp4';
-              matchedName = 'Admin Ali';
-              matchedUsername = 'adminali';
+              matchedName = 'Admin Arok';
+              matchedUsername = 'adminarok';
             } else if (
               meta.role === 'admin' ||
               meta.role === 'owner' ||

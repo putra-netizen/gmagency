@@ -121,13 +121,16 @@ DROP POLICY IF EXISTS "Allow public insert on shopee_orders" ON public.shopee_or
 CREATE POLICY "Allow public insert on shopee_orders" ON public.shopee_orders
   FOR INSERT TO anon, authenticated, public WITH CHECK (true);
 
+-- Only authenticated users (Admin / Admin SHP / Service Role) can UPDATE or DELETE
 DROP POLICY IF EXISTS "Allow public update on shopee_orders" ON public.shopee_orders;
-CREATE POLICY "Allow public update on shopee_orders" ON public.shopee_orders
-  FOR UPDATE TO anon, authenticated, public USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow authenticated update on shopee_orders" ON public.shopee_orders;
+CREATE POLICY "Allow authenticated update on shopee_orders" ON public.shopee_orders
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow public delete on shopee_orders" ON public.shopee_orders;
-CREATE POLICY "Allow public delete on shopee_orders" ON public.shopee_orders
-  FOR DELETE TO anon, authenticated, public USING (true);
+DROP POLICY IF EXISTS "Allow authenticated delete on shopee_orders" ON public.shopee_orders;
+CREATE POLICY "Allow authenticated delete on shopee_orders" ON public.shopee_orders
+  FOR DELETE TO authenticated USING (true);
 
 -- RLS: maps_orders
 ALTER TABLE public.maps_orders ENABLE ROW LEVEL SECURITY;
@@ -141,12 +144,14 @@ CREATE POLICY "Allow insert on maps_orders" ON public.maps_orders
   FOR INSERT TO anon, authenticated, public WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow update on maps_orders" ON public.maps_orders;
-CREATE POLICY "Allow update on maps_orders" ON public.maps_orders
-  FOR UPDATE TO anon, authenticated, public USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow authenticated update on maps_orders" ON public.maps_orders;
+CREATE POLICY "Allow authenticated update on maps_orders" ON public.maps_orders
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow delete on maps_orders" ON public.maps_orders;
-CREATE POLICY "Allow delete on maps_orders" ON public.maps_orders
-  FOR DELETE TO anon, authenticated, public USING (true);
+DROP POLICY IF EXISTS "Allow authenticated delete on maps_orders" ON public.maps_orders;
+CREATE POLICY "Allow authenticated delete on maps_orders" ON public.maps_orders
+  FOR DELETE TO authenticated USING (true);
 
 -- RLS: report_maps
 ALTER TABLE public.report_maps ENABLE ROW LEVEL SECURITY;
@@ -160,12 +165,14 @@ CREATE POLICY "Allow insert on report_maps" ON public.report_maps
   FOR INSERT TO anon, authenticated, public WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow update on report_maps" ON public.report_maps;
-CREATE POLICY "Allow update on report_maps" ON public.report_maps
-  FOR UPDATE TO anon, authenticated, public USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow authenticated update on report_maps" ON public.report_maps;
+CREATE POLICY "Allow authenticated update on report_maps" ON public.report_maps
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow delete on report_maps" ON public.report_maps;
-CREATE POLICY "Allow delete on report_maps" ON public.report_maps
-  FOR DELETE TO anon, authenticated, public USING (true);
+DROP POLICY IF EXISTS "Allow authenticated delete on report_maps" ON public.report_maps;
+CREATE POLICY "Allow authenticated delete on report_maps" ON public.report_maps
+  FOR DELETE TO authenticated USING (true);
 
 -- RLS: user_roles
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
@@ -300,11 +307,10 @@ BEGIN
   ELSIF NEW.email ILIKE '%vira%' OR NEW.email ILIKE '%adminshp3%' THEN
     v_role := 'adminshp';
     v_slot := 'adminshp3';
-    v_display_name := 'Admin SHP 3 (Vira)';
-  ELSIF NEW.email ILIKE '%ali%' OR NEW.email ILIKE '%adminshp4%' THEN
+  ELSIF NEW.email ILIKE '%arok%' OR NEW.email ILIKE '%ali%' OR NEW.email ILIKE '%adminshp4%' THEN
     v_role := 'adminshp';
     v_slot := 'adminshp4';
-    v_display_name := 'Admin SHP 4 (Ali)';
+    v_display_name := 'Admin SHP 4 (Arok)';
   END IF;
 
   INSERT INTO public.user_roles (user_id, role, email, username, slot, display_name)
