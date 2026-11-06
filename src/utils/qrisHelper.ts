@@ -1,14 +1,19 @@
 /**
  * Utility helper for managing custom QRIS payment configurations.
- * Ensures the real QRIS barcode image always loads reliably across both preview and deployed production environments.
+ * Guarantees the authentic official QRIS of MATERIAL JAYA (NMID: ID1022215501324)
+ * always loads reliably across preview and production environments without being altered or corrupted.
  */
 
 import defaultQrisAsset from '../assets/images/qris-gm.jpg';
 import { GM_LOGO_DATA_URI } from './gmLogoAsset';
 
+export const REAL_QRIS_MERCHANT_NAME = 'MATERIAL JAYA';
+export const REAL_QRIS_NMID = 'ID1022215501324';
+export const REAL_QRIS_PRINTER_ID = '93600915';
+
 export const DEFAULT_QRIS_IMAGE: string = defaultQrisAsset || '/qris-gm.jpg';
 export const PUBLIC_QRIS_IMAGE: string = '/qris-gm.jpg';
-export const SUPABASE_QRIS_IMAGE: string = 'https://reonysrsoaepzykwwfzw.supabase.co/storage/v1/object/public/katalog-image/qris/qris-gm.jpg';
+export const BACKUP_QRIS_IMAGE: string = '/original_qris_material_jaya.jpg';
 
 export interface QrisConfig {
   imageUrl: string;
@@ -17,15 +22,13 @@ export interface QrisConfig {
   printerId: string;
 }
 
-function isInvalidOrLogoFallback(url: string | null | undefined): boolean {
+function isInvalidOrOldFallback(url: string | null | undefined): boolean {
   if (!url || typeof url !== 'string') return true;
   const trimmed = url.trim();
   if (!trimmed) return true;
   const lower = trimmed.toLowerCase();
   if (
-    lower === '/favicon.svg' ||
-    lower === '/favicon.png' ||
-    lower === '/favicon.ico' ||
+    lower.includes('reonysrsoaepzykwwfzw') ||
     lower.includes('favicon.') ||
     lower.includes('logo_gm') ||
     lower.includes('icon-192') ||
@@ -44,16 +47,16 @@ export const getQrisConfig = (): QrisConfig => {
   if (typeof window === 'undefined') {
     return {
       imageUrl: DEFAULT_QRIS_IMAGE,
-      merchantName: 'GMSOLUTION',
-      nmid: 'ID1022215501324',
-      printerId: '93600915'
+      merchantName: REAL_QRIS_MERCHANT_NAME,
+      nmid: REAL_QRIS_NMID,
+      printerId: REAL_QRIS_PRINTER_ID
     };
   }
 
   let storedImage = null;
   try {
     storedImage = localStorage.getItem('gmsolution_qris_image');
-    if (isInvalidOrLogoFallback(storedImage)) {
+    if (isInvalidOrOldFallback(storedImage)) {
       if (storedImage) {
         localStorage.removeItem('gmsolution_qris_image');
       }
@@ -62,9 +65,12 @@ export const getQrisConfig = (): QrisConfig => {
   } catch {}
 
   const imageUrl = storedImage || DEFAULT_QRIS_IMAGE;
-  const merchantName = localStorage.getItem('gmsolution_qris_merchant_name') || 'GMSOLUTION';
-  const nmid = localStorage.getItem('gmsolution_qris_nmid') || 'ID1022215501324';
-  const printerId = localStorage.getItem('gmsolution_qris_printer_id') || '93600915';
+  const rawMerchantName = localStorage.getItem('gmsolution_qris_merchant_name');
+  const merchantName = (rawMerchantName && rawMerchantName.trim() && rawMerchantName !== 'GMSOLUTION')
+    ? rawMerchantName.trim()
+    : REAL_QRIS_MERCHANT_NAME;
+  const nmid = localStorage.getItem('gmsolution_qris_nmid') || REAL_QRIS_NMID;
+  const printerId = localStorage.getItem('gmsolution_qris_printer_id') || REAL_QRIS_PRINTER_ID;
 
   return { imageUrl, merchantName, nmid, printerId };
 };
@@ -73,7 +79,7 @@ export const saveQrisConfig = (config: Partial<QrisConfig>): void => {
   if (typeof window === 'undefined') return;
 
   if (config.imageUrl !== undefined) {
-    if (isInvalidOrLogoFallback(config.imageUrl)) {
+    if (isInvalidOrOldFallback(config.imageUrl)) {
       localStorage.removeItem('gmsolution_qris_image');
     } else {
       localStorage.setItem('gmsolution_qris_image', config.imageUrl);

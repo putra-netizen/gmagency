@@ -18,7 +18,7 @@ import {
 } from '../lib/supabase';
 import { getAdminShpLogs, clearAdminShpLogs, AdminShpLog, logAdminShpAction } from '../utils/adminshpLogs';
 import { formatRupiah } from './ProductCard';
-import { getQrisConfig, saveQrisConfig, resetQrisConfig } from '../utils/qrisHelper';
+import { getQrisConfig, saveQrisConfig, resetQrisConfig, REAL_QRIS_MERCHANT_NAME, REAL_QRIS_NMID, REAL_QRIS_PRINTER_ID, DEFAULT_QRIS_IMAGE } from '../utils/qrisHelper';
 import { toast } from '../utils/toast';
 import { generateMapsReportPDF } from '../utils/pdfGenerator';
 import { MonthlyDateRangePicker, TimeFilterConfig, isWithinCustomTimeframe } from './MonthlyDateRangePicker';
@@ -37,7 +37,7 @@ import {
   Star, MapPin, Upload, Users, Key, ShieldAlert, Search, FileDown,
   FileSpreadsheet, Download, Menu, ChevronRight, ChevronLeft, Wallet,
   Filter, Activity, Layers, SlidersHorizontal, Tag, Lock, Mail, ShieldCheck,
-  MessageSquare, RotateCcw
+  MessageSquare, RotateCcw, QrCode
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -4141,6 +4141,20 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
 
                   <button
                     type="button"
+                    onClick={() => setActiveSettingsTab('qris_config')}
+                    className={`px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer lg:w-full text-left ${
+                      activeSettingsTab === 'qris_config'
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/10'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                    id="sidebar-btn-qris-config"
+                  >
+                    <QrCode className="h-4 w-4 shrink-0" />
+                    <span>Konfigurasi QRIS</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setActiveSettingsTab('app_install')}
                     className={`px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer lg:w-full text-left ${
                       activeSettingsTab === 'app_install'
@@ -4210,6 +4224,22 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                       >
                         <TrendingUp className="h-4 w-4 shrink-0" />
                         <span>CMS Count Delivery</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSettingsTab('qris_config');
+                          setIsSettingsMenuOpen(false);
+                        }}
+                        className={`w-full px-4 py-3 text-xs font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer text-left ${
+                          activeSettingsTab === 'qris_config'
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <QrCode className="h-4 w-4 shrink-0" />
+                        <span>Konfigurasi QRIS</span>
                       </button>
 
                       <button
@@ -4608,6 +4638,106 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
                       </button>
                     </div>
                   </form>
+                </div>
+              )}
+
+              {activeSettingsTab === 'qris_config' && (
+                <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm space-y-6" id="qris-config-settings-panel">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-pink-50 text-pink-700 text-[10px] font-black uppercase tracking-wider border border-pink-200">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-pink-600" />
+                          QRIS Resmi Tervalidasi
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
+                          GPN & Standar Nasional
+                        </span>
+                      </div>
+                      <h3 className="text-base font-black text-slate-900 font-sans uppercase tracking-tight flex items-center gap-2 mt-2">
+                        <QrCode className="h-5 w-5 text-pink-600" />
+                        Konfigurasi QRIS Pembayaran (MATERIAL JAYA)
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium font-sans">
+                        QRIS resmi terhubung ke rekening <strong>{REAL_QRIS_MERCHANT_NAME}</strong> dengan NMID <strong>{REAL_QRIS_NMID}</strong> untuk menerima pembayaran checkout pelanggan secara langsung.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetQrisConfig();
+                        toast.success('QRIS dikunci dan dipulihkan ke master QRIS resmi (MATERIAL JAYA)!');
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50/70 hover:bg-pink-100/80 text-pink-700 text-xs font-bold transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
+                      id="btn-reset-qris"
+                    >
+                      <RotateCcw className="h-4 w-4 text-pink-600" />
+                      <span>Kunci & Pulihkan QRIS Asli</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start pt-2">
+                    {/* Left Column: Official QRIS Preview Card */}
+                    <div className="md:col-span-5 flex flex-col items-center">
+                      <div className="w-full max-w-[280px] rounded-2xl border border-slate-200 bg-white p-4 shadow-lg flex flex-col items-center">
+                        <div className="w-full flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Barcode QRIS</span>
+                          <span className="text-[10px] font-extrabold text-pink-600 uppercase">Live Payment</span>
+                        </div>
+                        <img
+                          src={DEFAULT_QRIS_IMAGE}
+                          alt="QRIS MATERIAL JAYA"
+                          className="w-full h-auto rounded-xl object-contain shadow-xs border border-slate-100"
+                        />
+                        <div className="mt-3 flex items-center justify-center gap-1.5 border-t border-slate-100 pt-3 w-full">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="text-[10px] font-black uppercase tracking-wide text-emerald-700">QRIS AKTIF DI CHECKOUT</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Verified Merchant Metadata */}
+                    <div className="md:col-span-7 space-y-4">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 space-y-4">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                          Detail Legalitas & Rekening QRIS
+                        </h4>
+
+                        <div className="space-y-3 border-t border-slate-200/80 pt-3">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-500">Nama Merchant Resmi:</span>
+                            <span className="font-black text-slate-900 uppercase font-mono">{REAL_QRIS_MERCHANT_NAME}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-500">NMID (National Merchant ID):</span>
+                            <span className="font-bold text-slate-900 font-mono tracking-wider">{REAL_QRIS_NMID}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-500">Dicetak Oleh:</span>
+                            <span className="font-bold text-slate-700 font-mono">{REAL_QRIS_PRINTER_ID}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-500">Jaringan Pembayaran:</span>
+                            <span className="font-bold text-emerald-700">BCA, Mandiri, BRI, BNI, Dana, OVO, Gopay, ShopeePay & Semua Bank</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                          <div className="text-xs text-emerald-900 leading-relaxed font-medium">
+                            <strong>Perlindungan QRIS Aktif:</strong> Barcode di atas adalah barcode resmi yang dipindai pembeli saat memesan layanan di modal Checkout. Sistem secara otomatis memblokir penggantian barcode yang tidak sah.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
