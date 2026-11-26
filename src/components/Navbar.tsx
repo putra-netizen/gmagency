@@ -4,13 +4,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import GMLogo from './GMLogo';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../lib/translations';
-import { Globe, ShieldAlert, Home, Grid, Settings, RefreshCw, LogOut, Sun, Moon, Menu, X, Wallet, Package, FileSpreadsheet, User, ShieldCheck, Database, TrendingUp } from 'lucide-react';
+import { Globe, ShieldAlert, Home, Grid, Settings, RefreshCw, LogOut, Sun, Moon, Menu, X, Wallet, Package, FileSpreadsheet, User, ShieldCheck, Database, TrendingUp, ShoppingBag, Star, MapPin, QrCode, Download, ExternalLink } from 'lucide-react';
 
-import { loginWithBackend, clientLogout, getAuthUser, getViewAsShpSlot, setViewAsShpSlot, AuthUser } from '../lib/auth';
+import { loginWithBackend, clientLogout, getAuthUser, getViewAsShpSlot, setViewAsShpSlot } from '../lib/auth';
 
 interface NavbarProps {
   currentLang: Language;
@@ -20,6 +20,8 @@ interface NavbarProps {
   supabaseConnected: boolean;
   theme?: 'light' | 'dark';
   onThemeToggle?: () => void;
+  isAdminSidebarOpen?: boolean;
+  onAdminSidebarOpenChange?: (open: boolean) => void;
 }
 
 export default function Navbar({
@@ -29,20 +31,30 @@ export default function Navbar({
   onViewChange,
   supabaseConnected,
   theme = 'dark',
-  onThemeToggle
+  onThemeToggle,
+  isAdminSidebarOpen,
+  onAdminSidebarOpenChange
 }: NavbarProps) {
   const t = TRANSLATIONS[currentLang];
 
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
-  const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(false);
+  const [internalSidebarOpen, setInternalSidebarOpen] = useState(false);
+  const isSidebarOpen = isAdminSidebarOpen !== undefined ? isAdminSidebarOpen : internalSidebarOpen;
 
-  const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
-    try {
-      return getAuthUser();
-    } catch {
-      return null;
+  const setSidebarOpen = (updater: boolean | ((prev: boolean) => boolean)) => {
+    const nextValue = typeof updater === 'function' ? updater(isSidebarOpen) : updater;
+    if (onAdminSidebarOpenChange) {
+      onAdminSidebarOpenChange(nextValue);
+    } else {
+      setInternalSidebarOpen(nextValue);
     }
+  };
+
+  const [activeAdminSection, setActiveAdminSection] = useState<{ tab: string; settingsTab: string }>({
+    tab: 'shopee_orders',
+    settingsTab: 'products'
   });
+  const [activeShpTab, setActiveShpTab] = useState<'shopee' | 'maps' | 'report_maps'>('shopee');
 
   const [viewAsSlot, setViewAsSlot] = useState<string | null>(() => {
     try {
@@ -76,47 +88,78 @@ export default function Navbar({
   });
 
   const isSuperAdminOnly = Boolean(isAdminAuth && !isShpAuth && !viewAsSlot);
+  const isAdminShpSession = Boolean((!isAdminAuth && isShpAuth) || (isAdminAuth && viewAsSlot));
+  const canShowAdminSidebar = Boolean(currentView === 'admin' && (isSuperAdminOnly || isAdminShpSession));
 
-  useEffect(() => {
-    if (!isSuperAdminOnly && isAdminMenuOpen) {
-      setIsAdminMenuOpen(false);
+  const getAdminDisplayName = (): string => {
+    if (isSuperAdminOnly) {
+      return 'Super Admin';
     }
-  }, [isSuperAdminOnly, isAdminMenuOpen]);
-
-  const getShpDisplayName = (): string => {
     try {
-      const user = getAuthUser();
-      let raw = '';
-      if (user?.role === 'adminshp' && user?.name) raw = user.name.toUpperCase();
-      else if (user?.role === 'adminshp' && user?.username) raw = user.username.toUpperCase();
-      else {
-        const slot = sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || 'adminshp1';
-        const saved = localStorage.getItem('gm_adminshp_creds');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed?.[slot]?.username) raw = parsed[slot].username.toUpperCase();
+      const targetSlot = viewAsSlot || (() => {
+        const user = getAuthUser();
+        if (user?.role === 'adminshp') {
+          return user.slot || user.inputer || user.username || user.name || '';
         }
-        if (!raw) {
-          if (slot === 'adminshp1') raw = 'ADMINERA';
-          else if (slot === 'adminshp2') raw = 'ADMINCIKA';
-          else if (slot === 'adminshp3') raw = 'ADMINVIRA';
-          else if (slot === 'adminshp4') raw = 'ADMINAROK';
-          else raw = slot.toUpperCase();
-        }
+        return sessionStorage.getItem('gm_adminshp_user') || localStorage.getItem('gm_adminshp_user') || '';
+      })();
+
+      const normalized = (targetSlot || '').trim().toLowerCase();
+      if (normalized === 'adminshp1' || normalized === 'adminera' || normalized === 'era') return 'Admin Era';
+      if (normalized === 'adminshp2' || normalized === 'admincika' || normalized === 'cika') return 'Admin Cika';
+      if (normalized === 'adminshp3' || normalized === 'adminvira' || normalized === 'vira') return 'Admin Vira';
+      if (normalized === 'adminshp4' || normalized === 'adminarok' || normalized === 'arok' || normalized === 'adminali' || normalized === 'ali' || normalized === 'fadhluali') return 'Admin Arok';
+
+      if (targetSlot) {
+        const cleaned = targetSlot.replace(/\b(ali|fadhluali)\b/gi, 'Arok').trim();
+        return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
       }
-      return raw.replace(/\bALI\b/g, 'AROK').replace(/\bFADHLUALI\b/g, 'AROK');
-    } catch (e) {
-      return 'ADMIN';
+      return 'Admin SHP';
+    } catch {
+      return 'Admin SHP';
     }
   };
+
+  const adminDisplayName = getAdminDisplayName();
+
+  useEffect(() => {
+    if (!canShowAdminSidebar && isSidebarOpen) {
+      setSidebarOpen(false);
+    }
+  }, [canShowAdminSidebar, isSidebarOpen]);
+
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSidebarOpen]);
 
   useEffect(() => {
     const handleRoute = () => {
       setCurrentPath(window.location.pathname);
     };
+    const handleTabChanged = (e: Event) => {
+      const custom = e as CustomEvent<{ activeTab?: string; activeSettingsTab?: string }>;
+      if (custom?.detail) {
+        setActiveAdminSection({
+          tab: custom.detail.activeTab || 'shopee_orders',
+          settingsTab: custom.detail.activeSettingsTab || 'products'
+        });
+      }
+    };
+    const handleShpTabChanged = (e: Event) => {
+      const custom = e as CustomEvent<{ activeTab?: 'shopee' | 'maps' | 'report_maps' }>;
+      if (custom?.detail?.activeTab) {
+        setActiveShpTab(custom.detail.activeTab);
+      }
+    };
     const handleAuthChange = () => {
       const user = getAuthUser();
-      setAuthUser(user);
       const viewAs = getViewAsShpSlot();
       setViewAsSlot(viewAs);
 
@@ -129,166 +172,148 @@ export default function Navbar({
       }
     };
     window.addEventListener('popstate', handleRoute);
+    window.addEventListener('admin-tab-changed', handleTabChanged);
+    window.addEventListener('adminshp-tab-changed', handleShpTabChanged);
     window.addEventListener('admin-auth-change', handleAuthChange);
     window.addEventListener('adminshp-auth-change', handleAuthChange);
     window.addEventListener('gm_auth_changed', handleAuthChange);
     return () => {
       window.removeEventListener('popstate', handleRoute);
+      window.removeEventListener('admin-tab-changed', handleTabChanged);
+      window.removeEventListener('adminshp-tab-changed', handleShpTabChanged);
       window.removeEventListener('admin-auth-change', handleAuthChange);
       window.removeEventListener('adminshp-auth-change', handleAuthChange);
       window.removeEventListener('gm_auth_changed', handleAuthChange);
     };
   }, []);
 
+  const navigateSidebar = (eventName: string, urlPath?: string) => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+    if (urlPath) {
+      window.history.pushState(null, '', urlPath);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    window.dispatchEvent(new CustomEvent(eventName));
+  };
+
+  const superAdminGroups = [
+    {
+      title: 'Manajemen & Keuangan',
+      items: [
+        {
+          id: 'menu-item-keuangan',
+          label: 'Keuangan & Omset',
+          icon: Wallet,
+          isActive: activeAdminSection.tab === 'keuangan',
+          onClick: () => navigateSidebar('admin-navigate-keuangan', '/admin/keuangan')
+        },
+        {
+          id: 'menu-item-edit-katalog',
+          label: 'Edit Katalog',
+          icon: Package,
+          isActive: activeAdminSection.tab === 'settings' && activeAdminSection.settingsTab === 'products',
+          onClick: () => navigateSidebar('admin-navigate-katalog', '/admin/settings')
+        },
+        {
+          id: 'menu-item-cms-hero-stats',
+          label: 'CMS Count Delivery',
+          icon: TrendingUp,
+          isActive: activeAdminSection.tab === 'settings' && activeAdminSection.settingsTab === 'hero_stats',
+          onClick: () => navigateSidebar('admin-navigate-hero-stats', '/admin/settings')
+        }
+      ]
+    },
+    {
+      title: 'Sistem & Konfigurasi',
+      items: [
+        {
+          id: 'menu-item-qris-config',
+          label: 'Konfigurasi QRIS',
+          icon: QrCode,
+          isActive: activeAdminSection.tab === 'settings' && activeAdminSection.settingsTab === 'qris_config',
+          onClick: () => navigateSidebar('admin-navigate-qris', '/admin/settings')
+        },
+        {
+          id: 'menu-item-app-install',
+          label: 'Pasang Aplikasi',
+          icon: Download,
+          isActive: activeAdminSection.tab === 'settings' && activeAdminSection.settingsTab === 'app_install',
+          onClick: () => navigateSidebar('admin-navigate-app-install', '/admin/settings')
+        }
+      ]
+    }
+  ];
+
+  const adminShpGroups = [
+    {
+      title: 'Menu Workspace',
+      items: [
+        {
+          id: 'sidebar-shp-item-shopee',
+          label: 'Report Sosmed & Spam WA',
+          icon: ShoppingBag,
+          isActive: activeShpTab === 'shopee',
+          onClick: () => navigateSidebar('adminshp-navigate-shopee')
+        },
+        {
+          id: 'sidebar-shp-item-reviews',
+          label: 'Review Orders',
+          icon: Star,
+          isActive: activeShpTab === 'maps',
+          onClick: () => navigateSidebar('adminshp-navigate-maps')
+        },
+        {
+          id: 'sidebar-shp-item-reports',
+          label: 'Report Orders',
+          icon: MapPin,
+          isActive: activeShpTab === 'report_maps',
+          onClick: () => navigateSidebar('adminshp-navigate-report-maps')
+        }
+      ]
+    }
+  ];
+
+  const activeSidebarGroups = isSuperAdminOnly ? superAdminGroups : adminShpGroups;
+
   return (
-    <header className={`sticky top-0 z-50 w-full border-b backdrop-blur-md shrink-0 transition-colors duration-300 ${
-      currentView === 'home'
-        ? (theme === 'dark'
-            ? 'border-slate-800 bg-slate-950/80 shadow-lg shadow-black/20 text-white'
-            : 'border-slate-200 bg-white/80 shadow-sm text-slate-900')
-        : 'border-slate-200 bg-white/80 shadow-sm text-slate-900'
-    }`}>
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        
-        {/* Logo brand or Admin Title */}
-        {currentView === 'admin' ? (
-          <div className="relative flex items-center gap-2 sm:gap-3" id="admin-logo-status-container">
-            {/* Hamburger Menu Button - EKSKLUSIF hanya untuk Super Admin (TIDAK PERNAH muncul di Portal Login atau Admin SHP) */}
-            {isSuperAdminOnly && (
-              <>
-                <button
-                  onClick={() => setIsAdminMenuOpen(prev => !prev)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all cursor-pointer shadow-md active:scale-95 border border-slate-700/50"
-                  title="Menu Admin"
-                  id="admin-hamburger-btn"
-                >
-                  {isAdminMenuOpen ? (
-                    <X className="h-5 w-5 text-amber-400 transition-transform duration-200" />
-                  ) : (
-                    <Menu className="h-5 w-5 text-white transition-transform duration-200" />
-                  )}
-                </button>
+    <>
+      <header className={`sticky top-0 z-[65] w-full border-b backdrop-blur-md shrink-0 transition-colors duration-300 ${
+        currentView === 'home'
+          ? (theme === 'dark'
+              ? 'border-slate-800 bg-slate-950/80 shadow-lg shadow-black/20 text-white'
+              : 'border-slate-200 bg-white/80 shadow-sm text-slate-900')
+          : 'border-slate-200 bg-white/95 shadow-xs text-slate-900'
+      }`}>
+        <div className={`mx-auto flex h-16 items-center justify-between px-4 sm:px-6 ${
+          currentView === 'admin' && canShowAdminSidebar ? 'w-full' : 'max-w-7xl lg:px-8'
+        }`}>
+          
+          {/* Logo brand or Admin Title */}
+          {currentView === 'admin' ? (
+            <div className="relative flex items-center gap-2.5 sm:gap-3" id="admin-logo-status-container">
+              {/* Layout spacer aligned with the fixed animated Hamburger-to-X toggle button */}
+              {canShowAdminSidebar && (
+                <div className="h-9 w-9 shrink-0" aria-hidden="true" />
+              )}
 
-                {/* Premium Hamburger Menu Dropdown Popover */}
-                {isAdminMenuOpen && (
-                  <>
-                    {/* Backdrop overlay */}
-                    <div 
-                      className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[2px]" 
-                      onClick={() => setIsAdminMenuOpen(false)} 
-                    />
-
-                    {/* Dropdown Card */}
-                    <motion.div
-                      initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute left-0 top-full mt-2.5 z-50 w-72 sm:w-80 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-2.5 shadow-2xl ring-1 ring-black/5"
-                      id="admin-hamburger-dropdown"
-                    >
-                      <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 mb-1 flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                          Menu Utama Admin
-                        </span>
-                        <span className="bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-blue-100 dark:border-blue-900">
-                          PREMIUM NAV
-                        </span>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        {/* 1. KEUANGAN */}
-                        <button
-                          onClick={() => {
-                            setIsAdminMenuOpen(false);
-                            window.history.pushState(null, '', '/admin/devpayroll');
-                            window.dispatchEvent(new PopStateEvent('popstate'));
-                            window.dispatchEvent(new CustomEvent('admin-navigate-keuangan'));
-                          }}
-                          className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-emerald-50/80 dark:hover:bg-emerald-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-emerald-200 dark:hover:border-emerald-900/60 bg-slate-50/50 dark:bg-slate-800/30"
-                          id="menu-item-keuangan"
-                        >
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform shadow-xs">
-                            <Wallet className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
-                              <span>KEUANGAN</span>
-                              <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-bold">NAVBAR</span>
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                              Ikhtisar omset & total pendapatan
-                            </div>
-                          </div>
-                        </button>
-
-                        {/* 2. EDIT KATALOG */}
-                        <button
-                          onClick={() => {
-                            setIsAdminMenuOpen(false);
-                            window.dispatchEvent(new CustomEvent('admin-navigate-katalog'));
-                          }}
-                          className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-blue-50/80 dark:hover:bg-blue-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-blue-200 dark:hover:border-blue-900/60 bg-slate-50/50 dark:bg-slate-800/30"
-                          id="menu-item-edit-katalog"
-                        >
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-transform shadow-xs">
-                            <Package className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                              EDIT KATALOG
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                              CRUD kelola produk & layanan
-                            </div>
-                          </div>
-                        </button>
-
-                        {/* 3. CMS COUNT DELIVERY & STATISTIK */}
-                        <button
-                          onClick={() => {
-                            setIsAdminMenuOpen(false);
-                            window.dispatchEvent(new CustomEvent('admin-navigate-hero-stats'));
-                          }}
-                          className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-indigo-50/80 dark:hover:bg-indigo-950/40 text-left transition-all group cursor-pointer border border-slate-100/60 dark:border-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-900/60 bg-slate-50/50 dark:bg-slate-800/30"
-                          id="menu-item-cms-hero-stats"
-                        >
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform shadow-xs">
-                            <TrendingUp className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors flex items-center gap-1.5">
-                              <span>CMS COUNT DELIVERY</span>
-                              <span className="text-[9px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded font-bold">CMS</span>
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                              Edit angka Total Delivery & Customers
-                            </div>
-                          </div>
-                        </button>
-                      </div>
-                    </motion.div>
-                  </>
-                )}
-              </>
-            )}
-
-            <div 
-              onClick={() => {
-                if (!isAdminAuth && !isShpAuth) {
-                  onViewChange('home');
-                }
-              }}
-              className={`flex items-center gap-2 ${!isAdminAuth && !isShpAuth ? 'cursor-pointer hover:opacity-85 transition-opacity' : ''}`}
-              title={!isAdminAuth && !isShpAuth ? "Kembali ke Beranda" : undefined}
-            >
-              <GMLogo size="xs" showSubtitle={false} hideText={true} />
-              <span className="text-xs sm:text-sm font-black tracking-wider font-sans uppercase text-slate-800 dark:text-slate-100">
-                ADMIN WORKING SPACE
-              </span>
+              <div 
+                onClick={() => {
+                  if (!isAdminAuth && !isShpAuth) {
+                    onViewChange('home');
+                  }
+                }}
+                className={`flex items-center gap-2 ${!isAdminAuth && !isShpAuth ? 'cursor-pointer hover:opacity-85 transition-opacity' : ''}`}
+                title={!isAdminAuth && !isShpAuth ? "Kembali ke Beranda" : undefined}
+              >
+                <GMLogo size="xs" showSubtitle={false} hideText={true} />
+                <span className="text-xs sm:text-sm font-black tracking-wider font-sans uppercase text-slate-800 whitespace-nowrap">
+                  ADMIN WORKING SPACE
+                </span>
+              </div>
             </div>
-          </div>
-        ) : (
+          ) : (
           /* Clean Logo & Brand Lockup without white capsule, adapting to Light/Dark Mode */
           <div 
             onClick={() => onViewChange('home')} 
@@ -302,109 +327,68 @@ export default function Navbar({
         {/* Action controls */}
         <div className="flex items-center gap-1.5 sm:gap-3" id="nav-actions">
 
-          {/* Admin panel actions for GM Owner / Super Admin */}
-          {currentView === 'admin' && isAdminAuth && (
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              {/* Refresh (icon only) */}
+          {/* Minimalist icon-only top-right actions for Super Admin & Admin SHP */}
+          {currentView === 'admin' && canShowAdminSidebar && (
+            <div className="flex items-center gap-3 sm:gap-4">
+              {/* Transparent Icon-Only Refresh */}
               <button
+                type="button"
                 onClick={() => {
-                  if (viewAsSlot) {
+                  if (isAdminShpSession) {
                     window.dispatchEvent(new CustomEvent('adminshp-refresh'));
                   } else {
                     window.dispatchEvent(new CustomEvent('admin-refresh'));
                   }
                 }}
-                className="h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-950 transition-all flex cursor-pointer shadow-xs active:scale-95"
+                className="flex h-8 w-8 items-center justify-center bg-transparent border-0 shadow-none p-0 text-slate-500 hover:text-slate-900 transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
                 title="Refresh Data"
-                id="nav-refresh-admin"
+                aria-label="Refresh Data"
+                id={isAdminShpSession && !isAdminAuth ? 'nav-refresh-adminshp' : 'nav-refresh-admin'}
               >
-                <RefreshCw className="h-4 w-4 text-slate-500 hover:text-slate-700" />
+                <RefreshCw className="h-[18px] w-[18px]" />
               </button>
 
-              {/* Log Out / Kembali ke Super Admin (Satu-satunya tombol merah di pojok kanan) */}
+              {/* Transparent Icon-Only Log Out / Exit */}
               <button
+                type="button"
                 onClick={() => {
                   if (viewAsSlot) {
                     setViewAsShpSlot(null);
                     setViewAsSlot(null);
+                  } else if (isAdminShpSession) {
+                    window.dispatchEvent(new CustomEvent('adminshp-logout'));
                   } else {
                     window.dispatchEvent(new CustomEvent('admin-logout'));
                   }
                 }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-red-100 bg-red-50/70 px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs font-semibold text-red-650 hover:bg-red-100/80 transition-all shadow-xs active:scale-95 cursor-pointer"
-                title={viewAsSlot ? "Kembali ke Super Admin" : "Log Out Super Admin"}
-                id="nav-logout-admin"
+                className="flex h-8 w-8 items-center justify-center bg-transparent border-0 shadow-none p-0 text-slate-500 hover:text-red-600 transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-lg"
+                title={viewAsSlot ? "Kembali ke Super Admin" : "Keluar"}
+                aria-label={viewAsSlot ? "Kembali ke Super Admin" : "Keluar"}
+                id={isAdminShpSession && !isAdminAuth ? 'nav-logout-adminshp' : 'nav-logout-admin'}
               >
-                <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Keluar</span>
+                <LogOut className="h-[18px] w-[18px]" />
               </button>
 
-              {/* Super Admin Identity Badge - ALWAYS displays SUPER ADMIN */}
-              <div 
-                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl bg-slate-900 text-white border border-slate-800 text-xs font-bold font-sans shadow-xs select-none"
-                title={`Super Admin: ${authUser?.name || authUser?.username || 'Owner'}`}
-                id="nav-identity-superadmin"
-              >
-                <div className="h-5 w-5 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-[10px] font-black uppercase shadow-xs">
-                  SA
-                </div>
-                <span className="text-[11px] font-extrabold uppercase tracking-tight text-white">
-                  SUPER ADMIN
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* AdminShp view actions (Only for direct, real Admin SHP session) */}
-          {currentView === 'admin' && !isAdminAuth && isShpAuth && (
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              {/* Supabase Connected Indicator */}
-              <div 
-                className="flex items-center justify-center h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-xs"
-                title="Supabase Database Connected"
-                id="nav-supabase-status-adminshp"
-              >
-                <Database className="h-4 w-4 text-emerald-600" />
-              </div>
-
-              {/* Refresh button */}
-              <button
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('adminshp-refresh'));
-                }}
-                className="h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-950 transition-all flex cursor-pointer shadow-xs active:scale-95"
-                title="Refresh Data"
-                id="nav-refresh-adminshp"
-              >
-                <RefreshCw className="h-4 w-4 text-slate-500 hover:text-slate-700" />
-              </button>
-
-              {/* Sign Out */}
-              <button
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('adminshp-logout'));
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-red-100 bg-red-50/70 px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs font-semibold text-red-650 hover:bg-red-100/80 transition-all shadow-xs active:scale-95 cursor-pointer"
-                id="nav-logout-adminshp"
-                title="Keluar / Sign Out"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Sign Out</span>
-              </button>
-
-              {/* AdminSHP Profile Identity Badge */}
-              <div 
-                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl bg-slate-100/90 text-slate-800 border border-slate-200 text-xs font-bold font-sans shadow-xs select-none"
-                title={`User: ${getShpDisplayName()}`}
-                id="nav-identity-adminshp"
-              >
-                <div className="h-5 w-5 rounded-lg bg-orange-500 text-white flex items-center justify-center text-[10px] font-black uppercase shadow-xs">
-                  {getShpDisplayName().charAt(0)}
-                </div>
-                <span className="text-[11px] font-extrabold uppercase tracking-tight text-slate-750">
-                  {getShpDisplayName()}
-                </span>
-              </div>
+              {/* Flat Profile Icon + Admin Name (Shown to the right of Exit icon when sidebar is hidden to the left) */}
+              <AnimatePresence initial={false}>
+                {!isSidebarOpen && (
+                  <motion.div
+                    key="nav-hidden-sidebar-profile"
+                    initial={{ opacity: 0, x: 6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 6 }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    className="flex items-center gap-1.5 text-slate-600 select-none pl-0.5"
+                    id={isAdminShpSession && !isAdminAuth ? 'nav-identity-adminshp' : 'nav-identity-superadmin'}
+                    title={adminDisplayName}
+                  >
+                    <User className="h-[18px] w-[18px] text-slate-500 shrink-0" />
+                    <span className="text-xs font-semibold text-slate-600 whitespace-nowrap truncate max-w-[110px] sm:max-w-none">
+                      {adminDisplayName}
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
@@ -462,5 +446,149 @@ export default function Navbar({
         </div>
       </div>
     </header>
+
+      {/* ROLE-SCOPED ADMIN SIDEBAR (Super Admin & All Admin SHP Roles, hidden on Login Portal) */}
+      {canShowAdminSidebar && (
+        <>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(prev => !prev)}
+            aria-expanded={isSidebarOpen}
+            aria-controls="admin-sidebar-panel"
+            aria-label={isSidebarOpen ? 'Tutup Sidebar Admin' : 'Buka Sidebar Admin'}
+            title={isSidebarOpen ? 'Tutup Sidebar' : 'Buka Menu Admin'}
+            id="admin-hamburger-btn"
+            className="fixed top-3.5 left-4 sm:left-6 z-[70] flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors duration-200 cursor-pointer shadow-sm active:scale-95 border border-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <span className="relative flex h-4 w-4 items-center justify-center" aria-hidden="true">
+              <motion.span
+                className="absolute h-[2px] w-4 rounded-full bg-current"
+                initial={false}
+                animate={isSidebarOpen ? { y: 0, rotate: 45 } : { y: -5, rotate: 0 }}
+                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              />
+              <motion.span
+                className="absolute h-[2px] w-4 rounded-full bg-current"
+                initial={false}
+                animate={isSidebarOpen ? { opacity: 0, scaleX: 0 } : { opacity: 1, scaleX: 1 }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              />
+              <motion.span
+                className="absolute h-[2px] w-4 rounded-full bg-current"
+                initial={false}
+                animate={isSidebarOpen ? { y: 0, rotate: -45 } : { y: 5, rotate: 0 }}
+                transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              />
+            </span>
+          </button>
+
+          <AnimatePresence>
+            {isSidebarOpen && (
+              <motion.aside
+                key="admin-sidebar-panel"
+                id="admin-sidebar-panel"
+                aria-label={isSuperAdminOnly ? 'Navigasi Utama Super Admin' : 'Navigasi Admin SHP'}
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                className="fixed top-16 bottom-0 left-0 z-[60] flex w-[272px] sm:w-[280px] flex-col bg-white border-r border-slate-200 shadow-[4px_0_24px_-4px_rgba(15,23,42,0.08)]"
+              >
+                {/* Sidebar Navigation Groups (No grey scrollbar) */}
+                <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  {activeSidebarGroups.map((group) => (
+                    <div key={group.title} className="space-y-1">
+                      <div className="px-3 pb-1 text-[11px] font-bold tracking-wider uppercase text-slate-400">
+                        {group.title}
+                      </div>
+                      <div className="space-y-0.5">
+                        {group.items.map((item) => {
+                          const Icon = item.icon;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              id={item.id}
+                              onClick={item.onClick}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-150 cursor-pointer text-left ${
+                                item.isActive
+                                  ? 'bg-slate-900 text-white shadow-xs'
+                                  : 'text-slate-700 hover:bg-slate-100 hover:text-slate-950'
+                              }`}
+                            >
+                              <Icon
+                                className={`h-4 w-4 shrink-0 ${
+                                  item.isActive ? 'text-white' : 'text-slate-500'
+                                }`}
+                              />
+                              <span className="truncate whitespace-nowrap">{item.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </nav>
+
+                {/* Sidebar Action Footer (No account info box) */}
+                <div className="shrink-0 border-t border-slate-200 bg-slate-50/60 p-3">
+                  {isSuperAdminOnly ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSidebarOpen(false);
+                          onViewChange('home');
+                        }}
+                        className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        <span>Beranda</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSidebarOpen(false);
+                          window.dispatchEvent(new CustomEvent('admin-logout'));
+                        }}
+                        className="flex items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        <LogOut className="h-3.5 w-3.5 shrink-0" />
+                        <span>Keluar</span>
+                      </button>
+                    </div>
+                  ) : viewAsSlot ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewAsShpSlot(null);
+                        setViewAsSlot(null);
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      <LogOut className="h-3.5 w-3.5 shrink-0" />
+                      <span>Kembali ke Super Admin</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSidebarOpen(false);
+                        window.dispatchEvent(new CustomEvent('adminshp-logout'));
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-red-200 bg-red-50/70 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      <LogOut className="h-3.5 w-3.5 shrink-0" />
+                      <span>Keluar</span>
+                    </button>
+                  )}
+                </div>
+              </motion.aside>
+            )}
+          </AnimatePresence>
+        </>
+      )}
+    </>
   );
 }

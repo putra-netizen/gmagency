@@ -9,7 +9,7 @@ import { TRANSLATIONS } from '../lib/translations';
 import { dbCreateOrder } from '../lib/supabase';
 import { formatRupiah } from './ProductCard';
 import { X, Check, HelpCircle, Phone, Link2, FileText, ShoppingBag, ArrowRight, MessageSquare, AlertCircle } from 'lucide-react';
-import { getQrisConfig, DEFAULT_QRIS_IMAGE, PUBLIC_QRIS_IMAGE, BACKUP_QRIS_IMAGE } from '../utils/qrisHelper';
+import { getQrisConfig, IMMUTABLE_QRIS_DATA_URI, DEFAULT_QRIS_IMAGE } from '../utils/qrisHelper';
 
 interface CheckoutModalProps {
   product: Product;
@@ -21,14 +21,10 @@ interface CheckoutModalProps {
 export default function CheckoutModal({ product, currentLang, onClose, onSuccess }: CheckoutModalProps) {
   const t = TRANSLATIONS[currentLang];
   const qrisConfig = getQrisConfig();
-  const [qrisImgSrc, setQrisImgSrc] = useState<string>(qrisConfig.imageUrl || DEFAULT_QRIS_IMAGE);
+  const [qrisImgSrc, setQrisImgSrc] = useState<string>(IMMUTABLE_QRIS_DATA_URI);
 
   const handleQrisImageError = () => {
-    if (qrisImgSrc !== PUBLIC_QRIS_IMAGE) {
-      setQrisImgSrc(PUBLIC_QRIS_IMAGE);
-    } else if (qrisImgSrc !== BACKUP_QRIS_IMAGE) {
-      setQrisImgSrc(BACKUP_QRIS_IMAGE);
-    }
+    setQrisImgSrc(IMMUTABLE_QRIS_DATA_URI);
   };
 
   // Form states

@@ -471,44 +471,100 @@ export default function AdminPanel({ currentLang, onInstallApp, onSwitchToAdminS
     window.dispatchEvent(new CustomEvent('admin-auth-change'));
   };
 
-  // Listen to custom navbar events
+  // Broadcast active tab state to Admin Sidebar in Navbar
   useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('admin-tab-changed', {
+        detail: { activeTab, activeSettingsTab }
+      })
+    );
+  }, [activeTab, activeSettingsTab]);
+
+  // Listen to custom navbar / sidebar events
+  useEffect(() => {
+    const navigateOperational = (tab: 'shopee_orders' | 'maps_reviews' | 'maps_reports' | 'orders') => {
+      isTabClicking.current = true;
+      setActiveTab(tab);
+      window.history.pushState(null, '', '/admin');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      setTimeout(() => { isTabClicking.current = false; }, 50);
+    };
+
     const onNavbarLogout = () => {
       handleLogout();
     };
     const onNavbarRefresh = () => {
       loadDashboardData(true);
     };
+    const onNavigateShopeeOrders = () => navigateOperational('shopee_orders');
+    const onNavigateMapsReviews = () => navigateOperational('maps_reviews');
+    const onNavigateMapsReports = () => navigateOperational('maps_reports');
+    const onNavigateOrders = () => navigateOperational('orders');
+
     const onNavigateKeuangan = () => {
+      isTabClicking.current = true;
       setActiveTab('keuangan');
       window.history.pushState(null, '', '/admin/keuangan');
       window.dispatchEvent(new PopStateEvent('popstate'));
+      setTimeout(() => { isTabClicking.current = false; }, 50);
     };
     const onNavigateKatalog = () => {
+      isTabClicking.current = true;
       setActiveTab('settings');
       setActiveSettingsTab('products');
       window.history.pushState(null, '', '/admin/settings');
       window.dispatchEvent(new PopStateEvent('popstate'));
+      setTimeout(() => { isTabClicking.current = false; }, 50);
     };
     const onNavigateHeroStats = () => {
+      isTabClicking.current = true;
       setActiveTab('settings');
       setActiveSettingsTab('hero_stats');
       window.history.pushState(null, '', '/admin/settings');
       window.dispatchEvent(new PopStateEvent('popstate'));
+      setTimeout(() => { isTabClicking.current = false; }, 50);
+    };
+    const onNavigateQris = () => {
+      isTabClicking.current = true;
+      setActiveTab('settings');
+      setActiveSettingsTab('qris_config');
+      window.history.pushState(null, '', '/admin/settings');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      setTimeout(() => { isTabClicking.current = false; }, 50);
+    };
+    const onNavigateAppInstall = () => {
+      isTabClicking.current = true;
+      setActiveTab('settings');
+      setActiveSettingsTab('app_install');
+      window.history.pushState(null, '', '/admin/settings');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      setTimeout(() => { isTabClicking.current = false; }, 50);
     };
 
     window.addEventListener('admin-logout', onNavbarLogout);
     window.addEventListener('admin-refresh', onNavbarRefresh);
+    window.addEventListener('admin-navigate-shopee-orders', onNavigateShopeeOrders);
+    window.addEventListener('admin-navigate-maps-reviews', onNavigateMapsReviews);
+    window.addEventListener('admin-navigate-maps-reports', onNavigateMapsReports);
+    window.addEventListener('admin-navigate-orders', onNavigateOrders);
     window.addEventListener('admin-navigate-keuangan', onNavigateKeuangan);
     window.addEventListener('admin-navigate-katalog', onNavigateKatalog);
     window.addEventListener('admin-navigate-hero-stats', onNavigateHeroStats);
+    window.addEventListener('admin-navigate-qris', onNavigateQris);
+    window.addEventListener('admin-navigate-app-install', onNavigateAppInstall);
 
     return () => {
       window.removeEventListener('admin-logout', onNavbarLogout);
       window.removeEventListener('admin-refresh', onNavbarRefresh);
+      window.removeEventListener('admin-navigate-shopee-orders', onNavigateShopeeOrders);
+      window.removeEventListener('admin-navigate-maps-reviews', onNavigateMapsReviews);
+      window.removeEventListener('admin-navigate-maps-reports', onNavigateMapsReports);
+      window.removeEventListener('admin-navigate-orders', onNavigateOrders);
       window.removeEventListener('admin-navigate-keuangan', onNavigateKeuangan);
       window.removeEventListener('admin-navigate-katalog', onNavigateKatalog);
       window.removeEventListener('admin-navigate-hero-stats', onNavigateHeroStats);
+      window.removeEventListener('admin-navigate-qris', onNavigateQris);
+      window.removeEventListener('admin-navigate-app-install', onNavigateAppInstall);
     };
   }, []);
 

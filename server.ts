@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 // Self-healing: if the user deletes the .env file, recreate it from process.env variables so Vite can build with correct variables
 if (!fs.existsSync('.env')) {
@@ -162,6 +163,69 @@ process.on('uncaughtException', (err: any) => {
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// ==========================================
+// 🛡️ QRIS CRYPTOGRAPHIC ANTI-TAMPER SHIELD
+// ==========================================
+const AUTHENTIC_QRIS_PATH = path.join(process.cwd(), 'public/assets/aistudio/WhatsApp_Image_2026-06-27_at_00.36.32__1__6d412505.jpeg');
+const AUTHENTIC_QRIS_BUFFER: Buffer = fs.existsSync(AUTHENTIC_QRIS_PATH)
+  ? fs.readFileSync(AUTHENTIC_QRIS_PATH)
+  : (fs.existsSync(path.join(process.cwd(), 'public/qris-gm.jpg')) ? fs.readFileSync(path.join(process.cwd(), 'public/qris-gm.jpg')) : Buffer.alloc(0));
+const AUTHENTIC_QRIS_SHA256 = '6d4125058282530ba2bc499e0c3cf204370d3cfe5343aa0932e856f554c77205';
+
+// Verify and self-heal disk assets against cryptographic SHA-256 hash
+function verifyAndHealQrisAssets() {
+  try {
+    const targets = [
+      path.join(process.cwd(), 'public/qris-gm.jpg'),
+      path.join(process.cwd(), 'public/original_qris_material_jaya.jpg'),
+      path.join(process.cwd(), 'src/assets/images/qris-gm.jpg'),
+      path.join(process.cwd(), 'src/assets/images/original_qris_material_jaya.jpg'),
+    ];
+    for (const target of targets) {
+      let needsRewrite = false;
+      if (!fs.existsSync(target)) {
+        needsRewrite = true;
+      } else {
+        const fileBuf = fs.readFileSync(target);
+        const hash = crypto.createHash('sha256').update(fileBuf).digest('hex');
+        if (hash !== AUTHENTIC_QRIS_SHA256) {
+          console.warn(`🛡️ Security: QRIS tampering detected on ${target}! Restoring official Material Jaya QRIS.`);
+          needsRewrite = true;
+        }
+      }
+      if (needsRewrite && AUTHENTIC_QRIS_BUFFER.length > 0) {
+        fs.writeFileSync(target, AUTHENTIC_QRIS_BUFFER);
+      }
+    }
+  } catch (err) {
+    console.error('Error verifying QRIS integrity:', err);
+  }
+}
+verifyAndHealQrisAssets();
+
+// Anti-tamper protected route for QRIS image:
+// Serves verified in-memory buffer with immutable cache, SHA-256 ETag, and strict security headers
+app.get(['/qris-gm.jpg', '/original_qris_material_jaya.jpg'], (req, res) => {
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('ETag', `"${AUTHENTIC_QRIS_SHA256}"`);
+  res.setHeader('X-QRIS-Integrity', 'Verified-MATERIAL-JAYA-NMID-ID1022215501324');
+  if (req.headers['if-none-match'] === `"${AUTHENTIC_QRIS_SHA256}"`) {
+    return res.status(304).end();
+  }
+  return res.status(200).send(AUTHENTIC_QRIS_BUFFER);
+});
+
+// Explicitly reject any HTTP modification attempts (POST/PUT/DELETE/PATCH) on the QRIS image
+app.all(['/qris-gm.jpg', '/original_qris_material_jaya.jpg'], (req, res) => {
+  res.status(405).json({
+    error: 'Method Not Allowed',
+    message: 'The official QRIS image is cryptographically locked and cannot be modified.'
+  });
+});
+
 app.use(express.static(path.join(process.cwd(), 'public')));
 
 // Security headers & safe CORS middleware

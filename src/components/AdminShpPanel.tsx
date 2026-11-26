@@ -744,6 +744,14 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
   }, [isAuthenticated, currentAdminUser]);
 
   useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('adminshp-tab-changed', {
+        detail: { activeTab }
+      })
+    );
+  }, [activeTab]);
+
+  useEffect(() => {
     const handleLogoutEvent = () => {
       handleLogout();
     };
@@ -752,6 +760,9 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
         loadData(false, true);
       }
     };
+    const handleNavigateShopee = () => setActiveTab('shopee');
+    const handleNavigateMaps = () => setActiveTab('maps');
+    const handleNavigateReportMaps = () => setActiveTab('report_maps');
     const handleSyncedEvent = (e: any) => {
       if (!isAuthenticated) return;
       const detail = e?.detail;
@@ -768,6 +779,9 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
 
     window.addEventListener('adminshp-logout', handleLogoutEvent);
     window.addEventListener('adminshp-refresh', handleManualRefreshEvent);
+    window.addEventListener('adminshp-navigate-shopee', handleNavigateShopee);
+    window.addEventListener('adminshp-navigate-maps', handleNavigateMaps);
+    window.addEventListener('adminshp-navigate-report-maps', handleNavigateReportMaps);
     window.addEventListener('gm_spreadsheet_data_synced', handleSyncedEvent);
     window.addEventListener('gm_supabase_data_synced', handleSyncedEvent);
 
@@ -816,6 +830,9 @@ export default function AdminShpPanel({ currentLang, onReturnToGmAdmin, viewAsSl
       clearInterval(autoRefreshInterval);
       window.removeEventListener('adminshp-logout', handleLogoutEvent);
       window.removeEventListener('adminshp-refresh', handleManualRefreshEvent);
+      window.removeEventListener('adminshp-navigate-shopee', handleNavigateShopee);
+      window.removeEventListener('adminshp-navigate-maps', handleNavigateMaps);
+      window.removeEventListener('adminshp-navigate-report-maps', handleNavigateReportMaps);
       window.removeEventListener('gm_spreadsheet_data_synced', handleSyncedEvent);
       window.removeEventListener('gm_supabase_data_synced', handleSyncedEvent);
     };

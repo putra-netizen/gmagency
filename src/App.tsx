@@ -63,6 +63,8 @@ export default function App() {
     return getViewAsShpSlot();
   });
 
+  const [isAdminSidebarOpen, setIsAdminSidebarOpen] = useState(false);
+
   useEffect(() => {
     // 1. Initial check with official Supabase getSession
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -326,10 +328,14 @@ export default function App() {
         supabaseConnected={dbIsSupabaseConnected()}
         theme={theme}
         onThemeToggle={handleThemeToggle}
+        isAdminSidebarOpen={isAdminSidebarOpen}
+        onAdminSidebarOpenChange={setIsAdminSidebarOpen}
       />
 
       {/* 2. Main Content Views */}
-      <main className="flex-grow">
+      <main className={`flex-grow transition-[padding] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        currentView === 'admin' && isAdminSidebarOpen ? 'md:pl-[280px]' : ''
+      }`}>
         {currentView === 'home' ? (
           /* HOME/SERVICES LANDING SCREEN */
           <div className="fade-in">
